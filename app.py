@@ -23,6 +23,7 @@ app.config['MAX_CONTENT_LENGTH'] = 5 * 1024 * 1024  # 5MB max
 
 # --- Banco de dados ---
 os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
+os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
 
 git add app.py
 git commit -m "fix: criar pasta data automaticamente"
