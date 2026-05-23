@@ -22,8 +22,11 @@ app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 app.config['MAX_CONTENT_LENGTH'] = 5 * 1024 * 1024  # 5MB max
 
 # --- Banco de dados ---
+os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
 
-def get_db():
+git add app.py
+git commit -m "fix: criar pasta data automaticamente"
+git push --force
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     return conn
