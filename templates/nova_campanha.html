@@ -1,0 +1,213 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="d-flex align-items-center mb-4">
+  <a href="{{ url_for('index') }}" class="btn btn-sm btn-outline-secondary me-3">
+    <i class="bi bi-arrow-left"></i>
+  </a>
+  <div>
+    <h4 class="fw-bold mb-0">Nova Campanha</h4>
+    <small class="text-muted">Configure e dispare sua campanha de e-mail</small>
+  </div>
+</div>
+
+<form method="POST" enctype="multipart/form-data" id="campaign-form">
+  <div class="row g-4">
+    <!-- Coluna esquerda -->
+    <div class="col-lg-7">
+
+      <!-- Dados da campanha -->
+      <div class="card mb-4">
+        <div class="card-body">
+          <h6 class="fw-semibold mb-3"><i class="bi bi-info-circle me-2 text-primary"></i>Dados da Campanha</h6>
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Nome da Campanha *</label>
+            <input type="text" name="campaign_name" class="form-control"
+              placeholder="Ex: Promos Abril 2025" required>
+          </div>
+          <div class="mb-3">
+            <label class="form-label fw-semibold">E-mail Remetente *</label>
+            <input type="email" name="sender_email" class="form-control"
+              placeholder="contato@asamarketingevendas.com.br" required>
+            <div class="form-text">Deve estar verificado no Amazon SES.</div>
+          </div>
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Assunto *</label>
+            <input type="text" name="subject" class="form-control"
+              placeholder="Ola {nome}, temos uma novidade para voce!" required>
+            <div class="form-text">Use <code>{nome}</code> para personalizar com o nome do contato.</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Editor do corpo do e-mail -->
+      <div class="card mb-4">
+        <div class="card-body">
+          <h6 class="fw-semibold mb-1"><i class="bi bi-code-slash me-2 text-primary"></i>Corpo do E-mail (HTML)</h6>
+          <div class="form-text mb-3">Use <code>{nome}</code> onde quiser inserir o nome do contato. Suporta HTML completo.</div>
+          <ul class="nav nav-tabs mb-2" id="editorTabs">
+            <li class="nav-item"><a class="nav-link active" href="#" onclick="showTab('html')">Editar HTML</a></li>
+            <li class="nav-item"><a class="nav-link" href="#" onclick="showTab('preview')">Preview</a></li>
+          </ul>
+          <div id="tab-html">
+            <textarea name="body_html" id="body_html" class="form-control font-monospace"
+              rows="14" required
+              placeholder="<p>Ola <strong>{nome}</strong>,</p>&#10;<p>Temos uma novidade incrivel para voce!</p>&#10;&#10;<p>Atenciosamente,<br>Equipe ASA Marketing</p>"></textarea>
+          </div>
+          <div id="tab-preview" class="d-none border rounded p-3 bg-white" style="min-height:200px">
+            <div id="preview-content" class="text-muted">Clique em Preview para visualizar.</div>
+          </div>
+          <!-- Template rapido -->
+          <div class="mt-2">
+            <button type="button" class="btn btn-sm btn-outline-secondary" onclick="carregarTemplate()">
+              <i class="bi bi-lightning me-1"></i> Carregar template basico
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Coluna direita -->
+    <div class="col-lg-5">
+      <!-- Upload CSV -->
+      <div class="card mb-4">
+        <div class="card-body">
+          <h6 class="fw-semibold mb-3"><i class="bi bi-file-earmark-spreadsheet me-2 text-primary"></i>Lista de Contatos (CSV)</h6>
+          <div class="upload-area border-2 border-dashed rounded-3 p-4 text-center mb-3" id="upload-area"
+            style="border-color:#4361ee55; background:#f8f9ff; cursor:pointer;"
+            onclick="document.getElementById('csv_file').click()">
+            <i class="bi bi-cloud-upload fs-2 text-primary"></i>
+            <p class="mb-1 fw-semibold mt-2">Clique para selecionar o CSV</p>
+            <p class="text-muted small mb-0">ou arraste o arquivo aqui</p>
+            <div id="file-info" class="mt-2 d-none">
+              <span class="badge bg-success fs-6" id="file-name"></span>
+            </div>
+          </div>
+          <input type="file" name="csv_file" id="csv_file" accept=".csv" class="d-none" required>
+          <div class="alert alert-info py-2 px-3 small mb-0">
+            <strong>Formato do CSV:</strong><br>
+            O arquivo deve ter colunas <code>nome</code> e <code>email</code><br>
+            <a href="#" onclick="baixarExemplo()" class="alert-link">
+              <i class="bi bi-download me-1"></i>Baixar CSV de exemplo
+            </a>
+          </div>
+        </div>
+      </div>
+
+      <!-- Preview contatos -->
+      <div class="card mb-4 d-none" id="contacts-preview-card">
+        <div class="card-body">
+          <h6 class="fw-semibold mb-2"><i class="bi bi-people me-2 text-primary"></i>Contatos Carregados</h6>
+          <div id="contacts-count" class="fs-5 fw-bold text-success mb-2">0 contatos</div>
+          <div id="contacts-preview" class="small text-muted"></div>
+        </div>
+      </div>
+
+      <!-- Botao disparar -->
+      <div class="card">
+        <div class="card-body">
+          <h6 class="fw-semibold mb-3"><i class="bi bi-send me-2 text-primary"></i>Disparar Campanha</h6>
+          <div class="form-check mb-3">
+            <input class="form-check-input" type="checkbox" id="confirma" required>
+            <label class="form-check-label small" for="confirma">
+              Confirmo que tenho permissao para enviar e-mails para esses contatos.
+            </label>
+          </div>
+          <button type="submit" class="btn btn-primary w-100 py-2 fw-semibold" id="btn-disparar">
+            <i class="bi bi-send-fill me-2"></i> Disparar Campanha
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+</form>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Upload drag & drop
+const csvInput = document.getElementById('csv_file');
+const uploadArea = document.getElementById('upload-area');
+
+uploadArea.addEventListener('dragover', e => { e.preventDefault(); uploadArea.style.background='#eef0ff'; });
+uploadArea.addEventListener('dragleave', () => { uploadArea.style.background='#f8f9ff'; });
+uploadArea.addEventListener('drop', e => {
+  e.preventDefault();
+  uploadArea.style.background='#f8f9ff';
+  if (e.dataTransfer.files[0]) {
+    csvInput.files = e.dataTransfer.files;
+    handleFileSelect(e.dataTransfer.files[0]);
+  }
+});
+csvInput.addEventListener('change', () => handleFileSelect(csvInput.files[0]));
+
+function handleFileSelect(file) {
+  document.getElementById('file-name').textContent = file.name;
+  document.getElementById('file-info').classList.remove('d-none');
+
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    const lines = e.target.result.split('\n').filter(l => l.trim());
+    const count = lines.length - 1;
+    document.getElementById('contacts-count').textContent = `${count} contatos`;
+    let preview = lines.slice(1, 4).map(l => `<div>• ${l.split(',').slice(0,2).join(' — ')}</div>`).join('');
+    if (count > 3) preview += `<div class="text-muted">... e mais ${count - 3}</div>`;
+    document.getElementById('contacts-preview').innerHTML = preview;
+    document.getElementById('contacts-preview-card').classList.remove('d-none');
+  };
+  reader.readAsText(file);
+}
+
+// Tabs HTML/Preview
+function showTab(tab) {
+  document.querySelectorAll('#editorTabs .nav-link').forEach(l => l.classList.remove('active'));
+  event.target.classList.add('active');
+  if (tab === 'html') {
+    document.getElementById('tab-html').classList.remove('d-none');
+    document.getElementById('tab-preview').classList.add('d-none');
+  } else {
+    document.getElementById('tab-html').classList.add('d-none');
+    document.getElementById('tab-preview').classList.remove('d-none');
+    const html = document.getElementById('body_html').value.replace(/\{nome\}/g, 'João Silva');
+    document.getElementById('preview-content').innerHTML = html;
+  }
+}
+
+function carregarTemplate() {
+  document.getElementById('body_html').value = `<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;background:#fff;border-radius:8px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,.1)">
+  <div style="background:linear-gradient(135deg,#4361ee,#3a0ca3);padding:32px;text-align:center">
+    <h1 style="color:#fff;margin:0;font-size:24px">ASA Marketing e Vendas</h1>
+  </div>
+  <div style="padding:32px">
+    <p style="font-size:16px">Ola, <strong>{nome}</strong>!</p>
+    <p>Escreva aqui o seu conteudo personalizado.</p>
+    <div style="text-align:center;margin:24px 0">
+      <a href="#" style="background:#4361ee;color:#fff;padding:12px 28px;border-radius:6px;text-decoration:none;font-weight:bold">
+        Saiba Mais
+      </a>
+    </div>
+    <p style="color:#666;font-size:13px">Atenciosamente,<br><strong>Equipe ASA Marketing</strong></p>
+  </div>
+  <div style="background:#f5f5f5;padding:16px;text-align:center;font-size:12px;color:#999">
+    Para cancelar o recebimento, <a href="#">clique aqui</a>.
+  </div>
+</div>`;
+}
+
+function baixarExemplo() {
+  const csv = 'nome,email\nJoao Silva,joao@exemplo.com\nMaria Santos,maria@exemplo.com\nPedro Oliveira,pedro@exemplo.com';
+  const blob = new Blob([csv], {type: 'text/csv'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'contatos_exemplo.csv';
+  a.click();
+  return false;
+}
+
+// Confirma antes de enviar
+document.getElementById('campaign-form').addEventListener('submit', function(e) {
+  const btn = document.getElementById('btn-disparar');
+  btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span> Enviando...';
+  btn.disabled = true;
+});
+</script>
+{% endblock %}

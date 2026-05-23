@@ -1,0 +1,139 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <div>
+    <h4 class="fw-bold mb-0">Dashboard</h4>
+    <small class="text-muted">Visao geral das campanhas</small>
+  </div>
+  <a href="{{ url_for('nova_campanha') }}" class="btn btn-primary">
+    <i class="bi bi-plus-lg me-1"></i> Nova Campanha
+  </a>
+</div>
+
+<!-- Stats -->
+<div class="row g-3 mb-4" id="stats-row">
+  <div class="col-md-3">
+    <div class="stat-card" style="background:linear-gradient(135deg,#4361ee,#3a0ca3)">
+      <div class="opacity-75 small mb-1">Total de Campanhas</div>
+      <div class="fs-3 fw-bold">{{ campaigns|length }}</div>
+    </div>
+  </div>
+  <div class="col-md-3">
+    <div class="stat-card" style="background:linear-gradient(135deg,#10b981,#059669)">
+      <div class="opacity-75 small mb-1">E-mails Enviados</div>
+      <div class="fs-3 fw-bold">{{ campaigns|sum(attribute='sent') }}</div>
+    </div>
+  </div>
+  <div class="col-md-3">
+    <div class="stat-card" style="background:linear-gradient(135deg,#f59e0b,#d97706)">
+      <div class="opacity-75 small mb-1">Quota Diaria SES</div>
+      <div class="fs-3 fw-bold" id="quota-valor">—</div>
+    </div>
+  </div>
+  <div class="col-md-3">
+    <div class="stat-card" style="background:linear-gradient(135deg,#ef4444,#dc2626)">
+      <div class="opacity-75 small mb-1">Erros Totais</div>
+      <div class="fs-3 fw-bold">{{ campaigns|sum(attribute='errors') }}</div>
+    </div>
+  </div>
+</div>
+
+<!-- Status SES -->
+<div class="card mb-4">
+  <div class="card-body d-flex align-items-center gap-3">
+    <div id="ses-status-icon" class="fs-4">&#9711;</div>
+    <div id="ses-status-text" class="text-muted small">Verificando conexao com Amazon SES...</div>
+    <button class="btn btn-sm btn-outline-secondary ms-auto" onclick="verificarSES()">
+      <i class="bi bi-arrow-clockwise"></i> Verificar SES
+    </button>
+  </div>
+</div>
+
+<!-- Historico de campanhas -->
+<div class="card">
+  <div class="card-header bg-white fw-semibold border-0 pt-4 pb-0 px-4">
+    <i class="bi bi-clock-history me-2"></i> Historico de Campanhas
+  </div>
+  <div class="card-body p-0">
+    {% if campaigns %}
+    <div class="table-responsive">
+      <table class="table table-hover mb-0 align-middle">
+        <thead class="table-light">
+          <tr>
+            <th class="ps-4">Campanha</th>
+            <th>Remetente</th>
+            <th>Total</th>
+            <th>Enviados</th>
+            <th>Erros</th>
+            <th>Status</th>
+            <th>Data</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for c in campaigns %}
+          <tr>
+            <td class="ps-4 fw-semibold">{{ c.name }}</td>
+            <td class="text-muted small">{{ c.sender_email }}</td>
+            <td>{{ c.total_contacts }}</td>
+            <td><span class="badge badge-sent px-2 py-1">{{ c.sent }}</span></td>
+            <td>
+              {% if c.errors > 0 %}
+              <span class="badge badge-error px-2 py-1">{{ c.errors }}</span>
+              {% else %}<span class="text-muted">0</span>{% endif %}
+            </td>
+            <td>
+              {% if c.status == 'running' %}
+                <span class="badge badge-running px-2 py-1"><i class="bi bi-hourglass-split me-1"></i>Enviando</span>
+              {% elif c.status == 'done' %}
+                <span class="badge badge-done px-2 py-1"><i class="bi bi-check-circle me-1"></i>Concluida</span>
+              {% else %}
+                <span class="badge bg-secondary px-2 py-1">{{ c.status }}</span>
+              {% endif %}
+            </td>
+            <td class="text-muted small">{{ c.created_at }}</td>
+            <td>
+              <a href="{{ url_for('campanha_detalhe', campaign_id=c.id) }}" class="btn btn-sm btn-outline-primary">
+                <i class="bi bi-eye"></i>
+              </a>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <div class="text-center py-5 text-muted">
+      <i class="bi bi-inbox fs-1 d-block mb-2"></i>
+      Nenhuma campanha ainda. <a href="{{ url_for('nova_campanha') }}">Crie a primeira!</a>
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function verificarSES() {
+  document.getElementById('ses-status-text').textContent = 'Verificando...';
+  fetch('/api/verificar-ses')
+    .then(r => r.json())
+    .then(data => {
+      if (data.ok) {
+        document.getElementById('ses-status-icon').innerHTML = '<span style="color:#10b981">&#9679;</span>';
+        document.getElementById('ses-status-text').innerHTML =
+          `<strong class="text-success">Amazon SES conectado.</strong> ` +
+          `Quota: <strong>${data.quota_diaria.toLocaleString()}</strong>/dia &bull; ` +
+          `Enviados hoje: <strong>${data.enviados_hoje}</strong> &bull; ` +
+          `Dominios: ${data.dominios.join(', ') || 'nenhum verificado'}`;
+        document.getElementById('quota-valor').textContent = data.quota_diaria.toLocaleString();
+      } else {
+        document.getElementById('ses-status-icon').innerHTML = '<span style="color:#ef4444">&#9679;</span>';
+        document.getElementById('ses-status-text').innerHTML =
+          `<span class="text-danger">Erro SES: ${data.erro}</span>`;
+      }
+    });
+}
+verificarSES();
+</script>
+{% endblock %}

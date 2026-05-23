@@ -1,0 +1,163 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="d-flex align-items-center mb-4">
+  <div>
+    <h4 class="fw-bold mb-0">Configuracoes</h4>
+    <small class="text-muted">AWS SES e guia de setup</small>
+  </div>
+</div>
+
+<div class="row g-4">
+  <div class="col-lg-6">
+    <!-- Status SES -->
+    <div class="card mb-4">
+      <div class="card-body">
+        <h6 class="fw-semibold mb-3"><i class="bi bi-cloud-check me-2 text-primary"></i>Status Amazon SES</h6>
+        <div id="ses-info" class="text-muted small">Verificando...</div>
+        <button class="btn btn-sm btn-outline-primary mt-3" onclick="verificarSES()">
+          <i class="bi bi-arrow-clockwise me-1"></i> Verificar Conexao
+        </button>
+      </div>
+    </div>
+
+    <!-- Verificar dominio -->
+    <div class="card mb-4">
+      <div class="card-body">
+        <h6 class="fw-semibold mb-3"><i class="bi bi-globe me-2 text-primary"></i>Verificar Dominio no SES</h6>
+        <p class="text-muted small mb-3">
+          Para enviar e-mails com <code>@asamarketingevendas.com.br</code>, o dominio precisa ser verificado.
+          Execute os comandos abaixo no terminal.
+        </p>
+        <div class="bg-dark text-light rounded p-3 small font-monospace mb-2">
+          <div class="text-warning mb-1"># 1. Verificar o dominio</div>
+          aws ses verify-domain-identity --domain asamarketingevendas.com.br --region sa-east-1<br><br>
+          <div class="text-warning mb-1"># 2. Verificar email especifico (alternativa)</div>
+          aws ses verify-email-identity --email-address contato@asamarketingevendas.com.br --region sa-east-1<br><br>
+          <div class="text-warning mb-1"># 3. Ver status das identidades</div>
+          aws ses list-identities --region sa-east-1
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-lg-6">
+    <!-- Registros DNS -->
+    <div class="card mb-4">
+      <div class="card-body">
+        <h6 class="fw-semibold mb-3"><i class="bi bi-shield-check me-2 text-primary"></i>Registros DNS Necessarios</h6>
+        <p class="text-muted small mb-3">
+          Adicione esses registros no painel DNS do seu dominio (Registro.br, Cloudflare, etc.):
+        </p>
+
+        <div class="mb-3">
+          <span class="badge bg-primary mb-1">SPF</span>
+          <div class="bg-light rounded p-2 small font-monospace">
+            Tipo: TXT<br>
+            Nome: @<br>
+            Valor: v=spf1 include:amazonses.com ~all
+          </div>
+        </div>
+
+        <div class="mb-3">
+          <span class="badge bg-success mb-1">DKIM</span>
+          <div class="bg-light rounded p-2 small font-monospace">
+            Execute para obter as chaves DKIM:<br>
+            <span class="text-primary">aws ses get-identity-dkim-attributes<br>
+            --identities asamarketingevendas.com.br<br>
+            --region sa-east-1</span>
+          </div>
+          <div class="form-text">Adicione os 3 registros CNAME que o comando retornar.</div>
+        </div>
+
+        <div class="mb-2">
+          <span class="badge bg-warning text-dark mb-1">DMARC</span>
+          <div class="bg-light rounded p-2 small font-monospace">
+            Tipo: TXT<br>
+            Nome: _dmarc<br>
+            Valor: v=DMARC1; p=none; rua=mailto:dmarc@asamarketingevendas.com.br
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Sair do Sandbox -->
+    <div class="card mb-4">
+      <div class="card-body">
+        <h6 class="fw-semibold mb-3"><i class="bi bi-arrow-up-circle me-2 text-success"></i>Sair do Sandbox do SES</h6>
+        <p class="text-muted small mb-3">
+          No Sandbox voce so pode enviar para e-mails verificados. Para enviar em producao:
+        </p>
+        <ol class="small text-muted ps-3">
+          <li class="mb-1">Acesse o <strong>Console AWS</strong> → <strong>Amazon SES</strong></li>
+          <li class="mb-1">Clique em <strong>"Request production access"</strong></li>
+          <li class="mb-1">Preencha: tipo de uso = <em>Marketing</em></li>
+          <li class="mb-1">Descreva: envio de campanhas para clientes da ASA Marketing</li>
+          <li class="mb-1">Website: asamarketingevendas.com.br</li>
+          <li>Aguarde aprovacao (geralmente 24h)</li>
+        </ol>
+        <a href="https://console.aws.amazon.com/ses/home?region=sa-east-1#/account" target="_blank"
+           class="btn btn-sm btn-success">
+          <i class="bi bi-box-arrow-up-right me-1"></i> Abrir Console SES
+        </a>
+      </div>
+    </div>
+
+    <!-- Alerta de faturamento -->
+    <div class="card">
+      <div class="card-body">
+        <h6 class="fw-semibold mb-3"><i class="bi bi-bell me-2 text-warning"></i>Alerta de Faturamento AWS</h6>
+        <p class="text-muted small mb-3">Configure um alerta para ser avisado sobre qualquer cobranca:</p>
+        <div class="bg-dark text-light rounded p-3 small font-monospace mb-2">
+          <div class="text-warning mb-1"># Criar SNS topic para alertas</div>
+          aws sns create-topic --name alerta-faturamento --region us-east-1<br><br>
+          <div class="text-warning mb-1"># Subscrever seu e-mail (substitua ARN e email)</div>
+          aws sns subscribe --topic-arn SEU_ARN_AQUI \<br>
+          &nbsp;&nbsp;--protocol email \<br>
+          &nbsp;&nbsp;--notification-endpoint contato@asamarketingevendas.com.br<br><br>
+          <div class="text-warning mb-1"># Criar alarme de billing (qualquer valor > $0.01)</div>
+          aws cloudwatch put-metric-alarm \<br>
+          &nbsp;&nbsp;--alarm-name "aws-custo-qualquer" \<br>
+          &nbsp;&nbsp;--metric-name EstimatedCharges \<br>
+          &nbsp;&nbsp;--namespace AWS/Billing \<br>
+          &nbsp;&nbsp;--statistic Maximum \<br>
+          &nbsp;&nbsp;--period 86400 \<br>
+          &nbsp;&nbsp;--threshold 0.01 \<br>
+          &nbsp;&nbsp;--comparison-operator GreaterThanThreshold \<br>
+          &nbsp;&nbsp;--dimensions Name=Currency,Value=USD \<br>
+          &nbsp;&nbsp;--evaluation-periods 1 \<br>
+          &nbsp;&nbsp;--alarm-actions SEU_ARN_AQUI \<br>
+          &nbsp;&nbsp;--region us-east-1
+        </div>
+        <div class="form-text">Billing Alarms so funcionam na regiao us-east-1.</div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function verificarSES() {
+  document.getElementById('ses-info').textContent = 'Verificando...';
+  fetch('/api/verificar-ses')
+    .then(r => r.json())
+    .then(data => {
+      if (data.ok) {
+        document.getElementById('ses-info').innerHTML = `
+          <div class="text-success fw-semibold mb-2">✓ Amazon SES conectado (sa-east-1)</div>
+          <div>Quota diaria: <strong>${data.quota_diaria.toLocaleString()} e-mails</strong></div>
+          <div>Enviados hoje: <strong>${data.enviados_hoje}</strong></div>
+          <div>Taxa maxima: <strong>${data.taxa_por_segundo}/s</strong></div>
+          <div class="mt-2">Dominios verificados: <strong>${data.dominios.join(', ') || 'nenhum'}</strong></div>
+          <div>E-mails verificados: <strong>${data.emails_verificados.join(', ') || 'nenhum'}</strong></div>
+        `;
+      } else {
+        document.getElementById('ses-info').innerHTML =
+          `<div class="text-danger">Erro: ${data.erro}</div>
+           <div class="text-muted mt-2">Execute <code>aws configure</code> no terminal para configurar suas credenciais.</div>`;
+      }
+    });
+}
+verificarSES();
+</script>
+{% endblock %}

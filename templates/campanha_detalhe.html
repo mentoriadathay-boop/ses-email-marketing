@@ -1,0 +1,171 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="d-flex align-items-center mb-4">
+  <a href="{{ url_for('index') }}" class="btn btn-sm btn-outline-secondary me-3">
+    <i class="bi bi-arrow-left"></i>
+  </a>
+  <div>
+    <h4 class="fw-bold mb-0">{{ campaign.name }}</h4>
+    <small class="text-muted">{{ campaign.sender_email }} &bull; {{ campaign.created_at }}</small>
+  </div>
+</div>
+
+<!-- Cards de status em tempo real -->
+<div class="row g-3 mb-4" id="status-cards">
+  <div class="col-md-3">
+    <div class="stat-card" style="background:linear-gradient(135deg,#6366f1,#4f46e5)">
+      <div class="opacity-75 small">Total de Contatos</div>
+      <div class="fs-3 fw-bold" id="total-count">{{ campaign.total_contacts }}</div>
+    </div>
+  </div>
+  <div class="col-md-3">
+    <div class="stat-card" style="background:linear-gradient(135deg,#10b981,#059669)">
+      <div class="opacity-75 small">Enviados</div>
+      <div class="fs-3 fw-bold" id="sent-count">{{ campaign.sent }}</div>
+    </div>
+  </div>
+  <div class="col-md-3">
+    <div class="stat-card" style="background:linear-gradient(135deg,#ef4444,#dc2626)">
+      <div class="opacity-75 small">Erros</div>
+      <div class="fs-3 fw-bold" id="error-count">{{ campaign.errors }}</div>
+    </div>
+  </div>
+  <div class="col-md-3">
+    <div class="stat-card" style="background:linear-gradient(135deg,#f59e0b,#d97706)">
+      <div class="opacity-75 small">Status</div>
+      <div class="fs-5 fw-bold" id="status-text">
+        {% if campaign.status == 'running' %}Enviando...
+        {% elif campaign.status == 'done' %}Concluida
+        {% else %}{{ campaign.status }}{% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Barra de progresso -->
+{% if campaign.total_contacts > 0 %}
+<div class="card mb-4">
+  <div class="card-body">
+    <div class="d-flex justify-content-between mb-2">
+      <span class="fw-semibold small">Progresso do Envio</span>
+      <span class="small text-muted" id="progress-label">
+        {{ campaign.sent }}/{{ campaign.total_contacts }}
+      </span>
+    </div>
+    <div class="progress" style="height:10px">
+      {% set pct = ((campaign.sent / campaign.total_contacts) * 100)|int if campaign.total_contacts > 0 else 0 %}
+      <div class="progress-bar bg-success" id="progress-bar" style="width:{{ pct }}%"></div>
+    </div>
+  </div>
+</div>
+{% endif %}
+
+<!-- Log em tempo real -->
+<div class="card">
+  <div class="card-header bg-white fw-semibold border-0 pt-4 pb-0 px-4 d-flex justify-content-between">
+    <span><i class="bi bi-list-check me-2"></i>Log de Envios</span>
+    <span class="badge bg-secondary" id="log-count">{{ logs|length }}</span>
+  </div>
+  <div class="card-body p-0">
+    <div id="log-container" style="max-height:450px;overflow-y:auto">
+      <table class="table table-sm table-hover mb-0 align-middle">
+        <thead class="table-light sticky-top">
+          <tr>
+            <th class="ps-4">E-mail</th>
+            <th>Nome</th>
+            <th>Status</th>
+            <th>Detalhe</th>
+            <th>Horario</th>
+          </tr>
+        </thead>
+        <tbody id="log-tbody">
+          {% for log in logs %}
+          <tr>
+            <td class="ps-4 small">{{ log.contact_email }}</td>
+            <td class="small">{{ log.contact_name or '—' }}</td>
+            <td>
+              {% if log.status == 'sent' %}
+                <span class="badge badge-sent">Enviado</span>
+              {% else %}
+                <span class="badge badge-error">Erro</span>
+              {% endif %}
+            </td>
+            <td class="small text-muted">{{ log.error_message or '—' }}</td>
+            <td class="small text-muted">{{ log.sent_at }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% if not logs %}
+      <div class="text-center py-5 text-muted" id="empty-log">
+        <i class="bi bi-hourglass-split fs-2 d-block mb-2"></i>
+        Aguardando envios...
+      </div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const campaignId = {{ campaign.id }};
+let isRunning = {{ 'true' if campaign.status == 'running' else 'false' }};
+let knownLogs = {{ logs|length }};
+
+function atualizarStatus() {
+  if (!isRunning) return;
+  fetch(`/api/progresso/${campaignId}`)
+    .then(r => r.json())
+    .then(data => {
+      document.getElementById('total-count').textContent = data.total;
+      document.getElementById('sent-count').textContent = data.sent;
+      document.getElementById('error-count').textContent = data.errors;
+
+      const pct = data.total > 0 ? Math.round((data.sent / data.total) * 100) : 0;
+      document.getElementById('progress-bar').style.width = pct + '%';
+      document.getElementById('progress-label').textContent = `${data.sent}/${data.total}`;
+
+      if (data.status === 'done') {
+        isRunning = false;
+        document.getElementById('status-text').textContent = 'Concluida';
+        showToast('Campanha concluida! ' + data.sent + ' e-mails enviados.', 'success');
+      }
+
+      // Adiciona novos logs ao topo
+      const newLogs = data.logs ? data.logs.slice(knownLogs) : [];
+      if (newLogs.length > 0) {
+        const tbody = document.getElementById('log-tbody');
+        const emptyMsg = document.getElementById('empty-log');
+        if (emptyMsg) emptyMsg.remove();
+
+        newLogs.reverse().forEach(log => {
+          const badge = log.status === 'sent'
+            ? '<span class="badge badge-sent">Enviado</span>'
+            : '<span class="badge badge-error">Erro</span>';
+          const row = `<tr>
+            <td class="ps-4 small">${log.email}</td>
+            <td class="small">${log.name || '—'}</td>
+            <td>${badge}</td>
+            <td class="small text-muted">${log.error || '—'}</td>
+            <td class="small text-muted">agora</td>
+          </tr>`;
+          tbody.insertAdjacentHTML('afterbegin', row);
+        });
+        knownLogs = data.logs.length;
+        document.getElementById('log-count').textContent = knownLogs;
+      }
+    });
+}
+
+function showToast(msg, type) {
+  const div = document.createElement('div');
+  div.className = `alert alert-${type} alert-dismissible shadow`;
+  div.innerHTML = `${msg}<button type="button" class="btn-close" data-bs-dismiss="alert"></button>`;
+  document.getElementById('toastContainer').appendChild(div);
+  setTimeout(() => div.remove(), 6000);
+}
+
+if (isRunning) setInterval(atualizarStatus, 1500);
+</script>
+{% endblock %}
