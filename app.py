@@ -16,7 +16,7 @@ app.secret_key = os.urandom(24)
 UPLOAD_FOLDER = os.path.join(os.path.dirname(__file__), 'uploads')
 DB_PATH = os.path.join(os.path.dirname(__file__), 'data', 'campaigns.db')
 ALLOWED_EXTENSIONS = {'csv'}
-AWS_REGION = 'sa-east-1'
+AWS_REGION = os.environ.get('AWS_REGION', 'sa-east-1')
 
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 app.config['MAX_CONTENT_LENGTH'] = 5 * 1024 * 1024  # 5MB max
@@ -89,7 +89,7 @@ def parse_csv(filepath):
     return contacts
 
 def get_ses_client():
-    return boto3.client('ses', region_name=AWS_REGION)
+    return boto3.client('ses', region_name=AWS_REGION, aws_access_key_id=os.environ.get('AWS_ACCESS_KEY_ID'), aws_secret_access_key=os.environ.get('AWS_SECRET_ACCESS_KEY'))
 
 def send_email_ses(ses_client, sender, recipient_email, recipient_name, subject, body_html):
     # Personaliza com o nome do contato
