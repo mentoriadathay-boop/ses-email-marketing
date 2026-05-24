@@ -1177,13 +1177,38 @@ def api_dashboard_stats():
     conn.close()
     return jsonify({'sends_by_day': sends_by_day, 'seq_stats': seq_stats, 'heatmap': heatmap})
 
-init_db()
+_db_ready = False
+
+def _try_init_db():
+    global _db_ready
+    if not DATABASE_URL:
+        print("=" * 60, flush=True)
+        print("ERRO: DATABASE_URL não configurada!", flush=True)
+        print("Adicione o PostgreSQL ao projeto no Railway e", flush=True)
+        print("conecte-o ao serviço para injetar DATABASE_URL.", flush=True)
+        print("=" * 60, flush=True)
+        return
+    try:
+        init_db()
+        _db_ready = True
+        print("Banco de dados PostgreSQL inicializado.", flush=True)
+    except Exception as e:
+        print(f"ERRO ao inicializar banco de dados: {e}", flush=True)
+
+_try_init_db()
+
+@app.route('/health')
+def health():
+    status = 'ok' if _db_ready else 'db_not_configured'
+    db_url_set = bool(DATABASE_URL)
+    return jsonify({'status': status, 'db_url_set': db_url_set, 'brevo_set': bool(BREVO_API_KEY)}), 200 if _db_ready else 503
 
 if not app.debug or os.environ.get('WERKZEUG_RUN_MAIN') == 'true':
-    _scheduler = BackgroundScheduler(daemon=True)
-    _scheduler.add_job(processar_cadencias, 'interval', minutes=30)
-    _scheduler.add_job(calcular_scores_inativos, 'interval', hours=24)
-    _scheduler.start()
+    if _db_ready:
+        _scheduler = BackgroundScheduler(daemon=True)
+        _scheduler.add_job(processar_cadencias, 'interval', minutes=30)
+        _scheduler.add_job(calcular_scores_inativos, 'interval', hours=24)
+        _scheduler.start()
 
 if __name__ == '__main__':
     print("\nASA Email Marketing rodando em: http://127.0.0.1:5000\n")
