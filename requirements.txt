@@ -3,3 +3,4 @@ sib-api-v3-sdk
 python-dotenv
 gunicorn
 apscheduler
+psycopg2-binary
