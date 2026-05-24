@@ -1,0 +1,86 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <div>
+    <h4 class="fw-bold mb-0">Cadencias de Email</h4>
+    <small class="text-muted">Sequencias automaticas estilo Apollo.io</small>
+  </div>
+  <a href="{{ url_for('nova_cadencia') }}" class="btn btn-primary">
+    <i class="bi bi-plus-lg me-1"></i> Nova Cadencia
+  </a>
+</div>
+
+{% if sequences %}
+<div class="row g-3">
+  {% for item in sequences %}
+  <div class="col-md-6 col-xl-4">
+    <div class="card h-100">
+      <div class="card-body">
+        <div class="d-flex justify-content-between align-items-start mb-2">
+          <h6 class="fw-bold mb-0">{{ item.seq.name }}</h6>
+          {% if item.seq.status == 'active' %}
+            <span class="badge" style="background:#d1fae5;color:#065f46">Ativa</span>
+          {% elif item.seq.status == 'paused' %}
+            <span class="badge" style="background:#fef3c7;color:#92400e">Pausada</span>
+          {% else %}
+            <span class="badge bg-secondary">{{ item.seq.status }}</span>
+          {% endif %}
+        </div>
+        {% if item.seq.description %}
+        <p class="text-muted small mb-3">{{ item.seq.description }}</p>
+        {% endif %}
+        <div class="row g-2 mb-3">
+          <div class="col-6">
+            <div class="rounded p-2 text-center" style="background:#f0f4ff">
+              <div class="fw-bold text-primary">{{ item.total }}</div>
+              <div class="small text-muted">Contatos</div>
+            </div>
+          </div>
+          <div class="col-6">
+            <div class="rounded p-2 text-center" style="background:#f0fdf4">
+              <div class="fw-bold text-success">{{ item.active }}</div>
+              <div class="small text-muted">Ativos</div>
+            </div>
+          </div>
+          <div class="col-6">
+            <div class="rounded p-2 text-center" style="background:#faf5ff">
+              <div class="fw-bold" style="color:#7c3aed">{{ item.finished }}</div>
+              <div class="small text-muted">Finalizados</div>
+            </div>
+          </div>
+          <div class="col-6">
+            <div class="rounded p-2 text-center" style="background:#fff7ed">
+              <div class="fw-bold text-warning">{{ item.open_rate }}%</div>
+              <div class="small text-muted">Abertura</div>
+            </div>
+          </div>
+        </div>
+        <div class="d-flex gap-2">
+          <a href="{{ url_for('cadencia_detalhe', seq_id=item.seq.id) }}" class="btn btn-sm btn-primary flex-fill">
+            <i class="bi bi-eye me-1"></i> Ver Detalhes
+          </a>
+          <a href="{{ url_for('editar_cadencia', seq_id=item.seq.id) }}" class="btn btn-sm btn-outline-secondary">
+            <i class="bi bi-pencil"></i>
+          </a>
+        </div>
+      </div>
+      <div class="card-footer bg-white border-0 pt-0">
+        <small class="text-muted"><i class="bi bi-clock me-1"></i>{{ item.seq.created_at }}</small>
+      </div>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% else %}
+<div class="card">
+  <div class="card-body text-center py-5 text-muted">
+    <i class="bi bi-arrow-repeat fs-1 d-block mb-3" style="color:#4361ee44"></i>
+    <h5>Nenhuma cadencia criada ainda</h5>
+    <p class="mb-4">Crie sua primeira sequencia automatica de emails.</p>
+    <a href="{{ url_for('nova_cadencia') }}" class="btn btn-primary">
+      <i class="bi bi-plus-lg me-1"></i> Criar Cadencia
+    </a>
+  </div>
+</div>
+{% endif %}
+{% endblock %}

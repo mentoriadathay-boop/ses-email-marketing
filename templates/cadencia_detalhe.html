@@ -1,0 +1,222 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="d-flex align-items-center mb-2">
+  <a href="{{ url_for('cadencias') }}" class="btn btn-sm btn-outline-secondary me-3">
+    <i class="bi bi-arrow-left"></i>
+  </a>
+  <div class="flex-fill">
+    <h4 class="fw-bold mb-0">{{ seq.name }}</h4>
+    <small class="text-muted">{{ seq.sender_email }} &bull; Criada em {{ seq.created_at }}</small>
+  </div>
+  <div class="d-flex gap-2">
+    {% if seq.status == 'active' %}
+    <form method="POST" action="{{ url_for('pausar_cadencia', seq_id=seq.id) }}" class="d-inline">
+      <button class="btn btn-sm btn-warning"><i class="bi bi-pause-fill me-1"></i> Pausar</button>
+    </form>
+    {% else %}
+    <form method="POST" action="{{ url_for('retomar_cadencia', seq_id=seq.id) }}" class="d-inline">
+      <button class="btn btn-sm btn-success"><i class="bi bi-play-fill me-1"></i> Retomar</button>
+    </form>
+    {% endif %}
+    <a href="{{ url_for('editar_cadencia', seq_id=seq.id) }}" class="btn btn-sm btn-outline-secondary">
+      <i class="bi bi-pencil me-1"></i> Editar
+    </a>
+    <button class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#modalCSV">
+      <i class="bi bi-upload me-1"></i> Importar Contatos
+    </button>
+  </div>
+</div>
+
+{% if seq.description %}
+<p class="text-muted mb-4">{{ seq.description }}</p>
+{% endif %}
+
+<!-- Cards de metricas -->
+<div class="row g-3 mb-4">
+  <div class="col-md-3">
+    <div class="stat-card" style="background:linear-gradient(135deg,#4361ee,#3a0ca3)">
+      <div class="opacity-75 small mb-1">Total de Contatos</div>
+      <div class="fs-3 fw-bold">{{ total }}</div>
+    </div>
+  </div>
+  <div class="col-md-3">
+    <div class="stat-card" style="background:linear-gradient(135deg,#10b981,#059669)">
+      <div class="opacity-75 small mb-1">Ativos</div>
+      <div class="fs-3 fw-bold">{{ active }}</div>
+    </div>
+  </div>
+  <div class="col-md-3">
+    <div class="stat-card" style="background:linear-gradient(135deg,#6366f1,#4f46e5)">
+      <div class="opacity-75 small mb-1">Finalizados</div>
+      <div class="fs-3 fw-bold">{{ finished }}</div>
+    </div>
+  </div>
+  <div class="col-md-3">
+    <div class="stat-card" style="background:linear-gradient(135deg,#f59e0b,#d97706)">
+      <div class="opacity-75 small mb-1">Taxa de Abertura</div>
+      <div class="fs-3 fw-bold">{{ open_rate }}%</div>
+    </div>
+  </div>
+</div>
+
+<!-- Tabela de passos -->
+<div class="card mb-4">
+  <div class="card-header bg-white fw-semibold border-0 pt-4 pb-0 px-4">
+    <i class="bi bi-list-ol me-2"></i> Passos da Cadencia
+  </div>
+  <div class="card-body p-0">
+    {% if step_metrics %}
+    <div class="table-responsive">
+      <table class="table table-hover mb-0 align-middle">
+        <thead class="table-light">
+          <tr>
+            <th class="ps-4">Passo</th>
+            <th>Dia</th>
+            <th>Assunto</th>
+            <th>Condicao</th>
+            <th>Enviados</th>
+            <th>Aberturas</th>
+            <th>Taxa</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for m in step_metrics %}
+          <tr>
+            <td class="ps-4"><span class="badge bg-primary">{{ m.step.step_number }}</span></td>
+            <td class="text-muted small">Dia {{ m.step.day_offset }}</td>
+            <td class="small fw-semibold">{{ m.step.subject[:60] }}{% if m.step.subject|length > 60 %}...{% endif %}</td>
+            <td>
+              {% if m.step.condition == 'always' %}
+                <span class="badge" style="background:#dbeafe;color:#1e40af">Sempre</span>
+              {% elif m.step.condition == 'only_if_opened' %}
+                <span class="badge" style="background:#d1fae5;color:#065f46">Se abriu</span>
+              {% else %}
+                <span class="badge" style="background:#fef3c7;color:#92400e">Se nao abriu</span>
+              {% endif %}
+            </td>
+            <td>{{ m.sent }}</td>
+            <td>{{ m.opens }}</td>
+            <td>
+              <div class="d-flex align-items-center gap-2">
+                <div class="progress flex-fill" style="height:6px;width:60px">
+                  <div class="progress-bar bg-warning" style="width:{{ m.open_rate }}%"></div>
+                </div>
+                <span class="small">{{ m.open_rate }}%</span>
+              </div>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <div class="text-center py-4 text-muted">
+      <i class="bi bi-list-ol fs-2 d-block mb-2"></i>
+      Nenhum passo configurado.
+      <a href="{{ url_for('editar_cadencia', seq_id=seq.id) }}">Adicionar passos</a>
+    </div>
+    {% endif %}
+  </div>
+</div>
+
+<!-- Tabela de contatos -->
+<div class="card">
+  <div class="card-header bg-white border-0 pt-4 pb-0 px-4 d-flex justify-content-between align-items-center">
+    <span class="fw-semibold"><i class="bi bi-people me-2"></i>Contatos</span>
+    <span class="badge bg-secondary">{{ contacts|length }}</span>
+  </div>
+  <div class="card-body p-0">
+    {% if contacts %}
+    <div style="max-height:480px;overflow-y:auto">
+      <table class="table table-sm table-hover mb-0 align-middle">
+        <thead class="table-light sticky-top">
+          <tr>
+            <th class="ps-4">E-mail</th>
+            <th>Nome</th>
+            <th>Passo Atual</th>
+            <th>Status</th>
+            <th>Proximo Envio</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for c in contacts %}
+          <tr>
+            <td class="ps-4 small">{{ c.contact_email }}</td>
+            <td class="small">{{ c.contact_name or '—' }}</td>
+            <td class="text-center">
+              <span class="badge bg-light text-dark border">{{ c.current_step }}</span>
+            </td>
+            <td>
+              {% if c.status == 'active' %}
+                <span class="badge" style="background:#d1fae5;color:#065f46">Ativo</span>
+              {% elif c.status == 'finished' %}
+                <span class="badge" style="background:#dbeafe;color:#1e40af">Finalizado</span>
+              {% elif c.status == 'paused' %}
+                <span class="badge" style="background:#fef3c7;color:#92400e">Pausado</span>
+              {% elif c.status == 'unsubscribed' %}
+                <span class="badge" style="background:#fee2e2;color:#991b1b">Descadastrado</span>
+              {% elif c.status == 'stopped' %}
+                <span class="badge bg-secondary">Parado</span>
+              {% else %}
+                <span class="badge bg-secondary">{{ c.status }}</span>
+              {% endif %}
+            </td>
+            <td class="small text-muted">{{ c.next_send_at or '—' }}</td>
+            <td>
+              {% if c.status == 'active' %}
+              <form method="POST" action="{{ url_for('parar_contato_cadencia', seq_id=seq.id, email=c.contact_email) }}"
+                    onsubmit="return confirm('Parar cadencia para {{ c.contact_email }}?')">
+                <button class="btn btn-xs btn-outline-danger py-0 px-1" style="font-size:.7rem">
+                  <i class="bi bi-stop-fill"></i>
+                </button>
+              </form>
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <div class="text-center py-5 text-muted">
+      <i class="bi bi-people fs-1 d-block mb-2"></i>
+      Nenhum contato ainda.
+      <button class="btn btn-link p-0" data-bs-toggle="modal" data-bs-target="#modalCSV">
+        Importe um CSV para comecar.
+      </button>
+    </div>
+    {% endif %}
+  </div>
+</div>
+
+<!-- Modal import CSV -->
+<div class="modal fade" id="modalCSV" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="bi bi-upload me-2"></i>Importar Contatos</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <form method="POST" action="{{ url_for('adicionar_contatos_cadencia', seq_id=seq.id) }}" enctype="multipart/form-data">
+        <div class="modal-body">
+          <p class="text-muted small">CSV com colunas <code>nome</code> e <code>email</code>. Contatos ja existentes na cadencia serao ignorados.</p>
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Arquivo CSV *</label>
+            <input type="file" name="csv_file" class="form-control" accept=".csv" required>
+          </div>
+          <div class="alert alert-info py-2 px-3 small mb-0">
+            O primeiro passo sera agendado de acordo com o dia configurado (dia 0 = proximo ciclo em ate 30 min).
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+          <button type="submit" class="btn btn-primary">
+            <i class="bi bi-upload me-1"></i> Importar
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}

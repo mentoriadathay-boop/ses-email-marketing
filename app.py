@@ -1,14 +1,14 @@
 import os
 import csv
-import json
 import sqlite3
 import threading
-import io
-from datetime import datetime
-from flask import Flask, render_template, request, jsonify, redirect, url_for, flash
+from datetime import datetime, timedelta
+from urllib.parse import quote
+from flask import Flask, render_template, request, jsonify, redirect, url_for, flash, Response
 from werkzeug.utils import secure_filename
 import boto3
 from botocore.exceptions import ClientError
+from apscheduler.schedulers.background import BackgroundScheduler
 
 app = Flask(__name__)
 app.secret_key = os.urandom(24)
@@ -17,13 +17,22 @@ UPLOAD_FOLDER = os.path.join(os.path.dirname(__file__), 'uploads')
 DB_PATH = os.path.join(os.path.dirname(__file__), 'data', 'campaigns.db')
 ALLOWED_EXTENSIONS = {'csv'}
 AWS_REGION = os.environ.get('AWS_REGION', 'sa-east-1')
+APP_URL = os.environ.get('APP_URL', 'http://127.0.0.1:5000').rstrip('/')
 
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 app.config['MAX_CONTENT_LENGTH'] = 5 * 1024 * 1024  # 5MB max
 
-# --- Banco de dados ---
 os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+
+PIXEL_GIF = (
+    b'\x47\x49\x46\x38\x39\x61\x01\x00\x01\x00\x80\x00\x00'
+    b'\xff\xff\xff\x00\x00\x00\x21\xf9\x04\x01\x00\x00\x00'
+    b'\x00\x2c\x00\x00\x00\x00\x01\x00\x01\x00\x00\x02\x02'
+    b'\x44\x01\x00\x3b'
+)
+
+# --- Banco de dados ---
 
 def get_db():
     conn = sqlite3.connect(DB_PATH)
@@ -58,6 +67,57 @@ def init_db():
             sent_at TEXT DEFAULT (datetime('now','localtime')),
             FOREIGN KEY (campaign_id) REFERENCES campaigns(id)
         );
+
+        CREATE TABLE IF NOT EXISTS sequences (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            description TEXT,
+            sender_email TEXT NOT NULL DEFAULT '',
+            status TEXT DEFAULT 'active',
+            created_at TEXT DEFAULT (datetime('now','localtime'))
+        );
+
+        CREATE TABLE IF NOT EXISTS sequence_steps (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            sequence_id INTEGER NOT NULL,
+            step_number INTEGER NOT NULL,
+            day_offset INTEGER NOT NULL,
+            subject TEXT NOT NULL,
+            body_html TEXT NOT NULL,
+            condition TEXT DEFAULT 'always',
+            FOREIGN KEY (sequence_id) REFERENCES sequences(id)
+        );
+
+        CREATE TABLE IF NOT EXISTS sequence_contacts (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            sequence_id INTEGER NOT NULL,
+            contact_email TEXT NOT NULL,
+            contact_name TEXT,
+            current_step INTEGER DEFAULT 1,
+            status TEXT DEFAULT 'active',
+            next_send_at TEXT,
+            started_at TEXT DEFAULT (datetime('now','localtime')),
+            finished_at TEXT,
+            FOREIGN KEY (sequence_id) REFERENCES sequences(id)
+        );
+
+        CREATE TABLE IF NOT EXISTS sequence_logs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            sequence_id INTEGER NOT NULL,
+            contact_email TEXT NOT NULL,
+            step_number INTEGER NOT NULL,
+            status TEXT NOT NULL,
+            error_message TEXT,
+            sent_at TEXT DEFAULT (datetime('now','localtime'))
+        );
+
+        CREATE TABLE IF NOT EXISTS email_opens (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            sequence_id INTEGER,
+            contact_email TEXT NOT NULL,
+            step_number INTEGER,
+            opened_at TEXT DEFAULT (datetime('now','localtime'))
+        );
     ''')
     conn.commit()
     conn.close()
@@ -78,7 +138,6 @@ def parse_csv(filepath):
             with open(filepath, newline='', encoding=enc) as f:
                 reader = csv.DictReader(f)
                 for row in reader:
-                    # Tenta variações comuns de nome de coluna
                     name = (row.get('nome') or row.get('Nome') or row.get('name') or
                             row.get('Name') or row.get('NOME') or '').strip()
                     email = (row.get('email') or row.get('Email') or row.get('EMAIL') or
@@ -91,13 +150,15 @@ def parse_csv(filepath):
     return contacts
 
 def get_ses_client():
-    return boto3.client('ses', region_name=AWS_REGION, aws_access_key_id=os.environ.get('AWS_ACCESS_KEY_ID'), aws_secret_access_key=os.environ.get('AWS_SECRET_ACCESS_KEY'))
+    return boto3.client(
+        'ses', region_name=AWS_REGION,
+        aws_access_key_id=os.environ.get('AWS_ACCESS_KEY_ID'),
+        aws_secret_access_key=os.environ.get('AWS_SECRET_ACCESS_KEY')
+    )
 
 def send_email_ses(ses_client, sender, recipient_email, recipient_name, subject, body_html):
-    # Personaliza com o nome do contato
     personalized_subject = subject.replace('{nome}', recipient_name or 'Cliente')
     personalized_body = body_html.replace('{nome}', recipient_name or 'Cliente')
-
     response = ses_client.send_email(
         Source=sender,
         Destination={'ToAddresses': [recipient_email]},
@@ -137,8 +198,7 @@ def run_campaign(campaign_id, contacts, sender, subject, body_html):
             campaign_progress[campaign_id]['logs'].append(
                 {'email': email, 'name': name, 'status': 'sent', 'error': None}
             )
-            conn.execute(
-                "UPDATE campaigns SET sent=sent+1 WHERE id=?", (campaign_id,))
+            conn.execute("UPDATE campaigns SET sent=sent+1 WHERE id=?", (campaign_id,))
         except ClientError as e:
             err_msg = e.response['Error']['Message']
             status = 'error'
@@ -146,8 +206,7 @@ def run_campaign(campaign_id, contacts, sender, subject, body_html):
             campaign_progress[campaign_id]['logs'].append(
                 {'email': email, 'name': name, 'status': 'error', 'error': err_msg}
             )
-            conn.execute(
-                "UPDATE campaigns SET errors=errors+1 WHERE id=?", (campaign_id,))
+            conn.execute("UPDATE campaigns SET errors=errors+1 WHERE id=?", (campaign_id,))
 
         conn.execute(
             "INSERT INTO campaign_logs (campaign_id,contact_email,contact_name,status,error_message)"
@@ -157,7 +216,6 @@ def run_campaign(campaign_id, contacts, sender, subject, body_html):
         )
         conn.commit()
 
-    # Finaliza
     campaign_progress[campaign_id]['status'] = 'done'
     conn.execute(
         "UPDATE campaigns SET status='done', finished_at=datetime('now','localtime') WHERE id=?",
@@ -165,7 +223,114 @@ def run_campaign(campaign_id, contacts, sender, subject, body_html):
     conn.commit()
     conn.close()
 
-# --- Rotas ---
+# --- Agendador de cadencias ---
+
+def processar_cadencias():
+    conn = get_db()
+    now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+
+    pending = conn.execute('''
+        SELECT sc.*, s.sender_email AS seq_sender
+        FROM sequence_contacts sc
+        JOIN sequences s ON s.id = sc.sequence_id
+        WHERE sc.status = 'active' AND sc.next_send_at <= ?
+    ''', (now,)).fetchall()
+
+    if not pending:
+        conn.close()
+        return
+
+    try:
+        ses = get_ses_client()
+    except Exception:
+        conn.close()
+        return
+
+    for c in pending:
+        seq_id = c['sequence_id']
+        step_num = c['current_step']
+        email = c['contact_email']
+        name = c['contact_name'] or 'Cliente'
+        sender = c['seq_sender']
+        contact_id = c['id']
+
+        step = conn.execute(
+            'SELECT * FROM sequence_steps WHERE sequence_id=? AND step_number=?',
+            (seq_id, step_num)
+        ).fetchone()
+
+        if not step:
+            conn.execute(
+                "UPDATE sequence_contacts SET status='finished', finished_at=datetime('now','localtime') WHERE id=?",
+                (contact_id,)
+            )
+            conn.commit()
+            continue
+
+        should_send = True
+        cond = step['condition']
+        if cond in ('only_if_opened', 'only_if_not_opened'):
+            opens_count = conn.execute(
+                'SELECT COUNT(*) FROM email_opens WHERE sequence_id=? AND contact_email=? AND step_number<?',
+                (seq_id, email, step_num)
+            ).fetchone()[0]
+            if cond == 'only_if_opened' and opens_count == 0:
+                should_send = False
+            elif cond == 'only_if_not_opened' and opens_count > 0:
+                should_send = False
+
+        if should_send:
+            pixel_url = f"{APP_URL}/track/open?email={quote(email)}&seq={seq_id}&step={step_num}"
+            unsub_url = f"{APP_URL}/descadastrar?email={quote(email)}&seq={seq_id}"
+            body = (
+                step['body_html']
+                + f'<img src="{pixel_url}" width="1" height="1" style="display:none;border:0" />'
+                + f'<div style="text-align:center;margin-top:24px;font-size:11px;color:#aaa">'
+                + f'<a href="{unsub_url}" style="color:#aaa">Descadastrar</a></div>'
+            )
+            try:
+                send_email_ses(ses, sender, email, name, step['subject'], body)
+                conn.execute(
+                    'INSERT INTO sequence_logs (sequence_id,contact_email,step_number,status) VALUES (?,?,?,?)',
+                    (seq_id, email, step_num, 'sent')
+                )
+            except ClientError as e:
+                conn.execute(
+                    'INSERT INTO sequence_logs (sequence_id,contact_email,step_number,status,error_message) VALUES (?,?,?,?,?)',
+                    (seq_id, email, step_num, 'error', e.response['Error']['Message'])
+                )
+        else:
+            conn.execute(
+                'INSERT INTO sequence_logs (sequence_id,contact_email,step_number,status) VALUES (?,?,?,?)',
+                (seq_id, email, step_num, 'skipped')
+            )
+
+        next_step = conn.execute(
+            'SELECT * FROM sequence_steps WHERE sequence_id=? AND step_number=?',
+            (seq_id, step_num + 1)
+        ).fetchone()
+
+        if next_step:
+            try:
+                started_at = datetime.strptime(c['started_at'], '%Y-%m-%d %H:%M:%S')
+            except (ValueError, TypeError):
+                started_at = datetime.now()
+            next_send = (started_at + timedelta(days=next_step['day_offset'])).strftime('%Y-%m-%d %H:%M:%S')
+            conn.execute(
+                'UPDATE sequence_contacts SET current_step=?, next_send_at=? WHERE id=?',
+                (step_num + 1, next_send, contact_id)
+            )
+        else:
+            conn.execute(
+                "UPDATE sequence_contacts SET status='finished', finished_at=datetime('now','localtime') WHERE id=?",
+                (contact_id,)
+            )
+
+        conn.commit()
+
+    conn.close()
+
+# --- Rotas de campanhas ---
 
 @app.route('/')
 def index():
@@ -184,7 +349,7 @@ def nova_campanha():
         body_html = request.form.get('body_html', '').strip()
 
         if not all([name, sender, subject, body_html]):
-            flash('Preencha todos os campos obrigatórios.', 'danger')
+            flash('Preencha todos os campos obrigatorios.', 'danger')
             return redirect(url_for('nova_campanha'))
 
         if 'csv_file' not in request.files or request.files['csv_file'].filename == '':
@@ -202,7 +367,7 @@ def nova_campanha():
 
         contacts = parse_csv(filepath)
         if not contacts:
-            flash('Nenhum contato válido encontrado no CSV. Verifique as colunas nome e email.', 'danger')
+            flash('Nenhum contato valido encontrado no CSV. Verifique as colunas nome e email.', 'danger')
             return redirect(url_for('nova_campanha'))
 
         conn = get_db()
@@ -215,7 +380,6 @@ def nova_campanha():
         conn.commit()
         conn.close()
 
-        # Dispara em thread separada
         t = threading.Thread(
             target=run_campaign,
             args=(campaign_id, contacts, sender, subject, body_html),
@@ -238,7 +402,7 @@ def campanha_detalhe(campaign_id):
         (campaign_id,)).fetchall()
     conn.close()
     if not campaign:
-        flash('Campanha não encontrada.', 'danger')
+        flash('Campanha nao encontrada.', 'danger')
         return redirect(url_for('index'))
     return render_template('campanha_detalhe.html', campaign=campaign, logs=logs)
 
@@ -247,7 +411,6 @@ def api_progresso(campaign_id):
     prog = campaign_progress.get(campaign_id)
     if prog:
         return jsonify(prog)
-    # Se não tem em memória, busca no banco
     conn = get_db()
     c = conn.execute("SELECT * FROM campaigns WHERE id=?", (campaign_id,)).fetchone()
     conn.close()
@@ -256,7 +419,7 @@ def api_progresso(campaign_id):
             'total': c['total_contacts'], 'sent': c['sent'],
             'errors': c['errors'], 'status': c['status'], 'logs': []
         })
-    return jsonify({'error': 'não encontrado'}), 404
+    return jsonify({'error': 'nao encontrado'}), 404
 
 @app.route('/api/verificar-ses')
 def api_verificar_ses():
@@ -276,7 +439,7 @@ def api_verificar_ses():
     except ClientError as e:
         return jsonify({'ok': False, 'erro': str(e)}), 500
     except Exception as e:
-        return jsonify({'ok': False, 'erro': f'AWS CLI não configurado: {str(e)}'}), 500
+        return jsonify({'ok': False, 'erro': f'AWS nao configurado: {str(e)}'}), 500
 
 @app.route('/configuracoes')
 def configuracoes():
@@ -297,7 +460,305 @@ def debug_credenciais():
         'AWS_REGION': region or '(vazia)',
     })
 
+# --- Rotas de cadencias ---
+
+@app.route('/cadencias')
+def cadencias():
+    conn = get_db()
+    seqs = conn.execute('SELECT * FROM sequences ORDER BY created_at DESC').fetchall()
+    result = []
+    for s in seqs:
+        sid = s['id']
+        total = conn.execute('SELECT COUNT(*) FROM sequence_contacts WHERE sequence_id=?', (sid,)).fetchone()[0]
+        active = conn.execute("SELECT COUNT(*) FROM sequence_contacts WHERE sequence_id=? AND status='active'", (sid,)).fetchone()[0]
+        finished = conn.execute("SELECT COUNT(*) FROM sequence_contacts WHERE sequence_id=? AND status='finished'", (sid,)).fetchone()[0]
+        sent = conn.execute("SELECT COUNT(*) FROM sequence_logs WHERE sequence_id=? AND status='sent'", (sid,)).fetchone()[0]
+        opens = conn.execute('SELECT COUNT(*) FROM email_opens WHERE sequence_id=?', (sid,)).fetchone()[0]
+        open_rate = round(opens / sent * 100, 1) if sent > 0 else 0
+        result.append({'seq': s, 'total': total, 'active': active, 'finished': finished, 'open_rate': open_rate})
+    conn.close()
+    return render_template('cadencias.html', sequences=result)
+
+@app.route('/cadencias/nova', methods=['GET', 'POST'])
+def nova_cadencia():
+    if request.method == 'POST':
+        name = request.form.get('name', '').strip()
+        description = request.form.get('description', '').strip()
+        sender = request.form.get('sender_email', '').strip()
+        days = request.form.getlist('step_day[]')
+        subjects = request.form.getlist('step_subject[]')
+        bodies = request.form.getlist('step_body[]')
+        conditions = request.form.getlist('step_condition[]')
+
+        if not name or not sender or not days:
+            flash('Preencha nome, remetente e pelo menos um passo.', 'danger')
+            return redirect(url_for('nova_cadencia'))
+
+        conn = get_db()
+        cur = conn.execute(
+            'INSERT INTO sequences (name, description, sender_email) VALUES (?,?,?)',
+            (name, description, sender)
+        )
+        seq_id = cur.lastrowid
+        for i, (day, subj, body, cond) in enumerate(zip(days, subjects, bodies, conditions), start=1):
+            conn.execute(
+                'INSERT INTO sequence_steps (sequence_id,step_number,day_offset,subject,body_html,condition) VALUES (?,?,?,?,?,?)',
+                (seq_id, i, int(day or 0), subj, body, cond or 'always')
+            )
+        conn.commit()
+        conn.close()
+        flash('Cadencia criada com sucesso!', 'success')
+        return redirect(url_for('cadencia_detalhe', seq_id=seq_id))
+
+    return render_template('nova_cadencia.html', seq=None, steps=[], editing=False)
+
+@app.route('/cadencias/<int:seq_id>')
+def cadencia_detalhe(seq_id):
+    conn = get_db()
+    seq = conn.execute('SELECT * FROM sequences WHERE id=?', (seq_id,)).fetchone()
+    if not seq:
+        flash('Cadencia nao encontrada.', 'danger')
+        conn.close()
+        return redirect(url_for('cadencias'))
+
+    steps = conn.execute(
+        'SELECT * FROM sequence_steps WHERE sequence_id=? ORDER BY step_number', (seq_id,)
+    ).fetchall()
+    contacts = conn.execute(
+        'SELECT * FROM sequence_contacts WHERE sequence_id=? ORDER BY started_at DESC LIMIT 200',
+        (seq_id,)
+    ).fetchall()
+
+    total = conn.execute('SELECT COUNT(*) FROM sequence_contacts WHERE sequence_id=?', (seq_id,)).fetchone()[0]
+    active = conn.execute("SELECT COUNT(*) FROM sequence_contacts WHERE sequence_id=? AND status='active'", (seq_id,)).fetchone()[0]
+    finished = conn.execute("SELECT COUNT(*) FROM sequence_contacts WHERE sequence_id=? AND status='finished'", (seq_id,)).fetchone()[0]
+    sent_total = conn.execute("SELECT COUNT(*) FROM sequence_logs WHERE sequence_id=? AND status='sent'", (seq_id,)).fetchone()[0]
+    opens_total = conn.execute('SELECT COUNT(*) FROM email_opens WHERE sequence_id=?', (seq_id,)).fetchone()[0]
+    open_rate = round(opens_total / sent_total * 100, 1) if sent_total > 0 else 0
+
+    step_metrics = []
+    for st in steps:
+        sn = st['step_number']
+        s_count = conn.execute(
+            "SELECT COUNT(*) FROM sequence_logs WHERE sequence_id=? AND step_number=? AND status='sent'",
+            (seq_id, sn)
+        ).fetchone()[0]
+        o_count = conn.execute(
+            'SELECT COUNT(*) FROM email_opens WHERE sequence_id=? AND step_number=?',
+            (seq_id, sn)
+        ).fetchone()[0]
+        step_metrics.append({
+            'step': st, 'sent': s_count, 'opens': o_count,
+            'open_rate': round(o_count / s_count * 100, 1) if s_count > 0 else 0
+        })
+
+    conn.close()
+    return render_template('cadencia_detalhe.html',
+        seq=seq, steps=steps, contacts=contacts,
+        total=total, active=active, finished=finished,
+        sent_total=sent_total, open_rate=open_rate,
+        step_metrics=step_metrics
+    )
+
+@app.route('/cadencias/<int:seq_id>/editar', methods=['GET', 'POST'])
+def editar_cadencia(seq_id):
+    conn = get_db()
+    seq = conn.execute('SELECT * FROM sequences WHERE id=?', (seq_id,)).fetchone()
+    if not seq:
+        flash('Cadencia nao encontrada.', 'danger')
+        conn.close()
+        return redirect(url_for('cadencias'))
+
+    if request.method == 'POST':
+        name = request.form.get('name', '').strip()
+        description = request.form.get('description', '').strip()
+        sender = request.form.get('sender_email', '').strip()
+        days = request.form.getlist('step_day[]')
+        subjects = request.form.getlist('step_subject[]')
+        bodies = request.form.getlist('step_body[]')
+        conditions = request.form.getlist('step_condition[]')
+
+        conn.execute(
+            'UPDATE sequences SET name=?, description=?, sender_email=? WHERE id=?',
+            (name, description, sender, seq_id)
+        )
+        conn.execute('DELETE FROM sequence_steps WHERE sequence_id=?', (seq_id,))
+        for i, (day, subj, body, cond) in enumerate(zip(days, subjects, bodies, conditions), start=1):
+            conn.execute(
+                'INSERT INTO sequence_steps (sequence_id,step_number,day_offset,subject,body_html,condition) VALUES (?,?,?,?,?,?)',
+                (seq_id, i, int(day or 0), subj, body, cond or 'always')
+            )
+        conn.commit()
+        conn.close()
+        flash('Cadencia atualizada!', 'success')
+        return redirect(url_for('cadencia_detalhe', seq_id=seq_id))
+
+    steps = conn.execute(
+        'SELECT * FROM sequence_steps WHERE sequence_id=? ORDER BY step_number', (seq_id,)
+    ).fetchall()
+    conn.close()
+    return render_template('nova_cadencia.html', seq=seq, steps=steps, editing=True)
+
+@app.route('/cadencias/<int:seq_id>/adicionar-contatos', methods=['POST'])
+def adicionar_contatos_cadencia(seq_id):
+    conn = get_db()
+    seq = conn.execute('SELECT * FROM sequences WHERE id=?', (seq_id,)).fetchone()
+    if not seq:
+        flash('Cadencia nao encontrada.', 'danger')
+        conn.close()
+        return redirect(url_for('cadencias'))
+
+    if 'csv_file' not in request.files or request.files['csv_file'].filename == '':
+        flash('Selecione um arquivo CSV.', 'danger')
+        conn.close()
+        return redirect(url_for('cadencia_detalhe', seq_id=seq_id))
+
+    file = request.files['csv_file']
+    if not allowed_file(file.filename):
+        flash('Arquivo deve ser .csv', 'danger')
+        conn.close()
+        return redirect(url_for('cadencia_detalhe', seq_id=seq_id))
+
+    filename = secure_filename(file.filename)
+    filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+    file.save(filepath)
+    contacts = parse_csv(filepath)
+
+    if not contacts:
+        flash('Nenhum contato valido encontrado.', 'danger')
+        conn.close()
+        return redirect(url_for('cadencia_detalhe', seq_id=seq_id))
+
+    first_step = conn.execute(
+        'SELECT * FROM sequence_steps WHERE sequence_id=? ORDER BY step_number LIMIT 1', (seq_id,)
+    ).fetchone()
+
+    if not first_step:
+        flash('Adicione pelo menos um passo antes de importar contatos.', 'danger')
+        conn.close()
+        return redirect(url_for('cadencia_detalhe', seq_id=seq_id))
+
+    now = datetime.now()
+    next_send = (now + timedelta(days=first_step['day_offset'])).strftime('%Y-%m-%d %H:%M:%S')
+    added = 0
+    for c in contacts:
+        existing = conn.execute(
+            'SELECT id FROM sequence_contacts WHERE sequence_id=? AND contact_email=?',
+            (seq_id, c['email'])
+        ).fetchone()
+        if not existing:
+            conn.execute(
+                'INSERT INTO sequence_contacts (sequence_id,contact_email,contact_name,current_step,next_send_at) VALUES (?,?,?,?,?)',
+                (seq_id, c['email'], c['name'], first_step['step_number'], next_send)
+            )
+            added += 1
+
+    conn.commit()
+    conn.close()
+    flash(f'{added} contatos adicionados a cadencia.', 'success')
+    return redirect(url_for('cadencia_detalhe', seq_id=seq_id))
+
+@app.route('/cadencias/<int:seq_id>/pausar', methods=['POST'])
+def pausar_cadencia(seq_id):
+    conn = get_db()
+    conn.execute(
+        "UPDATE sequence_contacts SET status='paused' WHERE sequence_id=? AND status='active'", (seq_id,))
+    conn.execute("UPDATE sequences SET status='paused' WHERE id=?", (seq_id,))
+    conn.commit()
+    conn.close()
+    flash('Cadencia pausada.', 'warning')
+    return redirect(url_for('cadencia_detalhe', seq_id=seq_id))
+
+@app.route('/cadencias/<int:seq_id>/retomar', methods=['POST'])
+def retomar_cadencia(seq_id):
+    conn = get_db()
+    conn.execute(
+        "UPDATE sequence_contacts SET status='active' WHERE sequence_id=? AND status='paused'", (seq_id,))
+    conn.execute("UPDATE sequences SET status='active' WHERE id=?", (seq_id,))
+    conn.commit()
+    conn.close()
+    flash('Cadencia retomada.', 'success')
+    return redirect(url_for('cadencia_detalhe', seq_id=seq_id))
+
+@app.route('/cadencias/<int:seq_id>/contato/<path:email>/parar', methods=['POST'])
+def parar_contato_cadencia(seq_id, email):
+    conn = get_db()
+    conn.execute(
+        "UPDATE sequence_contacts SET status='stopped' WHERE sequence_id=? AND contact_email=?",
+        (seq_id, email)
+    )
+    conn.commit()
+    conn.close()
+    flash(f'Cadencia parada para {email}.', 'info')
+    return redirect(url_for('cadencia_detalhe', seq_id=seq_id))
+
+@app.route('/api/cadencias/<int:seq_id>/metricas')
+def api_cadencia_metricas(seq_id):
+    conn = get_db()
+    steps = conn.execute(
+        'SELECT * FROM sequence_steps WHERE sequence_id=? ORDER BY step_number', (seq_id,)
+    ).fetchall()
+    result = []
+    for st in steps:
+        sn = st['step_number']
+        sent = conn.execute(
+            "SELECT COUNT(*) FROM sequence_logs WHERE sequence_id=? AND step_number=? AND status='sent'",
+            (seq_id, sn)
+        ).fetchone()[0]
+        opens = conn.execute(
+            'SELECT COUNT(*) FROM email_opens WHERE sequence_id=? AND step_number=?',
+            (seq_id, sn)
+        ).fetchone()[0]
+        result.append({
+            'step': sn, 'day_offset': st['day_offset'], 'subject': st['subject'],
+            'sent': sent, 'opens': opens,
+            'open_rate': round(opens / sent * 100, 1) if sent > 0 else 0
+        })
+    conn.close()
+    return jsonify(result)
+
+@app.route('/track/open')
+def track_open():
+    email = request.args.get('email', '')
+    seq_id = request.args.get('seq', type=int)
+    step_num = request.args.get('step', type=int)
+    if email and seq_id and step_num is not None:
+        try:
+            conn = get_db()
+            conn.execute(
+                'INSERT INTO email_opens (sequence_id, contact_email, step_number) VALUES (?,?,?)',
+                (seq_id, email, step_num)
+            )
+            conn.commit()
+            conn.close()
+        except Exception:
+            pass
+    return Response(PIXEL_GIF, mimetype='image/gif',
+                    headers={'Cache-Control': 'no-cache, no-store, must-revalidate'})
+
+@app.route('/descadastrar')
+def descadastrar():
+    email = request.args.get('email', '')
+    seq_id = request.args.get('seq', type=int)
+    if email and seq_id:
+        try:
+            conn = get_db()
+            conn.execute(
+                "UPDATE sequence_contacts SET status='unsubscribed' WHERE sequence_id=? AND contact_email=?",
+                (seq_id, email)
+            )
+            conn.commit()
+            conn.close()
+        except Exception:
+            pass
+    return render_template('descadastrar.html', email=email)
+
 init_db()
+
+if not app.debug or os.environ.get('WERKZEUG_RUN_MAIN') == 'true':
+    _scheduler = BackgroundScheduler(daemon=True)
+    _scheduler.add_job(processar_cadencias, 'interval', minutes=30)
+    _scheduler.start()
 
 if __name__ == '__main__':
     print("\nASA Email Marketing rodando em: http://127.0.0.1:5000\n")

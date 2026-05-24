@@ -41,6 +41,9 @@
       <a href="{{ url_for('nova_campanha') }}" class="nav-link {% if request.endpoint == 'nova_campanha' %}active{% endif %}">
         <i class="bi bi-plus-circle"></i> Nova Campanha
       </a>
+      <a href="{{ url_for('cadencias') }}" class="nav-link {% if 'cadencia' in request.endpoint %}active{% endif %}">
+        <i class="bi bi-arrow-repeat"></i> Cadencias
+      </a>
       <a href="{{ url_for('configuracoes') }}" class="nav-link {% if request.endpoint == 'configuracoes' %}active{% endif %}">
         <i class="bi bi-gear"></i> Configuracoes
       </a>

@@ -1,0 +1,194 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="d-flex align-items-center mb-4">
+  <a href="{{ url_for('cadencias') }}" class="btn btn-sm btn-outline-secondary me-3">
+    <i class="bi bi-arrow-left"></i>
+  </a>
+  <div>
+    <h4 class="fw-bold mb-0">{% if editing %}Editar Cadencia{% else %}Nova Cadencia{% endif %}</h4>
+    <small class="text-muted">Configure a sequencia automatica de emails</small>
+  </div>
+</div>
+
+<form method="POST" action="{{ url_for('editar_cadencia', seq_id=seq.id) if editing else url_for('nova_cadencia') }}">
+  <div class="row g-4">
+
+    <!-- Coluna esquerda: dados gerais -->
+    <div class="col-lg-4">
+      <div class="card mb-4">
+        <div class="card-body">
+          <h6 class="fw-semibold mb-3"><i class="bi bi-info-circle me-2 text-primary"></i>Dados da Cadencia</h6>
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Nome *</label>
+            <input type="text" name="name" class="form-control" required
+              placeholder="Ex: Prospecção Clientes B2B"
+              value="{{ seq.name if seq else '' }}">
+          </div>
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Descricao</label>
+            <textarea name="description" class="form-control" rows="3"
+              placeholder="Descricao opcional da cadencia">{{ seq.description if seq else '' }}</textarea>
+          </div>
+          <div class="mb-3">
+            <label class="form-label fw-semibold">E-mail Remetente *</label>
+            <input type="email" name="sender_email" class="form-control" required
+              placeholder="contato@seudominio.com.br"
+              value="{{ seq.sender_email if seq else '' }}">
+            <div class="form-text">Deve estar verificado no Amazon SES.</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-body">
+          <h6 class="fw-semibold mb-2"><i class="bi bi-info-circle me-2 text-primary"></i>Dicas</h6>
+          <ul class="small text-muted ps-3 mb-0">
+            <li>Use <code>{nome}</code> no assunto e corpo para personalizar</li>
+            <li>Dia 0 = envia imediatamente ao adicionar contato</li>
+            <li>Condicoes: enviar so se abriu (ou nao abriu) emails anteriores</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <!-- Coluna direita: passos -->
+    <div class="col-lg-8">
+      <div class="card">
+        <div class="card-body">
+          <div class="d-flex justify-content-between align-items-center mb-3">
+            <h6 class="fw-semibold mb-0"><i class="bi bi-list-ol me-2 text-primary"></i>Passos da Cadencia</h6>
+            <button type="button" class="btn btn-sm btn-outline-primary" onclick="adicionarPasso()">
+              <i class="bi bi-plus-lg me-1"></i> Adicionar Passo
+            </button>
+          </div>
+
+          <div id="passos-container">
+            {% if steps %}
+              {% for st in steps %}
+              <div class="passo-item border rounded p-3 mb-3" data-index="{{ loop.index0 }}">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                  <span class="badge bg-primary">Passo {{ st.step_number }}</span>
+                  <button type="button" class="btn btn-sm btn-outline-danger" onclick="removerPasso(this)">
+                    <i class="bi bi-trash"></i>
+                  </button>
+                </div>
+                <div class="row g-2 mb-2">
+                  <div class="col-sm-3">
+                    <label class="form-label small fw-semibold">Dia</label>
+                    <input type="number" name="step_day[]" class="form-control form-control-sm"
+                      min="0" value="{{ st.day_offset }}" required>
+                    <div class="form-text small">0 = imediato</div>
+                  </div>
+                  <div class="col-sm-9">
+                    <label class="form-label small fw-semibold">Condicao de envio</label>
+                    <select name="step_condition[]" class="form-select form-select-sm">
+                      <option value="always" {% if st.condition == 'always' %}selected{% endif %}>Sempre enviar</option>
+                      <option value="only_if_not_opened" {% if st.condition == 'only_if_not_opened' %}selected{% endif %}>Somente se NAO abriu anterior</option>
+                      <option value="only_if_opened" {% if st.condition == 'only_if_opened' %}selected{% endif %}>Somente se abriu anterior</option>
+                    </select>
+                  </div>
+                </div>
+                <div class="mb-2">
+                  <label class="form-label small fw-semibold">Assunto do E-mail *</label>
+                  <input type="text" name="step_subject[]" class="form-control form-control-sm"
+                    placeholder="Ola {nome}, vamos conversar?" value="{{ st.subject }}" required>
+                </div>
+                <div>
+                  <label class="form-label small fw-semibold">Corpo do E-mail (HTML) *</label>
+                  <textarea name="step_body[]" class="form-control form-control-sm font-monospace"
+                    rows="6" required>{{ st.body_html }}</textarea>
+                </div>
+              </div>
+              {% endfor %}
+            {% else %}
+              <div id="passos-vazio" class="text-center py-4 text-muted">
+                <i class="bi bi-plus-circle fs-2 d-block mb-2"></i>
+                Clique em "Adicionar Passo" para comecar.
+              </div>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+
+      <div class="d-flex gap-2 mt-3">
+        <button type="submit" class="btn btn-primary px-4">
+          <i class="bi bi-check-lg me-1"></i>
+          {% if editing %}Salvar Alteracoes{% else %}Criar Cadencia{% endif %}
+        </button>
+        <a href="{{ url_for('cadencias') }}" class="btn btn-outline-secondary">Cancelar</a>
+      </div>
+    </div>
+  </div>
+</form>
+
+<!-- Template oculto para novos passos -->
+<template id="passo-template">
+  <div class="passo-item border rounded p-3 mb-3">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+      <span class="badge bg-primary passo-num">Passo ?</span>
+      <button type="button" class="btn btn-sm btn-outline-danger" onclick="removerPasso(this)">
+        <i class="bi bi-trash"></i>
+      </button>
+    </div>
+    <div class="row g-2 mb-2">
+      <div class="col-sm-3">
+        <label class="form-label small fw-semibold">Dia</label>
+        <input type="number" name="step_day[]" class="form-control form-control-sm" min="0" value="0" required>
+        <div class="form-text small">0 = imediato</div>
+      </div>
+      <div class="col-sm-9">
+        <label class="form-label small fw-semibold">Condicao de envio</label>
+        <select name="step_condition[]" class="form-select form-select-sm">
+          <option value="always">Sempre enviar</option>
+          <option value="only_if_not_opened">Somente se NAO abriu anterior</option>
+          <option value="only_if_opened">Somente se abriu anterior</option>
+        </select>
+      </div>
+    </div>
+    <div class="mb-2">
+      <label class="form-label small fw-semibold">Assunto do E-mail *</label>
+      <input type="text" name="step_subject[]" class="form-control form-control-sm"
+        placeholder="Ola {nome}, vamos conversar?" required>
+    </div>
+    <div>
+      <label class="form-label small fw-semibold">Corpo do E-mail (HTML) *</label>
+      <textarea name="step_body[]" class="form-control form-control-sm font-monospace"
+        rows="6" required placeholder="<p>Ola <strong>{nome}</strong>,</p>&#10;<p>Seu texto aqui...</p>"></textarea>
+    </div>
+  </div>
+</template>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function atualizarNumeros() {
+  document.querySelectorAll('.passo-item').forEach((el, i) => {
+    const badge = el.querySelector('.passo-num');
+    if (badge) badge.textContent = 'Passo ' + (i + 1);
+  });
+}
+
+function adicionarPasso() {
+  const container = document.getElementById('passos-container');
+  const vazio = document.getElementById('passos-vazio');
+  if (vazio) vazio.remove();
+
+  const tmpl = document.getElementById('passo-template');
+  const clone = tmpl.content.cloneNode(true);
+  container.appendChild(clone);
+  atualizarNumeros();
+}
+
+function removerPasso(btn) {
+  btn.closest('.passo-item').remove();
+  atualizarNumeros();
+  if (!document.querySelector('.passo-item')) {
+    const container = document.getElementById('passos-container');
+    container.innerHTML = '<div id="passos-vazio" class="text-center py-4 text-muted"><i class="bi bi-plus-circle fs-2 d-block mb-2"></i>Clique em "Adicionar Passo" para comecar.</div>';
+  }
+}
+
+// Numerar passos ja existentes ao carregar (modo edicao)
+atualizarNumeros();
+</script>
+{% endblock %}
