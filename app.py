@@ -169,6 +169,16 @@ def init_db():
             id SERIAL PRIMARY KEY, email TEXT NOT NULL UNIQUE,
             reason TEXT, added_at TIMESTAMP DEFAULT NOW()
         )''',
+        '''CREATE TABLE IF NOT EXISTS contact_purchases (
+            id SERIAL PRIMARY KEY, contact_email TEXT NOT NULL,
+            product TEXT NOT NULL, purchased_at DATE,
+            created_at TIMESTAMP DEFAULT NOW()
+        )''',
+        '''CREATE TABLE IF NOT EXISTS mailings (
+            id SERIAL PRIMARY KEY, name TEXT NOT NULL,
+            filename TEXT NOT NULL, contact_count INTEGER DEFAULT 0,
+            created_at TIMESTAMP DEFAULT NOW()
+        )''',
     ]
     for sql in tables:
         conn.execute(sql)
@@ -180,6 +190,8 @@ def init_db():
         "ALTER TABLE sequence_steps ADD COLUMN ab_ratio INTEGER DEFAULT 50",
         "ALTER TABLE sequence_logs ADD COLUMN ab_version TEXT DEFAULT 'A'",
         "ALTER TABLE contacts ADD COLUMN product_interest TEXT",
+        "ALTER TABLE contacts ADD COLUMN source TEXT",
+        "ALTER TABLE campaigns ADD COLUMN mailing_id INTEGER",
     ]:
         try:
             conn.execute(f"DO $$ BEGIN {col_sql}; EXCEPTION WHEN duplicate_column THEN NULL; END $$")
@@ -540,6 +552,7 @@ def nova_campanha():
         subject = request.form.get('subject', '').strip()
         body_html = request.form.get('body_html', '').strip()
         send_mode = request.form.get('send_mode', 'csv')
+        mailing_id = request.form.get('mailing_id', '').strip() or None
 
         if not all([name, sender, subject, body_html]):
             flash('Preencha todos os campos obrigatórios.', 'danger')
@@ -552,6 +565,21 @@ def nova_campanha():
                 flash('Informe o email do destinatário.', 'danger')
                 return redirect(url_for('nova_campanha'))
             contacts = [{'name': ind_name, 'email': ind_email, 'tags': ''}]
+        elif send_mode == 'mailing':
+            if not mailing_id:
+                flash('Selecione um mailing.', 'danger')
+                return redirect(url_for('nova_campanha'))
+            conn_m = get_db()
+            ml = conn_m.execute('SELECT * FROM mailings WHERE id=%s', (mailing_id,)).fetchone()
+            conn_m.close()
+            if not ml:
+                flash('Mailing não encontrado.', 'danger')
+                return redirect(url_for('nova_campanha'))
+            filepath = os.path.join(app.config['UPLOAD_FOLDER'], ml['filename'])
+            contacts = parse_csv(filepath)
+            if not contacts:
+                flash('Nenhum contato válido no mailing selecionado.', 'danger')
+                return redirect(url_for('nova_campanha'))
         else:
             if 'csv_file' not in request.files or request.files['csv_file'].filename == '':
                 flash('Selecione um arquivo CSV.', 'danger')
@@ -570,8 +598,8 @@ def nova_campanha():
 
         conn = get_db()
         cur = conn.execute(
-            "INSERT INTO campaigns (name,subject,body,sender_email,total_contacts,status) VALUES (%s,%s,%s,%s,%s,%s) RETURNING id",
-            (name, subject, body_html, sender, len(contacts), 'pending'))
+            "INSERT INTO campaigns (name,subject,body,sender_email,total_contacts,status,mailing_id) VALUES (%s,%s,%s,%s,%s,%s,%s) RETURNING id",
+            (name, subject, body_html, sender, len(contacts), 'pending', mailing_id))
         campaign_id = cur.fetchone()['id']
         conn.commit()
         conn.close()
@@ -581,7 +609,10 @@ def nova_campanha():
         flash(f'Campanha iniciada! Enviando para {len(contacts)} contato(s).', 'success')
         return redirect(url_for('campanha_detalhe', campaign_id=campaign_id))
 
-    return render_template('nova_campanha.html')
+    conn = get_db()
+    mailings = conn.execute('SELECT * FROM mailings ORDER BY created_at DESC').fetchall()
+    conn.close()
+    return render_template('nova_campanha.html', mailings=mailings)
 
 @app.route('/campanha/<int:campaign_id>')
 def campanha_detalhe(campaign_id):
@@ -996,6 +1027,7 @@ def adicionar_contato_manual():
     status = request.form.get('status', 'lead').strip()
     tags = request.form.get('tags', '').strip()
     product_interest = request.form.get('product_interest', '').strip()
+    source = request.form.get('source', '').strip()
     if not email:
         flash('Email é obrigatório.', 'danger')
         return redirect(url_for('lista_contatos'))
@@ -1006,8 +1038,8 @@ def adicionar_contato_manual():
         conn.close()
         return redirect(url_for('contato_perfil', email=email))
     conn.execute(
-        'INSERT INTO contacts (email,name,phone,company,status,tags,product_interest) VALUES (%s,%s,%s,%s,%s,%s,%s)',
-        (email, name, phone, company, status or 'lead', tags, product_interest or None))
+        'INSERT INTO contacts (email,name,phone,company,status,tags,product_interest,source) VALUES (%s,%s,%s,%s,%s,%s,%s,%s)',
+        (email, name, phone, company, status or 'lead', tags, product_interest or None, source or None))
     conn.commit()
     conn.close()
     flash(f'Contato {email} adicionado!', 'success')
@@ -1052,11 +1084,18 @@ def contato_perfil(email):
         flash('Contato não encontrado.', 'danger'); conn.close(); return redirect(url_for('lista_contatos'))
 
     if request.method == 'POST':
-        fields = ['name', 'phone', 'company', 'position', 'status', 'tags', 'notes', 'product_interest']
+        fields = ['name', 'phone', 'company', 'position', 'status', 'tags', 'notes', 'product_interest', 'source']
         updates = {f: request.form.get(f, '').strip() for f in fields}
         conn.execute(
-            "UPDATE contacts SET name=%s,phone=%s,company=%s,position=%s,status=%s,tags=%s,notes=%s,product_interest=%s,updated_at=NOW() WHERE email=%s",
+            "UPDATE contacts SET name=%s,phone=%s,company=%s,position=%s,status=%s,tags=%s,notes=%s,product_interest=%s,source=%s,updated_at=NOW() WHERE email=%s",
             (*updates.values(), email))
+        # Salva produtos adquiridos
+        conn.execute('DELETE FROM contact_purchases WHERE contact_email=%s', (email,))
+        for prod, dt in zip(request.form.getlist('purchase_product[]'), request.form.getlist('purchase_date[]')):
+            if prod:
+                conn.execute(
+                    'INSERT INTO contact_purchases (contact_email,product,purchased_at) VALUES (%s,%s,%s)',
+                    (email, prod, dt if dt else None))
         conn.commit()
         log_activity(email, 'contact_updated', 'Dados atualizados pelo usuário', conn)
         conn.commit()
@@ -1071,11 +1110,15 @@ def contato_perfil(email):
         SELECT sc.*, s.name as seq_name FROM sequence_contacts sc
         JOIN sequences s ON s.id=sc.sequence_id WHERE sc.contact_email=%s ORDER BY sc.started_at DESC
     ''', (email,)).fetchall()
+    purchases = conn.execute(
+        'SELECT * FROM contact_purchases WHERE contact_email=%s ORDER BY created_at DESC',
+        (email,)).fetchall()
     best_hour = get_best_send_hour(email)
     is_bl = is_blacklisted(email, conn)
     conn.close()
     return render_template('contato_perfil.html', contact=contact, activities=activities,
-                           cadencias=cadencias_do_contato, best_hour=best_hour, is_blacklisted=is_bl)
+                           cadencias=cadencias_do_contato, purchases=purchases,
+                           best_hour=best_hour, is_blacklisted=is_bl)
 
 # ── Tags ──────────────────────────────────────────────────────────────────────
 
@@ -1127,6 +1170,54 @@ def adicionar_blacklist_manual():
         add_to_blacklist(email, reason)
         flash(f'{email} adicionado à blacklist.', 'warning')
     return redirect(url_for('lista_blacklist'))
+
+# ── Mailings ─────────────────────────────────────────────────────────────────
+
+@app.route('/mailings')
+def lista_mailings():
+    conn = get_db()
+    mailings = conn.execute('SELECT * FROM mailings ORDER BY created_at DESC').fetchall()
+    conn.close()
+    return render_template('mailings.html', mailings=mailings)
+
+@app.route('/mailings/upload', methods=['POST'])
+def upload_mailing():
+    name = request.form.get('name', '').strip()
+    if not name:
+        flash('Informe um nome para o mailing.', 'danger')
+        return redirect(url_for('lista_mailings'))
+    if 'csv_file' not in request.files or request.files['csv_file'].filename == '':
+        flash('Selecione um arquivo CSV.', 'danger')
+        return redirect(url_for('lista_mailings'))
+    file = request.files['csv_file']
+    if not allowed_file(file.filename):
+        flash('Arquivo deve ser .csv', 'danger')
+        return redirect(url_for('lista_mailings'))
+    filename = f"mailing_{uuid.uuid4().hex}.csv"
+    filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+    file.save(filepath)
+    contacts = parse_csv(filepath)
+    conn = get_db()
+    conn.execute('INSERT INTO mailings (name,filename,contact_count) VALUES (%s,%s,%s)',
+                 (name, filename, len(contacts)))
+    conn.commit()
+    conn.close()
+    flash(f'Mailing "{name}" salvo com {len(contacts)} contatos!', 'success')
+    return redirect(url_for('lista_mailings'))
+
+@app.route('/mailings/<int:mailing_id>/deletar', methods=['POST'])
+def deletar_mailing(mailing_id):
+    conn = get_db()
+    ml = conn.execute('SELECT * FROM mailings WHERE id=%s', (mailing_id,)).fetchone()
+    if ml:
+        filepath = os.path.join(app.config['UPLOAD_FOLDER'], ml['filename'])
+        if os.path.exists(filepath):
+            os.remove(filepath)
+        conn.execute('DELETE FROM mailings WHERE id=%s', (mailing_id,))
+        conn.commit()
+        flash(f'Mailing "{ml["name"]}" removido.', 'success')
+    conn.close()
+    return redirect(url_for('lista_mailings'))
 
 # ── Exportar ──────────────────────────────────────────────────────────────────
 

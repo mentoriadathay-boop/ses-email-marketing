@@ -13,16 +13,20 @@
 <!-- Toggle modo de envio -->
 <div class="card mb-4">
   <div class="card-body py-3">
-    <div class="d-flex align-items-center gap-3">
+    <div class="d-flex align-items-center gap-3 flex-wrap">
       <span class="fw-semibold small">Modo de envio:</span>
       <div class="btn-group" id="send-mode-toggle">
         <button type="button" class="btn btn-sm btn-primary active" id="btn-mode-csv"
                 onclick="setSendMode('csv')">
-          <i class="bi bi-file-earmark-spreadsheet me-1"></i> Lista CSV
+          <i class="bi bi-file-earmark-spreadsheet me-1"></i> Upload CSV
+        </button>
+        <button type="button" class="btn btn-sm btn-outline-primary" id="btn-mode-mailing"
+                onclick="setSendMode('mailing')">
+          <i class="bi bi-database me-1"></i> Mailing Salvo
         </button>
         <button type="button" class="btn btn-sm btn-outline-primary" id="btn-mode-individual"
                 onclick="setSendMode('individual')">
-          <i class="bi bi-person me-1"></i> Contato Individual
+          <i class="bi bi-person me-1"></i> Individual
         </button>
       </div>
     </div>
@@ -123,6 +127,28 @@
     <!-- Coluna direita -->
     <div class="col-lg-5">
 
+      <!-- Mailing salvo -->
+      <div id="mailing-section" class="card mb-4 d-none">
+        <div class="card-body">
+          <h6 class="fw-semibold mb-3">
+            <i class="bi bi-database me-2 text-primary"></i>Selecionar Mailing
+          </h6>
+          {% if mailings %}
+          <select name="mailing_id" id="mailing_id" class="form-select mb-3">
+            <option value="">— Escolha um mailing —</option>
+            {% for m in mailings %}
+            <option value="{{ m.id }}">{{ m.name }} ({{ m.contact_count }} contatos)</option>
+            {% endfor %}
+          </select>
+          {% else %}
+          <div class="alert alert-warning small mb-0">
+            Nenhum mailing cadastrado ainda.
+            <a href="{{ url_for('lista_mailings') }}">Subir mailing →</a>
+          </div>
+          {% endif %}
+        </div>
+      </div>
+
       <!-- Upload CSV (modo lista) -->
       <div id="csv-section" class="card mb-4">
         <div class="card-body">
@@ -203,23 +229,30 @@
 function setSendMode(mode) {
   document.getElementById('send_mode').value = mode;
   const csvSection = document.getElementById('csv-section');
+  const mailingSection = document.getElementById('mailing-section');
   const indSection = document.getElementById('individual-section');
   const csvInput = document.getElementById('csv_file');
   const indEmail = document.getElementById('ind_email');
 
+  csvSection.classList.add('d-none');
+  mailingSection.classList.add('d-none');
+  indSection.classList.add('d-none');
+  csvInput.removeAttribute('required');
+  indEmail && indEmail.removeAttribute('required');
+
+  ['btn-mode-csv','btn-mode-mailing','btn-mode-individual'].forEach(id => {
+    const b = document.getElementById(id);
+    if (b) { b.classList.remove('btn-primary'); b.classList.add('btn-outline-primary'); }
+  });
+  document.getElementById('btn-mode-' + mode).classList.replace('btn-outline-primary','btn-primary');
+
   if (mode === 'individual') {
-    csvSection.classList.add('d-none');
     indSection.classList.remove('d-none');
-    csvInput.removeAttribute('required');
-    indEmail.setAttribute('required', '');
-    document.getElementById('btn-mode-csv').classList.replace('btn-primary', 'btn-outline-primary');
-    document.getElementById('btn-mode-individual').classList.replace('btn-outline-primary', 'btn-primary');
+    indEmail && indEmail.setAttribute('required','');
+  } else if (mode === 'mailing') {
+    mailingSection.classList.remove('d-none');
   } else {
-    indSection.classList.add('d-none');
     csvSection.classList.remove('d-none');
-    indEmail.removeAttribute('required');
-    document.getElementById('btn-mode-csv').classList.replace('btn-outline-primary', 'btn-primary');
-    document.getElementById('btn-mode-individual').classList.replace('btn-primary', 'btn-outline-primary');
   }
 }
 

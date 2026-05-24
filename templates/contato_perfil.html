@@ -76,17 +76,19 @@
             <label class="form-label small fw-semibold">Produto/Servico de Interesse</label>
             <select name="product_interest" class="form-select form-select-sm">
               <option value="">— Nenhum selecionado —</option>
-              <option value="Estruturação de Mentoria" {% if contact.product_interest == 'Estruturação de Mentoria' %}selected{% endif %}>Estruturação de Mentoria</option>
-              <option value="Estruturação de negócio digital" {% if contact.product_interest == 'Estruturação de negócio digital' %}selected{% endif %}>Estruturação de negócio digital</option>
-              <option value="Curso MMP" {% if contact.product_interest == 'Curso MMP' %}selected{% endif %}>Curso MMP</option>
-              <option value="Curso Mentoria Profissional" {% if contact.product_interest == 'Curso Mentoria Profissional' %}selected{% endif %}>Curso Mentoria Profissional</option>
-              <option value="Sessão avulsa de mentoria" {% if contact.product_interest == 'Sessão avulsa de mentoria' %}selected{% endif %}>Sessão avulsa de mentoria</option>
-              <option value="Consultoria Vibe Coding" {% if contact.product_interest == 'Consultoria Vibe Coding' %}selected{% endif %}>Consultoria Vibe Coding</option>
-              <option value="Serviços Vibe Coding" {% if contact.product_interest == 'Serviços Vibe Coding' %}selected{% endif %}>Serviços Vibe Coding</option>
-              <option value="Carrosséis Mágicos" {% if contact.product_interest == 'Carrosséis Mágicos' %}selected{% endif %}>Carrosséis Mágicos</option>
-              <option value="Serviços Autoescolas" {% if contact.product_interest == 'Serviços Autoescolas' %}selected{% endif %}>Serviços Autoescolas</option>
-              <option value="ASA Marketing e Vendas" {% if contact.product_interest == 'ASA Marketing e Vendas' %}selected{% endif %}>ASA Marketing e Vendas</option>
-              <option value="Agente de IA" {% if contact.product_interest == 'Agente de IA' %}selected{% endif %}>Agente de IA</option>
+              {% set produtos = ['Estruturação de Mentoria','Estruturação de negócio digital','Curso MMP','Curso Mentoria Profissional','Sessão avulsa de mentoria','Consultoria Vibe Coding','Serviços Vibe Coding','Carrosséis Mágicos','Serviços Autoescolas','ASA Marketing e Vendas','Agente de IA'] %}
+              {% for p in produtos %}
+              <option value="{{ p }}" {% if contact.product_interest == p %}selected{% endif %}>{{ p }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="mb-2">
+            <label class="form-label small fw-semibold">Como me Conheceu</label>
+            <select name="source" class="form-select form-select-sm">
+              <option value="">— Nenhum selecionado —</option>
+              {% for src in ['Youtube','Instagram','IA indicou','Indicação','TikTok','LinkedIn','Google','Facebook','Outro'] %}
+              <option value="{{ src }}" {% if contact.source == src %}selected{% endif %}>{{ src }}</option>
+              {% endfor %}
             </select>
           </div>
           <div class="mb-3">
@@ -94,6 +96,37 @@
             <textarea name="notes" class="form-control form-control-sm" rows="3"
                       placeholder="Notas internas sobre o contato...">{{ contact.notes or '' }}</textarea>
           </div>
+
+          <!-- Produtos Adquiridos -->
+          <div class="mb-3">
+            <div class="d-flex justify-content-between align-items-center mb-2">
+              <label class="form-label small fw-semibold mb-0">Produtos Adquiridos</label>
+              <button type="button" class="btn btn-outline-success btn-sm py-0 px-2"
+                      onclick="adicionarCompra()" style="font-size:.75rem">
+                <i class="bi bi-plus-lg me-1"></i>Adicionar
+              </button>
+            </div>
+            <div id="purchases-container">
+              {% for p in purchases %}
+              <div class="purchase-row d-flex gap-2 mb-2 align-items-center">
+                <select name="purchase_product[]" class="form-select form-select-sm flex-fill">
+                  <option value="">— Produto —</option>
+                  {% set produtos = ['Estruturação de Mentoria','Estruturação de negócio digital','Curso MMP','Curso Mentoria Profissional','Sessão avulsa de mentoria','Consultoria Vibe Coding','Serviços Vibe Coding','Carrosséis Mágicos','Serviços Autoescolas','ASA Marketing e Vendas','Agente de IA'] %}
+                  {% for prod in produtos %}
+                  <option value="{{ prod }}" {% if p.product == prod %}selected{% endif %}>{{ prod }}</option>
+                  {% endfor %}
+                </select>
+                <input type="date" name="purchase_date[]" class="form-control form-control-sm" style="width:140px"
+                       value="{{ p.purchased_at.strftime('%Y-%m-%d') if p.purchased_at else '' }}">
+                <button type="button" class="btn btn-outline-danger btn-sm py-0 px-2"
+                        onclick="this.closest('.purchase-row').remove()">
+                  <i class="bi bi-trash"></i>
+                </button>
+              </div>
+              {% endfor %}
+            </div>
+          </div>
+
           <button type="submit" class="btn btn-primary btn-sm w-100">
             <i class="bi bi-check-lg me-1"></i> Salvar Alteracoes
           </button>
@@ -192,4 +225,26 @@
     </div>
   </div>
 </div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const PRODUTOS = ['Estruturação de Mentoria','Estruturação de negócio digital','Curso MMP','Curso Mentoria Profissional','Sessão avulsa de mentoria','Consultoria Vibe Coding','Serviços Vibe Coding','Carrosséis Mágicos','Serviços Autoescolas','ASA Marketing e Vendas','Agente de IA'];
+
+function adicionarCompra() {
+  const opts = PRODUTOS.map(p => `<option value="${p}">${p}</option>`).join('');
+  const row = document.createElement('div');
+  row.className = 'purchase-row d-flex gap-2 mb-2 align-items-center';
+  row.innerHTML = `
+    <select name="purchase_product[]" class="form-select form-select-sm flex-fill">
+      <option value="">— Produto —</option>${opts}
+    </select>
+    <input type="date" name="purchase_date[]" class="form-control form-control-sm" style="width:140px">
+    <button type="button" class="btn btn-outline-danger btn-sm py-0 px-2"
+            onclick="this.closest('.purchase-row').remove()">
+      <i class="bi bi-trash"></i>
+    </button>`;
+  document.getElementById('purchases-container').appendChild(row);
+}
+</script>
 {% endblock %}

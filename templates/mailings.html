@@ -1,0 +1,94 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <div>
+    <h4 class="fw-bold mb-0">Mailings</h4>
+    <small class="text-muted">Listas de contatos reutilizáveis para campanhas</small>
+  </div>
+  <button class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#modalUploadMailing">
+    <i class="bi bi-upload me-1"></i> Subir Mailing
+  </button>
+</div>
+
+<div class="card">
+  <div class="card-body p-0">
+    {% if mailings %}
+    <div class="table-responsive">
+      <table class="table table-hover mb-0 align-middle">
+        <thead class="table-light">
+          <tr>
+            <th class="ps-4">Nome</th>
+            <th>Contatos</th>
+            <th>Criado em</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for m in mailings %}
+          <tr>
+            <td class="ps-4 fw-semibold">{{ m.name }}</td>
+            <td>
+              <span class="badge" style="background:#dbeafe;color:#1e40af">
+                <i class="bi bi-people me-1"></i>{{ m.contact_count }}
+              </span>
+            </td>
+            <td class="small text-muted">{{ m.created_at }}</td>
+            <td class="text-end pe-3">
+              <a href="{{ url_for('nova_campanha') }}?mailing_id={{ m.id }}"
+                 class="btn btn-sm btn-outline-primary me-1">
+                <i class="bi bi-send me-1"></i>Usar em Campanha
+              </a>
+              <form method="POST" action="{{ url_for('deletar_mailing', mailing_id=m.id) }}"
+                    class="d-inline"
+                    onsubmit="return confirm('Remover o mailing {{ m.name }}?')">
+                <button type="submit" class="btn btn-sm btn-outline-danger">
+                  <i class="bi bi-trash"></i>
+                </button>
+              </form>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <div class="text-center py-5 text-muted">
+      <i class="bi bi-database fs-1 d-block mb-2"></i>
+      Nenhum mailing ainda. Suba seu primeiro CSV.
+    </div>
+    {% endif %}
+  </div>
+</div>
+
+<!-- Modal upload -->
+<div class="modal fade" id="modalUploadMailing" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="bi bi-upload me-2"></i>Subir Mailing</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <form method="POST" action="{{ url_for('upload_mailing') }}" enctype="multipart/form-data">
+        <div class="modal-body">
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Nome do Mailing *</label>
+            <input type="text" name="name" class="form-control" required
+                   placeholder="Ex: Leads Mentoria Maio 2025">
+          </div>
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Arquivo CSV *</label>
+            <input type="file" name="csv_file" class="form-control" accept=".csv" required>
+            <div class="form-text">Colunas: <code>nome</code> e <code>email</code></div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+          <button type="submit" class="btn btn-primary">
+            <i class="bi bi-upload me-1"></i> Salvar Mailing
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}
