@@ -1,0 +1,168 @@
+{% extends "base.html" %}
+{% block content %}
+{% set lbl = score_label(contact.current_score) %}
+
+<div class="d-flex align-items-center mb-4">
+  <a href="{{ url_for('lista_contatos') }}" class="btn btn-sm btn-outline-secondary me-3">
+    <i class="bi bi-arrow-left"></i>
+  </a>
+  <div class="flex-fill">
+    <h4 class="fw-bold mb-0">
+      {{ contact.name or contact.email }}
+      {% if is_blacklisted %}
+      <span class="badge bg-danger ms-2" style="font-size:.65rem">Blacklist</span>
+      {% endif %}
+    </h4>
+    <small class="text-muted">{{ contact.email }}</small>
+  </div>
+  <span class="badge fw-semibold px-3 py-2 fs-6"
+        style="background:{{ lbl[2] }};color:{{ lbl[1] }}">
+    {{ lbl[0] }} &mdash; {{ contact.current_score }} pts
+  </span>
+</div>
+
+<div class="row g-4">
+  <!-- Coluna esquerda: dados editáveis -->
+  <div class="col-lg-5">
+    <div class="card mb-4">
+      <div class="card-body">
+        <h6 class="fw-semibold mb-3"><i class="bi bi-person-lines-fill me-2 text-primary"></i>Dados do Contato</h6>
+        <form method="POST">
+          <div class="mb-2">
+            <label class="form-label small fw-semibold">Nome</label>
+            <input type="text" name="name" class="form-control form-control-sm"
+                   value="{{ contact.name or '' }}">
+          </div>
+          <div class="mb-2">
+            <label class="form-label small fw-semibold">Telefone</label>
+            <input type="text" name="phone" class="form-control form-control-sm"
+                   value="{{ contact.phone or '' }}" placeholder="(11) 99999-9999">
+          </div>
+          <div class="mb-2">
+            <label class="form-label small fw-semibold">Empresa</label>
+            <input type="text" name="company" class="form-control form-control-sm"
+                   value="{{ contact.company or '' }}">
+          </div>
+          <div class="mb-2">
+            <label class="form-label small fw-semibold">Cargo</label>
+            <input type="text" name="position" class="form-control form-control-sm"
+                   value="{{ contact.position or '' }}">
+          </div>
+          <div class="mb-2">
+            <label class="form-label small fw-semibold">Status</label>
+            <select name="status" class="form-select form-select-sm">
+              <option value="lead" {% if contact.status == 'lead' %}selected{% endif %}>Lead</option>
+              <option value="cliente" {% if contact.status == 'cliente' %}selected{% endif %}>Cliente</option>
+              <option value="inativo" {% if contact.status == 'inativo' %}selected{% endif %}>Inativo</option>
+            </select>
+          </div>
+          <div class="mb-2">
+            <label class="form-label small fw-semibold">Tags</label>
+            <input type="text" name="tags" class="form-control form-control-sm"
+                   value="{{ contact.tags or '' }}" placeholder="Ex: B2B, cliente-vip">
+            <div class="form-text">Separe com vírgula</div>
+          </div>
+          <div class="mb-3">
+            <label class="form-label small fw-semibold">Observacoes</label>
+            <textarea name="notes" class="form-control form-control-sm" rows="3"
+                      placeholder="Notas internas sobre o contato...">{{ contact.notes or '' }}</textarea>
+          </div>
+          <button type="submit" class="btn btn-primary btn-sm w-100">
+            <i class="bi bi-check-lg me-1"></i> Salvar Alteracoes
+          </button>
+        </form>
+      </div>
+    </div>
+
+    <!-- Smart send time -->
+    {% if best_hour is not none %}
+    <div class="card mb-4">
+      <div class="card-body">
+        <h6 class="fw-semibold mb-2"><i class="bi bi-clock me-2 text-warning"></i>Melhor Horario de Envio</h6>
+        <div class="fs-4 fw-bold text-warning">{{ '%02d:00' % best_hour }}</div>
+        <div class="text-muted small">Baseado no historico de aberturas deste contato.</div>
+      </div>
+    </div>
+    {% endif %}
+
+    <!-- Cadências -->
+    {% if cadencias %}
+    <div class="card">
+      <div class="card-body">
+        <h6 class="fw-semibold mb-3"><i class="bi bi-arrow-repeat me-2 text-primary"></i>Cadencias</h6>
+        {% for cad in cadencias %}
+        <div class="d-flex justify-content-between align-items-center mb-2 pb-2 border-bottom">
+          <div>
+            <div class="small fw-semibold">{{ cad.seq_name }}</div>
+            <div class="text-muted" style="font-size:.75rem">Passo {{ cad.current_step }}</div>
+          </div>
+          {% if cad.status == 'active' %}
+            <span class="badge" style="background:#d1fae5;color:#065f46">Ativo</span>
+          {% elif cad.status == 'finished' %}
+            <span class="badge" style="background:#dbeafe;color:#1e40af">Finalizado</span>
+          {% elif cad.status == 'unsubscribed' %}
+            <span class="badge" style="background:#fee2e2;color:#991b1b">Descadastrado</span>
+          {% else %}
+            <span class="badge bg-secondary">{{ cad.status }}</span>
+          {% endif %}
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+    {% endif %}
+  </div>
+
+  <!-- Coluna direita: timeline de atividades -->
+  <div class="col-lg-7">
+    <div class="card">
+      <div class="card-header bg-white border-0 pt-4 pb-0 px-4">
+        <h6 class="fw-semibold mb-0"><i class="bi bi-activity me-2 text-primary"></i>Historico de Atividades</h6>
+      </div>
+      <div class="card-body" style="max-height:520px;overflow-y:auto">
+        {% if activities %}
+        <div class="timeline">
+          {% for act in activities %}
+          <div class="d-flex gap-3 mb-3">
+            <div class="flex-shrink-0 mt-1">
+              {% if act.type == 'email_sent' %}
+                <span class="badge rounded-pill" style="background:#dbeafe;color:#1e40af;font-size:.7rem"><i class="bi bi-send"></i></span>
+              {% elif act.type == 'email_opened' %}
+                <span class="badge rounded-pill" style="background:#d1fae5;color:#065f46;font-size:.7rem"><i class="bi bi-eye"></i></span>
+              {% elif act.type == 'link_clicked' %}
+                <span class="badge rounded-pill" style="background:#fef3c7;color:#92400e;font-size:.7rem"><i class="bi bi-cursor"></i></span>
+              {% elif act.type == 'unsubscribed' %}
+                <span class="badge rounded-pill" style="background:#fee2e2;color:#991b1b;font-size:.7rem"><i class="bi bi-x-lg"></i></span>
+              {% elif act.type == 'contact_updated' %}
+                <span class="badge rounded-pill" style="background:#f3f4f6;color:#6b7280;font-size:.7rem"><i class="bi bi-pencil"></i></span>
+              {% else %}
+                <span class="badge rounded-pill bg-secondary" style="font-size:.7rem"><i class="bi bi-dot"></i></span>
+              {% endif %}
+            </div>
+            <div class="flex-fill">
+              <div class="small fw-semibold">
+                {% if act.type == 'email_sent' %}Email enviado
+                {% elif act.type == 'email_opened' %}Email aberto
+                {% elif act.type == 'link_clicked' %}Link clicado
+                {% elif act.type == 'unsubscribed' %}Descadastro
+                {% elif act.type == 'contact_updated' %}Dados atualizados
+                {% else %}{{ act.type }}{% endif %}
+              </div>
+              {% if act.description %}
+              <div class="text-muted" style="font-size:.75rem">{{ act.description }}</div>
+              {% endif %}
+              <div class="text-muted" style="font-size:.72rem">{{ act.created_at }}</div>
+            </div>
+          </div>
+          {% endfor %}
+        </div>
+        {% else %}
+        <div class="text-center py-4 text-muted">
+          <i class="bi bi-activity fs-2 d-block mb-2"></i>
+          Nenhuma atividade registrada ainda.
+        </div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

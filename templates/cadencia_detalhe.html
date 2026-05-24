@@ -74,7 +74,8 @@
             <th>Dia</th>
             <th>Assunto</th>
             <th>Condicao</th>
-            <th>Enviados</th>
+            <th>Env. A</th>
+            <th>Env. B</th>
             <th>Aberturas</th>
             <th>Taxa</th>
           </tr>
@@ -84,7 +85,15 @@
           <tr>
             <td class="ps-4"><span class="badge bg-primary">{{ m.step.step_number }}</span></td>
             <td class="text-muted small">Dia {{ m.step.day_offset }}</td>
-            <td class="small fw-semibold">{{ m.step.subject[:60] }}{% if m.step.subject|length > 60 %}...{% endif %}</td>
+            <td class="small fw-semibold">
+              {{ m.step.subject[:50] }}{% if m.step.subject|length > 50 %}...{% endif %}
+              {% if m.step.ab_subject_b %}
+              <div class="text-muted mt-1" style="font-size:.72rem">
+                <span class="badge bg-warning text-dark me-1">B</span>
+                {{ m.step.ab_subject_b[:40] }}{% if m.step.ab_subject_b|length > 40 %}...{% endif %}
+              </div>
+              {% endif %}
+            </td>
             <td>
               {% if m.step.condition == 'always' %}
                 <span class="badge" style="background:#dbeafe;color:#1e40af">Sempre</span>
@@ -94,11 +103,18 @@
                 <span class="badge" style="background:#fef3c7;color:#92400e">Se nao abriu</span>
               {% endif %}
             </td>
-            <td>{{ m.sent }}</td>
+            <td><span class="badge bg-light text-dark border">{{ m.sent_a }}</span></td>
+            <td>
+              {% if m.step.ab_subject_b %}
+              <span class="badge bg-warning text-dark">{{ m.sent_b }}</span>
+              {% else %}
+              <span class="text-muted small">—</span>
+              {% endif %}
+            </td>
             <td>{{ m.opens }}</td>
             <td>
               <div class="d-flex align-items-center gap-2">
-                <div class="progress flex-fill" style="height:6px;width:60px">
+                <div class="progress flex-fill" style="height:6px;width:50px">
                   <div class="progress-bar bg-warning" style="width:{{ m.open_rate }}%"></div>
                 </div>
                 <span class="small">{{ m.open_rate }}%</span>

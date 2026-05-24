@@ -10,8 +10,8 @@
   </a>
 </div>
 
-<!-- Stats -->
-<div class="row g-3 mb-4" id="stats-row">
+<!-- Stats Row 1 -->
+<div class="row g-3 mb-3" id="stats-row">
   <div class="col-md-3">
     <div class="stat-card" style="background:linear-gradient(135deg,#4361ee,#3a0ca3)">
       <div class="opacity-75 small mb-1">Total de Campanhas</div>
@@ -38,6 +38,40 @@
   </div>
 </div>
 
+<!-- Stats Row 2 (CRM) -->
+<div class="row g-3 mb-4">
+  <div class="col-md-3">
+    <a href="{{ url_for('lista_contatos') }}" class="text-decoration-none">
+      <div class="stat-card" style="background:linear-gradient(135deg,#6366f1,#4f46e5)">
+        <div class="opacity-75 small mb-1">Total Contatos</div>
+        <div class="fs-3 fw-bold">{{ total_contacts }}</div>
+      </div>
+    </a>
+  </div>
+  <div class="col-md-3">
+    <div class="stat-card" style="background:linear-gradient(135deg,#14b8a6,#0d9488)">
+      <div class="opacity-75 small mb-1">Taxa de Abertura</div>
+      <div class="fs-3 fw-bold">{{ open_rate }}%</div>
+    </div>
+  </div>
+  <div class="col-md-3">
+    <a href="{{ url_for('lista_contatos') }}?sort=score" class="text-decoration-none">
+      <div class="stat-card" style="background:linear-gradient(135deg,#ea580c,#c2410c)">
+        <div class="opacity-75 small mb-1">Leads Quentes</div>
+        <div class="fs-3 fw-bold">{{ hot_leads }}</div>
+      </div>
+    </a>
+  </div>
+  <div class="col-md-3">
+    <a href="{{ url_for('lista_blacklist') }}" class="text-decoration-none">
+      <div class="stat-card" style="background:linear-gradient(135deg,#64748b,#475569)">
+        <div class="opacity-75 small mb-1">Blacklist</div>
+        <div class="fs-3 fw-bold">{{ blacklist_count }}</div>
+      </div>
+    </a>
+  </div>
+</div>
+
 <!-- Status SES -->
 <div class="card mb-4">
   <div class="card-body d-flex align-items-center gap-3">
@@ -49,10 +83,33 @@
   </div>
 </div>
 
+<!-- Charts -->
+<div class="row g-4 mb-4">
+  <div class="col-lg-8">
+    <div class="card h-100">
+      <div class="card-body">
+        <h6 class="fw-semibold mb-3"><i class="bi bi-graph-up me-2 text-primary"></i>Envios por Dia (30 dias)</h6>
+        <canvas id="chartEnvios" height="80"></canvas>
+      </div>
+    </div>
+  </div>
+  <div class="col-lg-4">
+    <div class="card h-100">
+      <div class="card-body">
+        <h6 class="fw-semibold mb-3"><i class="bi bi-bar-chart me-2 text-primary"></i>Taxa de Abertura por Cadencia</h6>
+        <canvas id="chartCadencias" height="160"></canvas>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- Historico de campanhas -->
 <div class="card">
-  <div class="card-header bg-white fw-semibold border-0 pt-4 pb-0 px-4">
-    <i class="bi bi-clock-history me-2"></i> Historico de Campanhas
+  <div class="card-header bg-white fw-semibold border-0 pt-4 pb-0 px-4 d-flex justify-content-between align-items-center">
+    <span><i class="bi bi-clock-history me-2"></i>Historico de Campanhas</span>
+    <a href="{{ url_for('exportar_campanhas') }}" class="btn btn-sm btn-outline-secondary">
+      <i class="bi bi-download me-1"></i> Exportar CSV
+    </a>
   </div>
   <div class="card-body p-0">
     {% if campaigns %}
@@ -135,5 +192,58 @@ function verificarSES() {
     });
 }
 verificarSES();
+
+// Carrega charts
+fetch('/api/dashboard-stats')
+  .then(r => r.json())
+  .then(data => {
+    // Linha: envios por dia
+    const labels = data.sends_by_day.map(d => d.date);
+    const counts = data.sends_by_day.map(d => d.count);
+    new Chart(document.getElementById('chartEnvios'), {
+      type: 'line',
+      data: {
+        labels,
+        datasets: [{
+          label: 'Emails enviados',
+          data: counts,
+          borderColor: '#4361ee',
+          backgroundColor: '#4361ee22',
+          fill: true,
+          tension: 0.3,
+          pointRadius: 3
+        }]
+      },
+      options: {
+        responsive: true,
+        plugins: { legend: { display: false } },
+        scales: { y: { beginAtZero: true, ticks: { precision: 0 } } }
+      }
+    });
+
+    // Barra: taxa abertura por cadencia
+    const seqNames = data.seq_stats.map(s => s.name.length > 20 ? s.name.slice(0,18)+'...' : s.name);
+    const seqRates = data.seq_stats.map(s => s.rate);
+    new Chart(document.getElementById('chartCadencias'), {
+      type: 'bar',
+      data: {
+        labels: seqNames,
+        datasets: [{
+          label: 'Abertura %',
+          data: seqRates,
+          backgroundColor: '#10b98166',
+          borderColor: '#10b981',
+          borderWidth: 1,
+          borderRadius: 4
+        }]
+      },
+      options: {
+        indexAxis: 'y',
+        responsive: true,
+        plugins: { legend: { display: false } },
+        scales: { x: { beginAtZero: true, max: 100, ticks: { callback: v => v + '%' } } }
+      }
+    });
+  });
 </script>
 {% endblock %}

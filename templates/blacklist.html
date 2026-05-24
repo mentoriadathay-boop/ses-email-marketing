@@ -1,0 +1,86 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <div>
+    <h4 class="fw-bold mb-0">Blacklist</h4>
+    <small class="text-muted">Emails bloqueados de receber qualquer envio</small>
+  </div>
+  <button class="btn btn-sm btn-outline-danger" data-bs-toggle="modal" data-bs-target="#modalAdicionar">
+    <i class="bi bi-plus-lg me-1"></i> Adicionar
+  </button>
+</div>
+
+<div class="card">
+  <div class="card-body p-0">
+    {% if entries %}
+    <div class="table-responsive">
+      <table class="table table-hover mb-0 align-middle">
+        <thead class="table-light">
+          <tr>
+            <th class="ps-4">Email</th>
+            <th>Motivo</th>
+            <th>Adicionado em</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for e in entries %}
+          <tr>
+            <td class="ps-4 fw-semibold small">{{ e.email }}</td>
+            <td class="text-muted small">{{ e.reason or '—' }}</td>
+            <td class="text-muted small">{{ e.added_at }}</td>
+            <td>
+              <form method="POST" action="{{ url_for('remover_blacklist', email=e.email) }}"
+                    onsubmit="return confirm('Remover {{ e.email }} da blacklist?')">
+                <button type="submit" class="btn btn-sm btn-outline-danger py-0 px-2" style="font-size:.75rem">
+                  <i class="bi bi-trash"></i> Remover
+                </button>
+              </form>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <div class="text-center py-5 text-muted">
+      <i class="bi bi-slash-circle fs-1 d-block mb-2"></i>
+      Blacklist vazia. Nenhum email bloqueado.
+    </div>
+    {% endif %}
+  </div>
+</div>
+
+<!-- Modal adicionar -->
+<div class="modal fade" id="modalAdicionar" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="bi bi-slash-circle me-2"></i>Adicionar a Blacklist</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <form method="POST" action="{{ url_for('adicionar_blacklist_manual') }}">
+        <div class="modal-body">
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Email *</label>
+            <input type="email" name="email" class="form-control" required
+                   placeholder="exemplo@dominio.com">
+          </div>
+          <div class="mb-0">
+            <label class="form-label fw-semibold">Motivo</label>
+            <input type="text" name="reason" class="form-control"
+                   value="Adicionado manualmente"
+                   placeholder="Ex: Solicitou descadastro">
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+          <button type="submit" class="btn btn-danger">
+            <i class="bi bi-slash-circle me-1"></i> Bloquear Email
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}

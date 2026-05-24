@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <div>
+    <h4 class="fw-bold mb-0">Tags</h4>
+    <small class="text-muted">Segmentacao de contatos por tags</small>
+  </div>
+</div>
+
+{% if tags %}
+<div class="row g-3">
+  {% for tag_name, count in tags %}
+  <div class="col-md-3 col-sm-4 col-6">
+    <a href="{{ url_for('contatos_por_tag', tag=tag_name) }}" class="text-decoration-none">
+      <div class="card h-100 border-0 shadow-sm" style="transition:.2s" onmouseover="this.style.transform='translateY(-2px)'" onmouseout="this.style.transform=''">
+        <div class="card-body text-center py-4">
+          <div class="mb-2">
+            <span class="badge px-3 py-2 fs-6"
+                  style="background:#e0e7ff;color:#3730a3;border-radius:999px">
+              <i class="bi bi-tag me-1"></i>{{ tag_name }}
+            </span>
+          </div>
+          <div class="fs-4 fw-bold text-dark">{{ count }}</div>
+          <div class="text-muted small">contato{{ 's' if count != 1 else '' }}</div>
+        </div>
+      </div>
+    </a>
+  </div>
+  {% endfor %}
+</div>
+{% else %}
+<div class="card">
+  <div class="card-body text-center py-5 text-muted">
+    <i class="bi bi-tags fs-1 d-block mb-2"></i>
+    Nenhuma tag cadastrada ainda.<br>
+    <small>Tags sao adicionadas nos contatos via CSV (coluna <code>tags</code>) ou manualmente no perfil do contato.</small>
+  </div>
+</div>
+{% endif %}
+{% endblock %}

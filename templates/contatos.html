@@ -1,0 +1,135 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <div>
+    <h4 class="fw-bold mb-0">{{ page_title if page_title else 'Contatos' }}</h4>
+    <small class="text-muted">CRM — base de contatos e lead scoring</small>
+  </div>
+  <a href="{{ url_for('exportar_contatos') }}" class="btn btn-sm btn-outline-secondary">
+    <i class="bi bi-download me-1"></i> Exportar CSV
+  </a>
+</div>
+
+<!-- Filtros -->
+<div class="card mb-4">
+  <div class="card-body py-3">
+    <form method="GET" class="row g-2 align-items-end">
+      <div class="col-md-4">
+        <input type="text" name="q" class="form-control form-control-sm"
+               placeholder="Buscar por email, nome ou empresa..."
+               value="{{ search }}">
+      </div>
+      <div class="col-md-2">
+        <select name="status" class="form-select form-select-sm">
+          <option value="">Todos os status</option>
+          <option value="lead" {% if status_filter == 'lead' %}selected{% endif %}>Lead</option>
+          <option value="cliente" {% if status_filter == 'cliente' %}selected{% endif %}>Cliente</option>
+          <option value="inativo" {% if status_filter == 'inativo' %}selected{% endif %}>Inativo</option>
+        </select>
+      </div>
+      <div class="col-md-2">
+        <select name="tag" class="form-select form-select-sm">
+          <option value="">Todas as tags</option>
+          {% for t in all_tags %}
+          <option value="{{ t }}" {% if tag_filter == t %}selected{% endif %}>{{ t }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-md-2">
+        <select name="sort" class="form-select form-select-sm">
+          <option value="score" {% if sort == 'score' %}selected{% endif %}>Ordenar: Score</option>
+          <option value="name" {% if sort == 'name' %}selected{% endif %}>Ordenar: Nome</option>
+          <option value="recent" {% if sort == 'recent' %}selected{% endif %}>Ordenar: Recente</option>
+        </select>
+      </div>
+      <div class="col-md-2 d-flex gap-2">
+        <button type="submit" class="btn btn-sm btn-primary">
+          <i class="bi bi-search me-1"></i> Filtrar
+        </button>
+        <a href="{{ url_for('lista_contatos') }}" class="btn btn-sm btn-outline-secondary">
+          <i class="bi bi-x"></i>
+        </a>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Tabela de contatos -->
+<div class="card">
+  <div class="card-header bg-white border-0 pt-4 pb-0 px-4 d-flex justify-content-between align-items-center">
+    <span class="fw-semibold"><i class="bi bi-people me-2"></i>{{ contatos|length }} contato(s)</span>
+  </div>
+  <div class="card-body p-0">
+    {% if contatos %}
+    <div class="table-responsive">
+      <table class="table table-hover mb-0 align-middle">
+        <thead class="table-light">
+          <tr>
+            <th class="ps-4">Email / Nome</th>
+            <th>Empresa</th>
+            <th>Tags</th>
+            <th>Status</th>
+            <th>Score</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for c in contatos %}
+          {% set lbl = score_label(c.current_score) %}
+          <tr>
+            <td class="ps-4">
+              <div class="fw-semibold small">{{ c.email }}</div>
+              {% if c.name %}<div class="text-muted" style="font-size:.8rem">{{ c.name }}</div>{% endif %}
+            </td>
+            <td class="small text-muted">{{ c.company or '—' }}</td>
+            <td>
+              {% if c.tags %}
+                {% for t in c.tags.split(',') %}
+                  {% if t.strip() %}
+                  <a href="{{ url_for('contatos_por_tag', tag=t.strip()) }}"
+                     class="badge text-decoration-none me-1"
+                     style="background:#e0e7ff;color:#3730a3;font-size:.7rem">{{ t.strip() }}</a>
+                  {% endif %}
+                {% endfor %}
+              {% else %}
+                <span class="text-muted small">—</span>
+              {% endif %}
+            </td>
+            <td>
+              {% if c.status == 'cliente' %}
+                <span class="badge" style="background:#d1fae5;color:#065f46">Cliente</span>
+              {% elif c.status == 'inativo' %}
+                <span class="badge" style="background:#f3f4f6;color:#6b7280">Inativo</span>
+              {% else %}
+                <span class="badge" style="background:#dbeafe;color:#1e40af">Lead</span>
+              {% endif %}
+            </td>
+            <td>
+              <span class="badge fw-semibold px-2 py-1"
+                    style="background:{{ lbl[2] }};color:{{ lbl[1] }}">
+                {{ lbl[0] }} ({{ c.current_score }})
+              </span>
+            </td>
+            <td>
+              <a href="{{ url_for('contato_perfil', email=c.email) }}"
+                 class="btn btn-sm btn-outline-primary">
+                <i class="bi bi-person-lines-fill"></i>
+              </a>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <div class="text-center py-5 text-muted">
+      <i class="bi bi-people fs-1 d-block mb-2"></i>
+      Nenhum contato encontrado.
+      {% if search or status_filter or tag_filter %}
+      <div class="mt-2"><a href="{{ url_for('lista_contatos') }}">Limpar filtros</a></div>
+      {% endif %}
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}
