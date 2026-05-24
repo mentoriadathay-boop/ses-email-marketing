@@ -6,6 +6,7 @@
   <title>ASA Email Marketing</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
   <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
+  <link href="https://cdn.quilljs.com/1.3.6/quill.snow.css" rel="stylesheet">
   <style>
     body { background: #f0f2f5; font-family: 'Segoe UI', sans-serif; }
     .sidebar { width: 240px; min-height: 100vh; background: #1a1a2e; position: fixed; left: 0; top: 0; z-index: 100; }
@@ -26,6 +27,12 @@
     .badge-done { background: #dbeafe; color: #1e40af; }
     .progress-bar { transition: width 0.4s ease; }
     #toastContainer { position: fixed; top: 20px; right: 20px; z-index: 9999; }
+    /* Quill customizations */
+    .ql-container { font-family: Arial, sans-serif; font-size: 14px; }
+    .ql-toolbar { border-radius: 8px 8px 0 0; background: #f8f9fa; }
+    .ql-container { border-radius: 0 0 8px 8px; background: #fff; min-height: 180px; }
+    .editor-extra-btns { display: flex; gap: 6px; flex-wrap: wrap; padding: 6px 0 2px; }
+    .editor-extra-btns .btn { font-size: .75rem; padding: 2px 8px; }
   </style>
 </head>
 <body>
@@ -66,7 +73,28 @@
     {% block content %}{% endblock %}
   </div>
 
+  <!-- Modal global de templates -->
+  <div class="modal fade" id="modalTemplates" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title"><i class="bi bi-collection me-2"></i>Biblioteca de Templates</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <input type="text" class="form-control form-control-sm mb-3"
+                 placeholder="Buscar template..." oninput="filterTemplates(this.value)">
+          <div id="template-cards-container">
+            <div class="text-muted text-center py-3">Carregando...</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="https://cdn.quilljs.com/1.3.6/quill.min.js"></script>
+  <script src="{{ url_for('static', filename='js/editor.js') }}"></script>
   {% block scripts %}{% endblock %}
 </body>
 </html>

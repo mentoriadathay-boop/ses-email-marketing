@@ -10,7 +10,9 @@
   </div>
 </div>
 
-<form method="POST" action="{{ url_for('editar_cadencia', seq_id=seq.id) if editing else url_for('nova_cadencia') }}">
+<form method="POST"
+      action="{{ url_for('editar_cadencia', seq_id=seq.id) if editing else url_for('nova_cadencia') }}"
+      id="cadencia-form" onsubmit="return syncAllEditors()">
   <div class="row g-4">
 
     <!-- Coluna esquerda: dados gerais -->
@@ -21,15 +23,15 @@
           <div class="mb-3">
             <label class="form-label fw-semibold">Nome *</label>
             <input type="text" name="name" class="form-control" required
-              placeholder="Ex: Prospecção Clientes B2B"
+              placeholder="Ex: Prospecção B2B"
               value="{{ seq.name if seq else '' }}">
           </div>
           <div class="mb-3">
             <label class="form-label fw-semibold">Descricao</label>
-            <textarea name="description" class="form-control" rows="3"
-              placeholder="Descricao opcional da cadencia">{{ seq.description if seq else '' }}</textarea>
+            <textarea name="description" class="form-control" rows="2"
+              placeholder="Descricao opcional">{{ seq.description if seq else '' }}</textarea>
           </div>
-          <div class="mb-3">
+          <div class="mb-0">
             <label class="form-label fw-semibold">E-mail Remetente *</label>
             <input type="email" name="sender_email" class="form-control" required
               placeholder="contato@seudominio.com.br"
@@ -41,11 +43,11 @@
 
       <div class="card">
         <div class="card-body">
-          <h6 class="fw-semibold mb-2"><i class="bi bi-info-circle me-2 text-primary"></i>Dicas</h6>
+          <h6 class="fw-semibold mb-2"><i class="bi bi-lightbulb me-2 text-warning"></i>Dicas</h6>
           <ul class="small text-muted ps-3 mb-0">
-            <li>Use <code>{nome}</code> no assunto e corpo para personalizar</li>
-            <li>Dia 0 = envia imediatamente ao adicionar contato</li>
-            <li>Condicoes: enviar so se abriu (ou nao abriu) emails anteriores</li>
+            <li>Use <code>{nome}</code> para personalizar</li>
+            <li>Dia 0 = envia imediatamente</li>
+            <li>Condicoes filtram por abertura de emails anteriores</li>
           </ul>
         </div>
       </div>
@@ -65,9 +67,9 @@
           <div id="passos-container">
             {% if steps %}
               {% for st in steps %}
-              <div class="passo-item border rounded p-3 mb-3" data-index="{{ loop.index0 }}">
+              <div class="passo-item border rounded p-3 mb-3">
                 <div class="d-flex justify-content-between align-items-center mb-3">
-                  <span class="badge bg-primary">Passo {{ st.step_number }}</span>
+                  <span class="badge bg-primary passo-num">Passo {{ st.step_number }}</span>
                   <button type="button" class="btn btn-sm btn-outline-danger" onclick="removerPasso(this)">
                     <i class="bi bi-trash"></i>
                   </button>
@@ -89,14 +91,45 @@
                   </div>
                 </div>
                 <div class="mb-2">
-                  <label class="form-label small fw-semibold">Assunto do E-mail *</label>
-                  <input type="text" name="step_subject[]" class="form-control form-control-sm"
-                    placeholder="Ola {nome}, vamos conversar?" value="{{ st.subject }}" required>
+                  <label class="form-label small fw-semibold">Assunto *</label>
+                  <input type="text" name="step_subject[]" class="form-control form-control-sm step-subject-input"
+                    placeholder="Ola {nome}..." value="{{ st.subject }}" required>
                 </div>
-                <div>
-                  <label class="form-label small fw-semibold">Corpo do E-mail (HTML) *</label>
-                  <textarea name="step_body[]" class="form-control form-control-sm font-monospace"
-                    rows="6" required>{{ st.body_html }}</textarea>
+                <div class="mb-1">
+                  <div class="d-flex justify-content-between align-items-center mb-1">
+                    <label class="form-label small fw-semibold mb-0">Corpo do E-mail *</label>
+                    <div class="d-flex gap-1">
+                      <button type="button" class="btn btn-outline-secondary btn-sm py-0 px-2 btn-template"
+                              style="font-size:.7rem">
+                        <i class="bi bi-collection me-1"></i>Template
+                      </button>
+                      <button type="button" class="btn btn-outline-secondary btn-sm py-0 px-2 btn-assinatura"
+                              style="font-size:.7rem">
+                        <i class="bi bi-pen me-1"></i>Assinatura
+                      </button>
+                    </div>
+                  </div>
+                  <!-- Abas do passo -->
+                  <ul class="nav nav-tabs mb-0" style="font-size:.8rem">
+                    <li class="nav-item">
+                      <button class="nav-link active py-1 btn-tab-visual" type="button">Visual</button>
+                    </li>
+                    <li class="nav-item">
+                      <button class="nav-link py-1 btn-tab-html" type="button">HTML</button>
+                    </li>
+                  </ul>
+                  <div class="visual-wrap border border-top-0 rounded-bottom">
+                    <div class="step-quill-container" style="min-height:160px"></div>
+                    <div class="editor-extra-btns px-2 pb-2 border-top bg-light">
+                      <button type="button" class="btn btn-outline-secondary btn-sm btn-insert-nome">
+                        <i class="bi bi-person-badge me-1"></i>{nome}
+                      </button>
+                    </div>
+                  </div>
+                  <div class="html-wrap d-none">
+                    <textarea name="step_body[]" class="step-body-textarea form-control font-monospace border-top-0 rounded-top-0"
+                              rows="7">{{ st.body_html }}</textarea>
+                  </div>
                 </div>
               </div>
               {% endfor %}
@@ -121,7 +154,7 @@
   </div>
 </form>
 
-<!-- Template oculto para novos passos -->
+<!-- Template HTML para novos passos -->
 <template id="passo-template">
   <div class="passo-item border rounded p-3 mb-3">
     <div class="d-flex justify-content-between align-items-center mb-3">
@@ -146,14 +179,44 @@
       </div>
     </div>
     <div class="mb-2">
-      <label class="form-label small fw-semibold">Assunto do E-mail *</label>
-      <input type="text" name="step_subject[]" class="form-control form-control-sm"
-        placeholder="Ola {nome}, vamos conversar?" required>
+      <label class="form-label small fw-semibold">Assunto *</label>
+      <input type="text" name="step_subject[]" class="form-control form-control-sm step-subject-input"
+        placeholder="Ola {nome}..." required>
     </div>
-    <div>
-      <label class="form-label small fw-semibold">Corpo do E-mail (HTML) *</label>
-      <textarea name="step_body[]" class="form-control form-control-sm font-monospace"
-        rows="6" required placeholder="<p>Ola <strong>{nome}</strong>,</p>&#10;<p>Seu texto aqui...</p>"></textarea>
+    <div class="mb-1">
+      <div class="d-flex justify-content-between align-items-center mb-1">
+        <label class="form-label small fw-semibold mb-0">Corpo do E-mail *</label>
+        <div class="d-flex gap-1">
+          <button type="button" class="btn btn-outline-secondary btn-sm py-0 px-2 btn-template"
+                  style="font-size:.7rem">
+            <i class="bi bi-collection me-1"></i>Template
+          </button>
+          <button type="button" class="btn btn-outline-secondary btn-sm py-0 px-2 btn-assinatura"
+                  style="font-size:.7rem">
+            <i class="bi bi-pen me-1"></i>Assinatura
+          </button>
+        </div>
+      </div>
+      <ul class="nav nav-tabs mb-0" style="font-size:.8rem">
+        <li class="nav-item">
+          <button class="nav-link active py-1 btn-tab-visual" type="button">Visual</button>
+        </li>
+        <li class="nav-item">
+          <button class="nav-link py-1 btn-tab-html" type="button">HTML</button>
+        </li>
+      </ul>
+      <div class="visual-wrap border border-top-0 rounded-bottom">
+        <div class="step-quill-container" style="min-height:160px"></div>
+        <div class="editor-extra-btns px-2 pb-2 border-top bg-light">
+          <button type="button" class="btn btn-outline-secondary btn-sm btn-insert-nome">
+            <i class="bi bi-person-badge me-1"></i>{nome}
+          </button>
+        </div>
+      </div>
+      <div class="html-wrap d-none">
+        <textarea name="step_body[]" class="step-body-textarea form-control font-monospace border-top-0 rounded-top-0"
+                  rows="7" placeholder="<p>Ola <strong>{nome}</strong>,</p>"></textarea>
+      </div>
     </div>
   </div>
 </template>
@@ -175,7 +238,12 @@ function adicionarPasso() {
 
   const tmpl = document.getElementById('passo-template');
   const clone = tmpl.content.cloneNode(true);
+  const stepDiv = clone.querySelector('.passo-item');
   container.appendChild(clone);
+
+  // Inicializa o editor do novo passo
+  const newDiv = container.lastElementChild;
+  initStepEditor(newDiv);
   atualizarNumeros();
 }
 
@@ -183,12 +251,17 @@ function removerPasso(btn) {
   btn.closest('.passo-item').remove();
   atualizarNumeros();
   if (!document.querySelector('.passo-item')) {
-    const container = document.getElementById('passos-container');
-    container.innerHTML = '<div id="passos-vazio" class="text-center py-4 text-muted"><i class="bi bi-plus-circle fs-2 d-block mb-2"></i>Clique em "Adicionar Passo" para comecar.</div>';
+    document.getElementById('passos-container').innerHTML =
+      '<div id="passos-vazio" class="text-center py-4 text-muted">' +
+      '<i class="bi bi-plus-circle fs-2 d-block mb-2"></i>' +
+      'Clique em "Adicionar Passo" para comecar.</div>';
   }
 }
 
-// Numerar passos ja existentes ao carregar (modo edicao)
-atualizarNumeros();
+// Inicializa editores dos passos já existentes (modo edição)
+document.addEventListener('DOMContentLoaded', function() {
+  document.querySelectorAll('.passo-item').forEach(div => initStepEditor(div));
+  atualizarNumeros();
+});
 </script>
 {% endblock %}

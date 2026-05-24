@@ -2,9 +2,10 @@ import os
 import csv
 import sqlite3
 import threading
+import uuid
 from datetime import datetime, timedelta
 from urllib.parse import quote
-from flask import Flask, render_template, request, jsonify, redirect, url_for, flash, Response
+from flask import Flask, render_template, request, jsonify, redirect, url_for, flash, Response, send_from_directory
 from werkzeug.utils import secure_filename
 import boto3
 from botocore.exceptions import ClientError
@@ -14,16 +15,19 @@ app = Flask(__name__)
 app.secret_key = os.urandom(24)
 
 UPLOAD_FOLDER = os.path.join(os.path.dirname(__file__), 'uploads')
+IMAGES_FOLDER = os.path.join(UPLOAD_FOLDER, 'imagens')
 DB_PATH = os.path.join(os.path.dirname(__file__), 'data', 'campaigns.db')
 ALLOWED_EXTENSIONS = {'csv'}
+ALLOWED_IMAGE_EXT = {'jpg', 'jpeg', 'png', 'gif', 'webp'}
 AWS_REGION = os.environ.get('AWS_REGION', 'sa-east-1')
 APP_URL = os.environ.get('APP_URL', 'http://127.0.0.1:5000').rstrip('/')
 
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
-app.config['MAX_CONTENT_LENGTH'] = 5 * 1024 * 1024  # 5MB max
+app.config['MAX_CONTENT_LENGTH'] = 5 * 1024 * 1024
 
 os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+os.makedirs(IMAGES_FOLDER, exist_ok=True)
 
 PIXEL_GIF = (
     b'\x47\x49\x46\x38\x39\x61\x01\x00\x01\x00\x80\x00\x00'
@@ -31,6 +35,33 @@ PIXEL_GIF = (
     b'\x00\x2c\x00\x00\x00\x00\x01\x00\x01\x00\x00\x02\x02'
     b'\x44\x01\x00\x3b'
 )
+
+_DEFAULT_TEMPLATES = [
+    ('Boas-vindas caloroso', 'Relacionamento',
+     'Bem-vindo, {nome}! Estamos felizes em te ter aqui',
+     '<p>Olá, <strong>{nome}</strong>!</p><p>É um prazer tê-lo(a) conosco. Estou animado(a) para começar essa jornada juntos!</p><p>Nos próximos dias vou compartilhar conteúdos e oportunidades que podem agregar muito ao seu negócio.</p><p>Qualquer dúvida, basta responder este email — responderei pessoalmente.</p><p>Um abraço,<br><strong>Equipe ASA Marketing</strong></p>'),
+    ('Follow-up após 3 dias', 'Follow-up',
+     '{nome}, ainda pensando na nossa conversa?',
+     '<p>Olá, <strong>{nome}</strong>,</p><p>Passaram alguns dias desde meu último contato e queria saber se você teve a chance de refletir sobre o que conversamos.</p><p>Fico à disposição para responder qualquer dúvida ou marcar uma conversa rápida de 15 minutos.</p><p>Me avise como posso ajudar!</p><p>Atenciosamente,<br><strong>Equipe ASA Marketing</strong></p>'),
+    ('Apresentação de produto/serviço', 'Vendas',
+     '{nome}, conheça nossa solução para o seu negócio',
+     '<p>Olá, <strong>{nome}</strong>!</p><p>Quero aproveitar para apresentar nossa solução que tem ajudado empresas como a sua a <strong>aumentar resultados</strong>.</p><p><strong>O que oferecemos:</strong></p><ul><li>Atendimento personalizado</li><li>Resultados comprovados</li><li>Suporte dedicado</li></ul><p>Posso preparar uma apresentação personalizada para você?</p><p>Atenciosamente,<br><strong>Equipe ASA Marketing</strong></p>'),
+    ('Convite para reunião', 'Relacionamento',
+     '{nome}, podemos conversar 15 minutos?',
+     '<p>Olá, <strong>{nome}</strong>!</p><p>Gostaria de agendar uma conversa rápida de 15 minutos para entender melhor os desafios do seu negócio e mostrar como podemos ajudar.</p><p>Tenho disponibilidade nos próximos dias. Qual horário funciona melhor para você?</p><p>Aguardo seu retorno!</p><p>Atenciosamente,<br><strong>Equipe ASA Marketing</strong></p>'),
+    ('Proposta comercial', 'Vendas',
+     '{nome}, preparei uma proposta especial para você',
+     '<p>Olá, <strong>{nome}</strong>!</p><p>Conforme conversamos, preparei uma proposta personalizada pensando nas necessidades específicas do seu negócio.</p><p><strong>Destaques da proposta:</strong></p><ul><li>Solução sob medida para o seu segmento</li><li>Condições especiais de investimento</li><li>Implementação rápida e suporte completo</li></ul><p>Podemos agendar uma chamada para detalhar tudo?</p><p>Atenciosamente,<br><strong>Equipe ASA Marketing</strong></p>'),
+    ('Reengajamento de lead frio', 'Reengajamento',
+     '{nome}, faz tempo que não nos falamos...',
+     '<p>Olá, <strong>{nome}</strong>!</p><p>Já faz algum tempo desde nosso último contato e queria saber como você está e como vai o seu negócio.</p><p>O mercado mudou bastante e temos novidades que podem ser relevantes para você agora.</p><p>Posso te enviar algumas informações? Seria um prazer retomar a conversa!</p><p>Atenciosamente,<br><strong>Equipe ASA Marketing</strong></p>'),
+    ('Agradecimento pós-reunião', 'Relacionamento',
+     '{nome}, obrigado pelo seu tempo hoje!',
+     '<p>Olá, <strong>{nome}</strong>!</p><p>Quero agradecer pela conversa de hoje. Foi muito produtivo conhecer melhor o seu negócio e os desafios que você enfrenta.</p><p>Como combinado, vou preparar os próximos passos e enviar para você em breve.</p><p>Fico à disposição para qualquer dúvida que surgir.</p><p>Um abraço,<br><strong>Equipe ASA Marketing</strong></p>'),
+    ('Última tentativa de contato', 'Follow-up',
+     '{nome}, última mensagem minha sobre isso',
+     '<p>Olá, <strong>{nome}</strong>,</p><p>Tentei entrar em contato algumas vezes e entendo que você deve estar ocupado(a).</p><p>Esta será minha última mensagem sobre este assunto — não quero ser inconveniente.</p><p>Se em algum momento fizer sentido conversar, estarei aqui. Basta responder este email.</p><p>Sucesso no seu negócio!</p><p>Atenciosamente,<br><strong>Equipe ASA Marketing</strong></p>'),
+]
 
 # --- Banco de dados ---
 
@@ -118,8 +149,34 @@ def init_db():
             step_number INTEGER,
             opened_at TEXT DEFAULT (datetime('now','localtime'))
         );
+
+        CREATE TABLE IF NOT EXISTS email_templates (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            category TEXT,
+            subject TEXT,
+            body_html TEXT NOT NULL,
+            created_at TEXT DEFAULT (datetime('now','localtime'))
+        );
+
+        CREATE TABLE IF NOT EXISTS signature (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT,
+            body_html TEXT NOT NULL,
+            updated_at TEXT DEFAULT (datetime('now','localtime'))
+        );
     ''')
     conn.commit()
+
+    # Popula templates padrão apenas na primeira execução
+    if conn.execute('SELECT COUNT(*) FROM email_templates').fetchone()[0] == 0:
+        for name, cat, subj, body in _DEFAULT_TEMPLATES:
+            conn.execute(
+                'INSERT INTO email_templates (name, category, subject, body_html) VALUES (?,?,?,?)',
+                (name, cat, subj, body)
+            )
+        conn.commit()
+
     conn.close()
 
 # Estado em memória para progresso em tempo real
@@ -129,6 +186,9 @@ campaign_progress = {}
 
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+
+def allowed_image(filename):
+    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_IMAGE_EXT
 
 def parse_csv(filepath):
     contacts = []
@@ -159,7 +219,7 @@ def get_ses_client():
 def send_email_ses(ses_client, sender, recipient_email, recipient_name, subject, body_html):
     personalized_subject = subject.replace('{nome}', recipient_name or 'Cliente')
     personalized_body = body_html.replace('{nome}', recipient_name or 'Cliente')
-    response = ses_client.send_email(
+    return ses_client.send_email(
         Source=sender,
         Destination={'ToAddresses': [recipient_email]},
         Message={
@@ -173,7 +233,6 @@ def send_email_ses(ses_client, sender, recipient_email, recipient_name, subject,
             }
         }
     )
-    return response
 
 def run_campaign(campaign_id, contacts, sender, subject, body_html):
     conn = get_db()
@@ -183,7 +242,6 @@ def run_campaign(campaign_id, contacts, sender, subject, body_html):
         'total': len(contacts), 'sent': 0, 'errors': 0,
         'status': 'running', 'logs': []
     }
-
     conn.execute("UPDATE campaigns SET status='running', total_contacts=? WHERE id=?",
                  (len(contacts), campaign_id))
     conn.commit()
@@ -223,7 +281,7 @@ def run_campaign(campaign_id, contacts, sender, subject, body_html):
     conn.commit()
     conn.close()
 
-# --- Agendador de cadencias ---
+# --- Agendador de cadências ---
 
 def processar_cadencias():
     conn = get_db()
@@ -347,28 +405,34 @@ def nova_campanha():
         sender = request.form.get('sender_email', '').strip()
         subject = request.form.get('subject', '').strip()
         body_html = request.form.get('body_html', '').strip()
+        send_mode = request.form.get('send_mode', 'csv')
 
         if not all([name, sender, subject, body_html]):
-            flash('Preencha todos os campos obrigatorios.', 'danger')
+            flash('Preencha todos os campos obrigatórios.', 'danger')
             return redirect(url_for('nova_campanha'))
 
-        if 'csv_file' not in request.files or request.files['csv_file'].filename == '':
-            flash('Selecione um arquivo CSV.', 'danger')
-            return redirect(url_for('nova_campanha'))
-
-        file = request.files['csv_file']
-        if not allowed_file(file.filename):
-            flash('Arquivo deve ser .csv', 'danger')
-            return redirect(url_for('nova_campanha'))
-
-        filename = secure_filename(file.filename)
-        filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-        file.save(filepath)
-
-        contacts = parse_csv(filepath)
-        if not contacts:
-            flash('Nenhum contato valido encontrado no CSV. Verifique as colunas nome e email.', 'danger')
-            return redirect(url_for('nova_campanha'))
+        if send_mode == 'individual':
+            ind_name = request.form.get('ind_name', '').strip()
+            ind_email = request.form.get('ind_email', '').strip()
+            if not ind_email:
+                flash('Informe o email do destinatário.', 'danger')
+                return redirect(url_for('nova_campanha'))
+            contacts = [{'name': ind_name, 'email': ind_email}]
+        else:
+            if 'csv_file' not in request.files or request.files['csv_file'].filename == '':
+                flash('Selecione um arquivo CSV.', 'danger')
+                return redirect(url_for('nova_campanha'))
+            file = request.files['csv_file']
+            if not allowed_file(file.filename):
+                flash('Arquivo deve ser .csv', 'danger')
+                return redirect(url_for('nova_campanha'))
+            filename = secure_filename(file.filename)
+            filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+            file.save(filepath)
+            contacts = parse_csv(filepath)
+            if not contacts:
+                flash('Nenhum contato válido encontrado no CSV.', 'danger')
+                return redirect(url_for('nova_campanha'))
 
         conn = get_db()
         cursor = conn.execute(
@@ -387,7 +451,7 @@ def nova_campanha():
         )
         t.start()
 
-        flash(f'Campanha iniciada! Enviando para {len(contacts)} contatos.', 'success')
+        flash(f'Campanha iniciada! Enviando para {len(contacts)} contato(s).', 'success')
         return redirect(url_for('campanha_detalhe', campaign_id=campaign_id))
 
     return render_template('nova_campanha.html')
@@ -402,7 +466,7 @@ def campanha_detalhe(campaign_id):
         (campaign_id,)).fetchall()
     conn.close()
     if not campaign:
-        flash('Campanha nao encontrada.', 'danger')
+        flash('Campanha não encontrada.', 'danger')
         return redirect(url_for('index'))
     return render_template('campanha_detalhe.html', campaign=campaign, logs=logs)
 
@@ -419,7 +483,7 @@ def api_progresso(campaign_id):
             'total': c['total_contacts'], 'sent': c['sent'],
             'errors': c['errors'], 'status': c['status'], 'logs': []
         })
-    return jsonify({'error': 'nao encontrado'}), 404
+    return jsonify({'error': 'não encontrado'}), 404
 
 @app.route('/api/verificar-ses')
 def api_verificar_ses():
@@ -439,11 +503,65 @@ def api_verificar_ses():
     except ClientError as e:
         return jsonify({'ok': False, 'erro': str(e)}), 500
     except Exception as e:
-        return jsonify({'ok': False, 'erro': f'AWS nao configurado: {str(e)}'}), 500
+        return jsonify({'ok': False, 'erro': f'AWS não configurado: {str(e)}'}), 500
 
 @app.route('/configuracoes')
 def configuracoes():
-    return render_template('configuracoes.html')
+    conn = get_db()
+    sig = conn.execute('SELECT * FROM signature ORDER BY id DESC LIMIT 1').fetchone()
+    conn.close()
+    return render_template('configuracoes.html', signature=sig)
+
+@app.route('/configuracoes/assinatura', methods=['POST'])
+def salvar_assinatura():
+    body_html = request.form.get('sig_body', '').strip()
+    name = request.form.get('sig_name', '').strip()
+    conn = get_db()
+    existing = conn.execute('SELECT id FROM signature LIMIT 1').fetchone()
+    if existing:
+        conn.execute(
+            "UPDATE signature SET name=?, body_html=?, updated_at=datetime('now','localtime') WHERE id=?",
+            (name, body_html, existing['id'])
+        )
+    else:
+        conn.execute('INSERT INTO signature (name, body_html) VALUES (?,?)', (name, body_html))
+    conn.commit()
+    conn.close()
+    flash('Assinatura salva com sucesso!', 'success')
+    return redirect(url_for('configuracoes'))
+
+@app.route('/api/assinatura')
+def api_assinatura():
+    conn = get_db()
+    sig = conn.execute('SELECT * FROM signature ORDER BY id DESC LIMIT 1').fetchone()
+    conn.close()
+    if sig:
+        return jsonify({'body_html': sig['body_html'], 'name': sig['name']})
+    return jsonify({'body_html': '', 'name': ''})
+
+@app.route('/api/templates')
+def api_templates():
+    conn = get_db()
+    tpls = conn.execute('SELECT * FROM email_templates ORDER BY category, name').fetchall()
+    conn.close()
+    return jsonify([dict(t) for t in tpls])
+
+@app.route('/upload/imagem', methods=['POST'])
+def upload_imagem():
+    if 'imagem' not in request.files:
+        return jsonify({'erro': 'Nenhum arquivo enviado'}), 400
+    file = request.files['imagem']
+    if file.filename == '' or not allowed_image(file.filename):
+        return jsonify({'erro': 'Tipo de arquivo não permitido'}), 400
+    ext = file.filename.rsplit('.', 1)[1].lower()
+    filename = f"{uuid.uuid4().hex}.{ext}"
+    filepath = os.path.join(IMAGES_FOLDER, filename)
+    file.save(filepath)
+    return jsonify({'url': f'/uploads/imagens/{filename}'})
+
+@app.route('/uploads/imagens/<path:filename>')
+def serve_imagem(filename):
+    return send_from_directory(IMAGES_FOLDER, filename)
 
 @app.route('/api/debug-credenciais')
 def debug_credenciais():
@@ -460,7 +578,7 @@ def debug_credenciais():
         'AWS_REGION': region or '(vazia)',
     })
 
-# --- Rotas de cadencias ---
+# --- Rotas de cadências ---
 
 @app.route('/cadencias')
 def cadencias():
@@ -507,7 +625,7 @@ def nova_cadencia():
             )
         conn.commit()
         conn.close()
-        flash('Cadencia criada com sucesso!', 'success')
+        flash('Cadência criada com sucesso!', 'success')
         return redirect(url_for('cadencia_detalhe', seq_id=seq_id))
 
     return render_template('nova_cadencia.html', seq=None, steps=[], editing=False)
@@ -517,7 +635,7 @@ def cadencia_detalhe(seq_id):
     conn = get_db()
     seq = conn.execute('SELECT * FROM sequences WHERE id=?', (seq_id,)).fetchone()
     if not seq:
-        flash('Cadencia nao encontrada.', 'danger')
+        flash('Cadência não encontrada.', 'danger')
         conn.close()
         return redirect(url_for('cadencias'))
 
@@ -565,7 +683,7 @@ def editar_cadencia(seq_id):
     conn = get_db()
     seq = conn.execute('SELECT * FROM sequences WHERE id=?', (seq_id,)).fetchone()
     if not seq:
-        flash('Cadencia nao encontrada.', 'danger')
+        flash('Cadência não encontrada.', 'danger')
         conn.close()
         return redirect(url_for('cadencias'))
 
@@ -590,7 +708,7 @@ def editar_cadencia(seq_id):
             )
         conn.commit()
         conn.close()
-        flash('Cadencia atualizada!', 'success')
+        flash('Cadência atualizada!', 'success')
         return redirect(url_for('cadencia_detalhe', seq_id=seq_id))
 
     steps = conn.execute(
@@ -604,7 +722,7 @@ def adicionar_contatos_cadencia(seq_id):
     conn = get_db()
     seq = conn.execute('SELECT * FROM sequences WHERE id=?', (seq_id,)).fetchone()
     if not seq:
-        flash('Cadencia nao encontrada.', 'danger')
+        flash('Cadência não encontrada.', 'danger')
         conn.close()
         return redirect(url_for('cadencias'))
 
@@ -625,7 +743,7 @@ def adicionar_contatos_cadencia(seq_id):
     contacts = parse_csv(filepath)
 
     if not contacts:
-        flash('Nenhum contato valido encontrado.', 'danger')
+        flash('Nenhum contato válido encontrado.', 'danger')
         conn.close()
         return redirect(url_for('cadencia_detalhe', seq_id=seq_id))
 
@@ -655,7 +773,7 @@ def adicionar_contatos_cadencia(seq_id):
 
     conn.commit()
     conn.close()
-    flash(f'{added} contatos adicionados a cadencia.', 'success')
+    flash(f'{added} contatos adicionados à cadência.', 'success')
     return redirect(url_for('cadencia_detalhe', seq_id=seq_id))
 
 @app.route('/cadencias/<int:seq_id>/pausar', methods=['POST'])
@@ -666,7 +784,7 @@ def pausar_cadencia(seq_id):
     conn.execute("UPDATE sequences SET status='paused' WHERE id=?", (seq_id,))
     conn.commit()
     conn.close()
-    flash('Cadencia pausada.', 'warning')
+    flash('Cadência pausada.', 'warning')
     return redirect(url_for('cadencia_detalhe', seq_id=seq_id))
 
 @app.route('/cadencias/<int:seq_id>/retomar', methods=['POST'])
@@ -677,7 +795,7 @@ def retomar_cadencia(seq_id):
     conn.execute("UPDATE sequences SET status='active' WHERE id=?", (seq_id,))
     conn.commit()
     conn.close()
-    flash('Cadencia retomada.', 'success')
+    flash('Cadência retomada.', 'success')
     return redirect(url_for('cadencia_detalhe', seq_id=seq_id))
 
 @app.route('/cadencias/<int:seq_id>/contato/<path:email>/parar', methods=['POST'])
@@ -689,7 +807,7 @@ def parar_contato_cadencia(seq_id, email):
     )
     conn.commit()
     conn.close()
-    flash(f'Cadencia parada para {email}.', 'info')
+    flash(f'Cadência parada para {email}.', 'info')
     return redirect(url_for('cadencia_detalhe', seq_id=seq_id))
 
 @app.route('/api/cadencias/<int:seq_id>/metricas')

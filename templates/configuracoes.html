@@ -3,7 +3,64 @@
 <div class="d-flex align-items-center mb-4">
   <div>
     <h4 class="fw-bold mb-0">Configuracoes</h4>
-    <small class="text-muted">AWS SES e guia de setup</small>
+    <small class="text-muted">AWS SES, assinatura e guia de setup</small>
+  </div>
+</div>
+
+<!-- Assinatura de Email -->
+<div class="card mb-4">
+  <div class="card-body">
+    <h6 class="fw-semibold mb-3"><i class="bi bi-pen me-2 text-primary"></i>Assinatura de Email</h6>
+    <p class="text-muted small mb-3">
+      A assinatura e inserida automaticamente ao abrir formularios de nova campanha.
+      Use <code>{nome}</code> se quiser personalizar.
+    </p>
+    <form method="POST" action="{{ url_for('salvar_assinatura') }}" id="sig-form"
+          onsubmit="return syncSigEditor()">
+      <div class="mb-3">
+        <label class="form-label fw-semibold small">Nome da assinatura (opcional)</label>
+        <input type="text" name="sig_name" class="form-control form-control-sm"
+               placeholder="Ex: Joao Silva — ASA Marketing"
+               value="{{ signature.name if signature else '' }}">
+      </div>
+
+      <!-- Abas editor assinatura -->
+      <ul class="nav nav-tabs mb-0">
+        <li class="nav-item">
+          <button class="nav-link active py-1" type="button"
+                  id="tab-btn-visual-quill-sig"
+                  onclick="editorTab('visual','quill-sig','textarea-sig')">
+            <i class="bi bi-eye me-1"></i> Editor Visual
+          </button>
+        </li>
+        <li class="nav-item">
+          <button class="nav-link py-1" type="button"
+                  id="tab-btn-html-quill-sig"
+                  onclick="editorTab('html','quill-sig','textarea-sig')">
+            <i class="bi bi-code-slash me-1"></i> Editar HTML
+          </button>
+        </li>
+      </ul>
+      <div id="visual-quill-sig" class="border border-top-0 rounded-bottom mb-3">
+        <div id="quill-sig" style="min-height:120px"></div>
+        <div class="editor-extra-btns px-2 pb-2 border-top bg-light">
+          <button type="button" class="btn btn-outline-secondary btn-sm"
+                  onclick="insertNome('quill-sig')">
+            <i class="bi bi-person-badge me-1"></i>{nome}
+          </button>
+        </div>
+      </div>
+      <div id="html-quill-sig" class="d-none mb-3">
+        <textarea id="textarea-sig" name="sig_body"
+                  class="form-control font-monospace border-top-0 rounded-top-0"
+                  rows="6"
+                  placeholder="<p>Atenciosamente,<br><strong>Seu Nome</strong><br>Empresa</p>">{{ signature.body_html if signature else '' }}</textarea>
+      </div>
+
+      <button type="submit" class="btn btn-primary btn-sm">
+        <i class="bi bi-check-lg me-1"></i> Salvar Assinatura
+      </button>
+    </form>
   </div>
 </div>
 
@@ -159,5 +216,21 @@ function verificarSES() {
     });
 }
 verificarSES();
+
+// Editor de assinatura
+function syncSigEditor() {
+  // garante sincronização antes do submit
+  editorTab('html', 'quill-sig', 'textarea-sig');
+  editorTab('visual', 'quill-sig', 'textarea-sig');
+  return true;
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+  initEditor({
+    containerId: 'quill-sig',
+    textareaId: 'textarea-sig',
+    autoSignature: false
+  });
+});
 </script>
 {% endblock %}
