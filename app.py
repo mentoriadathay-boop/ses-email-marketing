@@ -906,6 +906,31 @@ def api_cadencia_metricas(seq_id):
 
 # ── CRM — Contatos ────────────────────────────────────────────────────────────
 
+@app.route('/contatos/adicionar', methods=['POST'])
+def adicionar_contato_manual():
+    email = request.form.get('email', '').strip()
+    name = request.form.get('name', '').strip()
+    phone = request.form.get('phone', '').strip()
+    company = request.form.get('company', '').strip()
+    status = request.form.get('status', 'lead').strip()
+    tags = request.form.get('tags', '').strip()
+    if not email:
+        flash('Email é obrigatório.', 'danger')
+        return redirect(url_for('lista_contatos'))
+    conn = get_db()
+    existing = conn.execute('SELECT id FROM contacts WHERE email=?', (email,)).fetchone()
+    if existing:
+        flash(f'{email} já existe na base.', 'warning')
+        conn.close()
+        return redirect(url_for('contato_perfil', email=email))
+    conn.execute(
+        'INSERT INTO contacts (email,name,phone,company,status,tags) VALUES (?,?,?,?,?,?)',
+        (email, name, phone, company, status or 'lead', tags))
+    conn.commit()
+    conn.close()
+    flash(f'Contato {email} adicionado!', 'success')
+    return redirect(url_for('contato_perfil', email=email))
+
 @app.route('/contatos')
 def lista_contatos():
     conn = get_db()
