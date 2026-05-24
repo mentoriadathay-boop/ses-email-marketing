@@ -72,6 +72,23 @@
                    value="{{ contact.tags or '' }}" placeholder="Ex: B2B, cliente-vip">
             <div class="form-text">Separe com vírgula</div>
           </div>
+          <div class="mb-2">
+            <label class="form-label small fw-semibold">Produto/Servico de Interesse</label>
+            <select name="product_interest" class="form-select form-select-sm">
+              <option value="">— Nenhum selecionado —</option>
+              <option value="Estruturação de Mentoria" {% if contact.product_interest == 'Estruturação de Mentoria' %}selected{% endif %}>Estruturação de Mentoria</option>
+              <option value="Estruturação de negócio digital" {% if contact.product_interest == 'Estruturação de negócio digital' %}selected{% endif %}>Estruturação de negócio digital</option>
+              <option value="Curso MMP" {% if contact.product_interest == 'Curso MMP' %}selected{% endif %}>Curso MMP</option>
+              <option value="Curso Mentoria Profissional" {% if contact.product_interest == 'Curso Mentoria Profissional' %}selected{% endif %}>Curso Mentoria Profissional</option>
+              <option value="Sessão avulsa de mentoria" {% if contact.product_interest == 'Sessão avulsa de mentoria' %}selected{% endif %}>Sessão avulsa de mentoria</option>
+              <option value="Consultoria Vibe Coding" {% if contact.product_interest == 'Consultoria Vibe Coding' %}selected{% endif %}>Consultoria Vibe Coding</option>
+              <option value="Serviços Vibe Coding" {% if contact.product_interest == 'Serviços Vibe Coding' %}selected{% endif %}>Serviços Vibe Coding</option>
+              <option value="Carrosséis Mágicos" {% if contact.product_interest == 'Carrosséis Mágicos' %}selected{% endif %}>Carrosséis Mágicos</option>
+              <option value="Serviços Autoescolas" {% if contact.product_interest == 'Serviços Autoescolas' %}selected{% endif %}>Serviços Autoescolas</option>
+              <option value="ASA Marketing e Vendas" {% if contact.product_interest == 'ASA Marketing e Vendas' %}selected{% endif %}>ASA Marketing e Vendas</option>
+              <option value="Agente de IA" {% if contact.product_interest == 'Agente de IA' %}selected{% endif %}>Agente de IA</option>
+            </select>
+          </div>
           <div class="mb-3">
             <label class="form-label small fw-semibold">Observacoes</label>
             <textarea name="notes" class="form-control form-control-sm" rows="3"

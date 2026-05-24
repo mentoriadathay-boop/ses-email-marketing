@@ -179,6 +179,7 @@ def init_db():
         "ALTER TABLE sequence_steps ADD COLUMN ab_body_b TEXT",
         "ALTER TABLE sequence_steps ADD COLUMN ab_ratio INTEGER DEFAULT 50",
         "ALTER TABLE sequence_logs ADD COLUMN ab_version TEXT DEFAULT 'A'",
+        "ALTER TABLE contacts ADD COLUMN product_interest TEXT",
     ]:
         try:
             conn.execute(f"DO $$ BEGIN {col_sql}; EXCEPTION WHEN duplicate_column THEN NULL; END $$")
@@ -994,6 +995,7 @@ def adicionar_contato_manual():
     company = request.form.get('company', '').strip()
     status = request.form.get('status', 'lead').strip()
     tags = request.form.get('tags', '').strip()
+    product_interest = request.form.get('product_interest', '').strip()
     if not email:
         flash('Email é obrigatório.', 'danger')
         return redirect(url_for('lista_contatos'))
@@ -1004,8 +1006,8 @@ def adicionar_contato_manual():
         conn.close()
         return redirect(url_for('contato_perfil', email=email))
     conn.execute(
-        'INSERT INTO contacts (email,name,phone,company,status,tags) VALUES (%s,%s,%s,%s,%s,%s)',
-        (email, name, phone, company, status or 'lead', tags))
+        'INSERT INTO contacts (email,name,phone,company,status,tags,product_interest) VALUES (%s,%s,%s,%s,%s,%s,%s)',
+        (email, name, phone, company, status or 'lead', tags, product_interest or None))
     conn.commit()
     conn.close()
     flash(f'Contato {email} adicionado!', 'success')
@@ -1050,10 +1052,10 @@ def contato_perfil(email):
         flash('Contato não encontrado.', 'danger'); conn.close(); return redirect(url_for('lista_contatos'))
 
     if request.method == 'POST':
-        fields = ['name', 'phone', 'company', 'position', 'status', 'tags', 'notes']
+        fields = ['name', 'phone', 'company', 'position', 'status', 'tags', 'notes', 'product_interest']
         updates = {f: request.form.get(f, '').strip() for f in fields}
         conn.execute(
-            "UPDATE contacts SET name=%s,phone=%s,company=%s,position=%s,status=%s,tags=%s,notes=%s,updated_at=NOW() WHERE email=%s",
+            "UPDATE contacts SET name=%s,phone=%s,company=%s,position=%s,status=%s,tags=%s,notes=%s,product_interest=%s,updated_at=NOW() WHERE email=%s",
             (*updates.values(), email))
         conn.commit()
         log_activity(email, 'contact_updated', 'Dados atualizados pelo usuário', conn)
