@@ -23,11 +23,9 @@ app.config['MAX_CONTENT_LENGTH'] = 5 * 1024 * 1024  # 5MB max
 
 # --- Banco de dados ---
 os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
-os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
+os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
-git add app.py
-git commit -m "fix: criar pasta data automaticamente"
-git push --force
+def get_db():
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     return conn
@@ -284,7 +282,8 @@ def api_verificar_ses():
 def configuracoes():
     return render_template('configuracoes.html')
 
+init_db()
+
 if __name__ == '__main__':
-    init_db()
-    print("\n✅ ASA Email Marketing rodando em: http://127.0.0.1:5000\n")
+    print("\nASA Email Marketing rodando em: http://127.0.0.1:5000\n")
     app.run(debug=True, host='127.0.0.1', port=5000)
