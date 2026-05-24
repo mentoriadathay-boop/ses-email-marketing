@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ASA Email Marketing — Configuração necessária</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
+</head>
+<body class="bg-light d-flex align-items-center justify-content-center" style="min-height:100vh">
+  <div class="card shadow" style="max-width:560px;width:100%">
+    <div class="card-body p-5">
+      <div class="text-center mb-4">
+        <i class="bi bi-gear-fill text-warning" style="font-size:3rem"></i>
+        <h4 class="fw-bold mt-3">Configuração necessária</h4>
+        <p class="text-muted">O app iniciou, mas as variáveis de ambiente precisam ser configuradas no Railway.</p>
+      </div>
+
+      <div class="mb-3">
+        <div class="d-flex align-items-center p-3 rounded border {% if db_url_set %}border-success bg-success bg-opacity-10{% else %}border-danger bg-danger bg-opacity-10{% endif %}">
+          <i class="bi {% if db_url_set %}bi-check-circle-fill text-success{% else %}bi-x-circle-fill text-danger{% endif %} me-3 fs-5"></i>
+          <div>
+            <div class="fw-semibold">DATABASE_URL</div>
+            <div class="small text-muted">{% if db_url_set %}Configurada ✓{% else %}Não configurada — adicione o PostgreSQL ao projeto Railway{% endif %}</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="mb-4">
+        <div class="d-flex align-items-center p-3 rounded border {% if brevo_set %}border-success bg-success bg-opacity-10{% else %}border-warning bg-warning bg-opacity-10{% endif %}">
+          <i class="bi {% if brevo_set %}bi-check-circle-fill text-success{% else %}bi-exclamation-circle-fill text-warning{% endif %} me-3 fs-5"></i>
+          <div>
+            <div class="fw-semibold">BREVO_API_KEY</div>
+            <div class="small text-muted">{% if brevo_set %}Configurada ✓{% else %}Não configurada — necessária para enviar emails{% endif %}</div>
+          </div>
+        </div>
+      </div>
+
+      {% if not db_url_set %}
+      <div class="alert alert-info small mb-4">
+        <strong>Como configurar o PostgreSQL no Railway:</strong>
+        <ol class="mb-0 mt-2 ps-3">
+          <li>No seu projeto Railway, clique em <strong>"+ New" → "Database" → "PostgreSQL"</strong></li>
+          <li>Aguarde o banco subir</li>
+          <li>Clique no serviço do seu app Flask → <strong>Variables</strong></li>
+          <li>Clique em <strong>"+ Add Variable Reference"</strong> → selecione o Postgres → <strong>DATABASE_URL</strong></li>
+          <li>Salve — o Railway vai restartar o app automaticamente</li>
+        </ol>
+      </div>
+      {% endif %}
+
+      <div class="text-center">
+        <a href="/" class="btn btn-primary">
+          <i class="bi bi-arrow-clockwise me-2"></i>Tentar novamente
+        </a>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

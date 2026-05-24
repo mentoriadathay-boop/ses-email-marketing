@@ -492,6 +492,23 @@ def calcular_scores_inativos():
     conn.commit()
     conn.close()
 
+# ── Guard: redireciona para setup se banco não estiver pronto ─────────────────
+
+_SETUP_EXEMPT = {'health', 'setup_page', 'static'}
+
+@app.before_request
+def require_db():
+    if not _db_ready and request.endpoint not in _SETUP_EXEMPT:
+        return render_template('setup.html',
+                               db_url_set=bool(DATABASE_URL),
+                               brevo_set=bool(BREVO_API_KEY)), 503
+
+@app.route('/setup')
+def setup_page():
+    return render_template('setup.html',
+                           db_url_set=bool(DATABASE_URL),
+                           brevo_set=bool(BREVO_API_KEY)), 503
+
 # ── Rotas de campanhas ────────────────────────────────────────────────────────
 
 @app.route('/')
