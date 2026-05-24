@@ -24,6 +24,9 @@ ALLOWED_IMAGE_EXT = {'jpg', 'jpeg', 'png', 'gif', 'webp'}
 APP_URL = os.environ.get('APP_URL', 'http://127.0.0.1:5000').rstrip('/')
 BREVO_API_KEY = os.environ.get('BREVO_API_KEY', '')
 DATABASE_URL = os.environ.get('DATABASE_URL', '')
+# psycopg2 exige postgresql:// mas Railway/Heroku fornecem postgres://
+if DATABASE_URL.startswith('postgres://'):
+    DATABASE_URL = DATABASE_URL.replace('postgres://', 'postgresql://', 1)
 
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 app.config['MAX_CONTENT_LENGTH'] = 5 * 1024 * 1024
@@ -501,13 +504,15 @@ def require_db():
     if not _db_ready and request.endpoint not in _SETUP_EXEMPT:
         return render_template('setup.html',
                                db_url_set=bool(DATABASE_URL),
-                               brevo_set=bool(BREVO_API_KEY)), 503
+                               brevo_set=bool(BREVO_API_KEY),
+                               db_error=_db_error), 503
 
 @app.route('/setup')
 def setup_page():
     return render_template('setup.html',
                            db_url_set=bool(DATABASE_URL),
-                           brevo_set=bool(BREVO_API_KEY)), 503
+                           brevo_set=bool(BREVO_API_KEY),
+                           db_error=_db_error), 503
 
 # ── Rotas de campanhas ────────────────────────────────────────────────────────
 
@@ -1195,30 +1200,32 @@ def api_dashboard_stats():
     return jsonify({'sends_by_day': sends_by_day, 'seq_stats': seq_stats, 'heatmap': heatmap})
 
 _db_ready = False
+_db_error = ''
 
 def _try_init_db():
-    global _db_ready
+    global _db_ready, _db_error
     if not DATABASE_URL:
-        print("=" * 60, flush=True)
-        print("ERRO: DATABASE_URL não configurada!", flush=True)
-        print("Adicione o PostgreSQL ao projeto no Railway e", flush=True)
-        print("conecte-o ao serviço para injetar DATABASE_URL.", flush=True)
-        print("=" * 60, flush=True)
+        _db_error = 'DATABASE_URL não configurada. Adicione o PostgreSQL no Railway e conecte-o ao serviço.'
+        print(f"ERRO: {_db_error}", flush=True)
         return
     try:
         init_db()
         _db_ready = True
-        print("Banco de dados PostgreSQL inicializado.", flush=True)
+        print("Banco de dados PostgreSQL inicializado com sucesso.", flush=True)
     except Exception as e:
+        _db_error = str(e)
         print(f"ERRO ao inicializar banco de dados: {e}", flush=True)
 
 _try_init_db()
 
 @app.route('/health')
 def health():
-    status = 'ok' if _db_ready else 'db_not_configured'
-    db_url_set = bool(DATABASE_URL)
-    return jsonify({'status': status, 'db_url_set': db_url_set, 'brevo_set': bool(BREVO_API_KEY)}), 200 if _db_ready else 503
+    return jsonify({
+        'status': 'ok' if _db_ready else 'error',
+        'db_url_set': bool(DATABASE_URL),
+        'brevo_set': bool(BREVO_API_KEY),
+        'db_error': _db_error if not _db_ready else None,
+    }), 200 if _db_ready else 503
 
 if not app.debug or os.environ.get('WERKZEUG_RUN_MAIN') == 'true':
     if _db_ready:
