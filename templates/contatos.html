@@ -23,6 +23,16 @@
         <select name="status" class="form-select form-select-sm">
           <option value="">Todos os status</option>
           <option value="lead" {% if status_filter == 'lead' %}selected{% endif %}>Lead</option>
+          <option value="interessado" {% if status_filter == 'interessado' %}selected{% endif %}>Interessado</option>
+          <option value="negocio_quente" {% if status_filter == 'negocio_quente' %}selected{% endif %}>Negocio quente</option>
+          <option value="em_prospeccao" {% if status_filter == 'em_prospeccao' %}selected{% endif %}>Em Prospeccao</option>
+          <option value="respondeu_aplicacao" {% if status_filter == 'respondeu_aplicacao' %}selected{% endif %}>Respondeu aplicacao</option>
+          <option value="mentoria" {% if status_filter == 'mentoria' %}selected{% endif %}>Mentoria</option>
+          <option value="mentorado" {% if status_filter == 'mentorado' %}selected{% endif %}>Mentorado</option>
+          <option value="diagnostico" {% if status_filter == 'diagnostico' %}selected{% endif %}>Diagnostico</option>
+          <option value="vibe_coding" {% if status_filter == 'vibe_coding' %}selected{% endif %}>Vibe Coding</option>
+          <option value="mailing_mentores" {% if status_filter == 'mailing_mentores' %}selected{% endif %}>Mailing Mentores</option>
+          <option value="wix" {% if status_filter == 'wix' %}selected{% endif %}>Wix</option>
           <option value="cliente" {% if status_filter == 'cliente' %}selected{% endif %}>Cliente</option>
           <option value="inativo" {% if status_filter == 'inativo' %}selected{% endif %}>Inativo</option>
         </select>
@@ -96,13 +106,23 @@
               {% endif %}
             </td>
             <td>
-              {% if c.status == 'cliente' %}
-                <span class="badge" style="background:#d1fae5;color:#065f46">Cliente</span>
-              {% elif c.status == 'inativo' %}
-                <span class="badge" style="background:#f3f4f6;color:#6b7280">Inativo</span>
-              {% else %}
-                <span class="badge" style="background:#dbeafe;color:#1e40af">Lead</span>
-              {% endif %}
+              {% set status_map = {
+                'lead': ('Lead', '#dbeafe', '#1e40af'),
+                'interessado': ('Interessado', '#fef9c3', '#854d0e'),
+                'negocio_quente': ('Negocio quente', '#fee2e2', '#991b1b'),
+                'em_prospeccao': ('Em Prospeccao', '#e0e7ff', '#3730a3'),
+                'respondeu_aplicacao': ('Respondeu aplicacao', '#fef3c7', '#92400e'),
+                'mentoria': ('Mentoria', '#f0fdf4', '#166534'),
+                'mentorado': ('Mentorado', '#d1fae5', '#065f46'),
+                'diagnostico': ('Diagnostico', '#f0f9ff', '#0c4a6e'),
+                'vibe_coding': ('Vibe Coding', '#fdf4ff', '#6b21a8'),
+                'mailing_mentores': ('Mailing Mentores', '#fff7ed', '#9a3412'),
+                'wix': ('Wix', '#f0fdf4', '#14532d'),
+                'cliente': ('Cliente', '#d1fae5', '#065f46'),
+                'inativo': ('Inativo', '#f3f4f6', '#6b7280')
+              } %}
+              {% set s = status_map.get(c.status, (c.status, '#f3f4f6', '#6b7280')) %}
+              <span class="badge" style="background:{{ s[1] }};color:{{ s[2] }}">{{ s[0] }}</span>
             </td>
             <td>
               <span class="badge fw-semibold px-2 py-1"

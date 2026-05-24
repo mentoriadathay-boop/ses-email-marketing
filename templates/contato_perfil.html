@@ -52,6 +52,16 @@
             <label class="form-label small fw-semibold">Status</label>
             <select name="status" class="form-select form-select-sm">
               <option value="lead" {% if contact.status == 'lead' %}selected{% endif %}>Lead</option>
+              <option value="interessado" {% if contact.status == 'interessado' %}selected{% endif %}>Interessado</option>
+              <option value="negocio_quente" {% if contact.status == 'negocio_quente' %}selected{% endif %}>Negocio quente</option>
+              <option value="em_prospeccao" {% if contact.status == 'em_prospeccao' %}selected{% endif %}>Em Prospeccao</option>
+              <option value="respondeu_aplicacao" {% if contact.status == 'respondeu_aplicacao' %}selected{% endif %}>Respondeu aplicacao</option>
+              <option value="mentoria" {% if contact.status == 'mentoria' %}selected{% endif %}>Mentoria</option>
+              <option value="mentorado" {% if contact.status == 'mentorado' %}selected{% endif %}>Mentorado</option>
+              <option value="diagnostico" {% if contact.status == 'diagnostico' %}selected{% endif %}>Diagnostico</option>
+              <option value="vibe_coding" {% if contact.status == 'vibe_coding' %}selected{% endif %}>Vibe Coding</option>
+              <option value="mailing_mentores" {% if contact.status == 'mailing_mentores' %}selected{% endif %}>Mailing Mentores</option>
+              <option value="wix" {% if contact.status == 'wix' %}selected{% endif %}>Wix</option>
               <option value="cliente" {% if contact.status == 'cliente' %}selected{% endif %}>Cliente</option>
               <option value="inativo" {% if contact.status == 'inativo' %}selected{% endif %}>Inativo</option>
             </select>
