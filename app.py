@@ -9,9 +9,13 @@ from urllib.parse import quote, unquote
 from flask import (Flask, render_template, request, jsonify, redirect,
                    url_for, flash, Response, send_from_directory)
 from werkzeug.utils import secure_filename
-import boto3
-from botocore.exceptions import ClientError
+import sib_api_v3_sdk
+from sib_api_v3_sdk.rest import ApiException
 from apscheduler.schedulers.background import BackgroundScheduler
+
+# SES mantido comentado para reversão fácil:
+# import boto3
+# from botocore.exceptions import ClientError
 
 app = Flask(__name__)
 app.secret_key = os.urandom(24)
@@ -21,8 +25,11 @@ IMAGES_FOLDER = os.path.join(UPLOAD_FOLDER, 'imagens')
 DB_PATH = os.path.join(os.path.dirname(__file__), 'data', 'campaigns.db')
 ALLOWED_EXTENSIONS = {'csv'}
 ALLOWED_IMAGE_EXT = {'jpg', 'jpeg', 'png', 'gif', 'webp'}
-AWS_REGION = os.environ.get('AWS_REGION', 'sa-east-1')
 APP_URL = os.environ.get('APP_URL', 'http://127.0.0.1:5000').rstrip('/')
+BREVO_API_KEY = os.environ.get('BREVO_API_KEY', '')
+
+# SES (mantido para reversão):
+# AWS_REGION = os.environ.get('AWS_REGION', 'sa-east-1')
 
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 app.config['MAX_CONTENT_LENGTH'] = 5 * 1024 * 1024
@@ -271,31 +278,38 @@ def score_label(score):
 
 app.jinja_env.globals['score_label'] = score_label
 
-def get_ses_client():
-    return boto3.client('ses', region_name=AWS_REGION,
-        aws_access_key_id=os.environ.get('AWS_ACCESS_KEY_ID'),
-        aws_secret_access_key=os.environ.get('AWS_SECRET_ACCESS_KEY'))
-
-def send_email_ses(ses_client, sender, recipient_email, recipient_name, subject, body_html):
+def send_email_brevo(sender, recipient_email, recipient_name, subject, body_html):
     personalized_subject = subject.replace('{nome}', recipient_name or 'Cliente')
     personalized_body = body_html.replace('{nome}', recipient_name or 'Cliente')
-    return ses_client.send_email(
-        Source=sender,
-        Destination={'ToAddresses': [recipient_email]},
-        Message={
-            'Subject': {'Data': personalized_subject, 'Charset': 'UTF-8'},
-            'Body': {
-                'Html': {'Data': personalized_body, 'Charset': 'UTF-8'},
-                'Text': {'Data': personalized_body.replace('<br>', '\n').replace('<br/>', '\n'), 'Charset': 'UTF-8'}
-            }
-        }
+    configuration = sib_api_v3_sdk.Configuration()
+    configuration.api_key['api-key'] = BREVO_API_KEY
+    api_instance = sib_api_v3_sdk.TransactionalEmailsApi(sib_api_v3_sdk.ApiClient(configuration))
+    email = sib_api_v3_sdk.SendSmtpEmail(
+        to=[{'email': recipient_email, 'name': recipient_name or ''}],
+        sender={'email': sender, 'name': 'ASA Marketing'},
+        subject=personalized_subject,
+        html_content=personalized_body
     )
+    return api_instance.send_transac_email(email)
+
+# SES equivalentes (mantidos para reversão):
+# def get_ses_client():
+#     return boto3.client('ses', region_name=AWS_REGION,
+#         aws_access_key_id=os.environ.get('AWS_ACCESS_KEY_ID'),
+#         aws_secret_access_key=os.environ.get('AWS_SECRET_ACCESS_KEY'))
+#
+# def send_email_ses(ses_client, sender, recipient_email, recipient_name, subject, body_html):
+#     personalized_subject = subject.replace('{nome}', recipient_name or 'Cliente')
+#     personalized_body = body_html.replace('{nome}', recipient_name or 'Cliente')
+#     return ses_client.send_email(
+#         Source=sender, Destination={'ToAddresses': [recipient_email]},
+#         Message={'Subject': {'Data': personalized_subject, 'Charset': 'UTF-8'},
+#                  'Body': {'Html': {'Data': personalized_body, 'Charset': 'UTF-8'}}})
 
 # ── Campanha ─────────────────────────────────────────────────────────────────
 
 def run_campaign(campaign_id, contacts, sender, subject, body_html):
     conn = get_db()
-    ses = get_ses_client()
     campaign_progress[campaign_id] = {'total': len(contacts), 'sent': 0, 'errors': 0, 'status': 'running', 'logs': []}
     conn.execute("UPDATE campaigns SET status='running',total_contacts=? WHERE id=?", (len(contacts), campaign_id))
     conn.commit()
@@ -310,14 +324,14 @@ def run_campaign(campaign_id, contacts, sender, subject, body_html):
         upsert_contact(email, name, contact.get('tags', ''), conn)
 
         try:
-            send_email_ses(ses, sender, email, name, subject, body_html)
+            send_email_brevo(sender, email, name, subject, body_html)
             status = 'sent'
             campaign_progress[campaign_id]['sent'] += 1
             campaign_progress[campaign_id]['logs'].append({'email': email, 'name': name, 'status': 'sent', 'error': None})
             conn.execute("UPDATE campaigns SET sent=sent+1 WHERE id=?", (campaign_id,))
             log_activity(email, 'email_sent', f'Campanha: {campaign_id}', conn)
-        except ClientError as e:
-            err_msg = e.response['Error']['Message']
+        except Exception as e:
+            err_msg = str(e)
             status = 'error'
             campaign_progress[campaign_id]['errors'] += 1
             campaign_progress[campaign_id]['logs'].append({'email': email, 'name': name, 'status': 'error', 'error': err_msg})
@@ -348,9 +362,7 @@ def processar_cadencias():
         conn.close()
         return
 
-    try:
-        ses = get_ses_client()
-    except Exception:
+    if not BREVO_API_KEY:
         conn.close()
         return
 
@@ -403,15 +415,15 @@ def processar_cadencias():
                     + f'<div style="text-align:center;margin-top:24px;font-size:11px;color:#aaa"><a href="{unsub_url}" style="color:#aaa">Descadastrar</a></div>')
 
             try:
-                send_email_ses(ses, sender, email, name, use_subject, body)
+                send_email_brevo(sender, email, name, use_subject, body)
                 conn.execute('INSERT INTO sequence_logs (sequence_id,contact_email,step_number,status,ab_version) VALUES (?,?,?,?,?)',
                              (seq_id, email, step_num, 'sent', ab_version))
                 conn.execute('INSERT INTO send_analytics (contact_email,sent_at) VALUES (?,?)',
                              (email, now))
                 log_activity(email, 'email_sent', f'Cadência {seq_id}, passo {step_num} (versão {ab_version})', conn)
-            except ClientError as e:
+            except Exception as e:
                 conn.execute('INSERT INTO sequence_logs (sequence_id,contact_email,step_number,status,error_message,ab_version) VALUES (?,?,?,?,?,?)',
-                             (seq_id, email, step_num, 'error', e.response['Error']['Message'], ab_version))
+                             (seq_id, email, step_num, 'error', str(e), ab_version))
         else:
             conn.execute('INSERT INTO sequence_logs (sequence_id,contact_email,step_number,status) VALUES (?,?,?,?)',
                          (seq_id, email, step_num, 'skipped'))
@@ -543,21 +555,27 @@ def api_progresso(campaign_id):
 
 @app.route('/api/verificar-ses')
 def api_verificar_ses():
+    if not BREVO_API_KEY:
+        return jsonify({'ok': False, 'erro': 'BREVO_API_KEY não configurada. Adicione no Railway em Variables.'}), 500
     try:
-        ses = get_ses_client()
-        identities = ses.list_verified_email_addresses()
-        domains = ses.list_identities(IdentityType='Domain')
-        quota = ses.get_send_quota()
+        configuration = sib_api_v3_sdk.Configuration()
+        configuration.api_key['api-key'] = BREVO_API_KEY
+        account_api = sib_api_v3_sdk.AccountApi(sib_api_v3_sdk.ApiClient(configuration))
+        account = account_api.get_account()
+        plan = account.plan[0] if account.plan else None
+        quota_diaria = plan.credits if plan and hasattr(plan, 'credits') else 0
         return jsonify({'ok': True,
-            'emails_verificados': identities.get('VerifiedEmailAddresses', []),
-            'dominios': domains.get('Identities', []),
-            'quota_diaria': quota.get('Max24HourSend', 0),
-            'enviados_hoje': quota.get('SentLast24Hours', 0),
-            'taxa_por_segundo': quota.get('MaxSendRate', 0)})
-    except ClientError as e:
-        return jsonify({'ok': False, 'erro': str(e)}), 500
+            'emails_verificados': [account.email],
+            'dominios': [],
+            'quota_diaria': quota_diaria,
+            'enviados_hoje': 0,
+            'taxa_por_segundo': 0,
+            'provedor': 'Brevo',
+            'conta': account.email})
+    except ApiException as e:
+        return jsonify({'ok': False, 'erro': f'Erro Brevo: {e.status} — {e.reason}'}), 500
     except Exception as e:
-        return jsonify({'ok': False, 'erro': f'AWS não configurado: {str(e)}'}), 500
+        return jsonify({'ok': False, 'erro': f'Brevo não configurado: {str(e)}'}), 500
 
 @app.route('/configuracoes')
 def configuracoes():
