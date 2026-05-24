@@ -595,6 +595,17 @@ def campanha_detalhe(campaign_id):
         return redirect(url_for('index'))
     return render_template('campanha_detalhe.html', campaign=campaign, logs=logs)
 
+@app.route('/campanha/log/<int:log_id>/deletar', methods=['POST'])
+def deletar_log_campanha(log_id):
+    conn = get_db()
+    log = conn.execute('SELECT campaign_id FROM campaign_logs WHERE id=%s', (log_id,)).fetchone()
+    campaign_id = log['campaign_id'] if log else None
+    conn.execute('DELETE FROM campaign_logs WHERE id=%s', (log_id,))
+    conn.commit()
+    conn.close()
+    flash('Registro removido do log.', 'success')
+    return redirect(url_for('campanha_detalhe', campaign_id=campaign_id) if campaign_id else url_for('index'))
+
 @app.route('/api/progresso/<int:campaign_id>')
 def api_progresso(campaign_id):
     prog = campaign_progress.get(campaign_id)

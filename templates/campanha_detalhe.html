@@ -71,18 +71,25 @@
       <table class="table table-sm table-hover mb-0 align-middle">
         <thead class="table-light sticky-top">
           <tr>
-            <th class="ps-4">E-mail</th>
-            <th>Nome</th>
+            <th class="ps-4">E-mail / Nome</th>
             <th>Status</th>
             <th>Detalhe</th>
             <th>Horario</th>
+            <th></th>
           </tr>
         </thead>
         <tbody id="log-tbody">
           {% for log in logs %}
           <tr>
-            <td class="ps-4 small">{{ log.contact_email }}</td>
-            <td class="small">{{ log.contact_name or '—' }}</td>
+            <td class="ps-4">
+              <a href="{{ url_for('contato_perfil', email=log.contact_email) }}"
+                 class="text-decoration-none fw-semibold small">
+                {{ log.contact_name or log.contact_email }}
+              </a>
+              {% if log.contact_name %}
+              <div class="text-muted" style="font-size:.75rem">{{ log.contact_email }}</div>
+              {% endif %}
+            </td>
             <td>
               {% if log.status == 'sent' %}
                 <span class="badge badge-sent">Enviado</span>
@@ -92,6 +99,15 @@
             </td>
             <td class="small text-muted">{{ log.error_message or '—' }}</td>
             <td class="small text-muted">{{ log.sent_at }}</td>
+            <td>
+              <form method="POST"
+                    action="{{ url_for('deletar_log_campanha', log_id=log.id) }}"
+                    onsubmit="return confirm('Remover este registro do log?')">
+                <button type="submit" class="btn btn-sm btn-outline-danger py-0 px-2">
+                  <i class="bi bi-trash"></i>
+                </button>
+              </form>
+            </td>
           </tr>
           {% endfor %}
         </tbody>
@@ -143,12 +159,16 @@ function atualizarStatus() {
           const badge = log.status === 'sent'
             ? '<span class="badge badge-sent">Enviado</span>'
             : '<span class="badge badge-error">Erro</span>';
+          const nameCell = log.name
+            ? `<a href="/contatos/${encodeURIComponent(log.email)}" class="text-decoration-none fw-semibold small">${log.name}</a>
+               <div class="text-muted" style="font-size:.75rem">${log.email}</div>`
+            : `<a href="/contatos/${encodeURIComponent(log.email)}" class="text-decoration-none fw-semibold small">${log.email}</a>`;
           const row = `<tr>
-            <td class="ps-4 small">${log.email}</td>
-            <td class="small">${log.name || '—'}</td>
+            <td class="ps-4">${nameCell}</td>
             <td>${badge}</td>
             <td class="small text-muted">${log.error || '—'}</td>
             <td class="small text-muted">agora</td>
+            <td><span class="text-muted small">—</span></td>
           </tr>`;
           tbody.insertAdjacentHTML('afterbegin', row);
         });
