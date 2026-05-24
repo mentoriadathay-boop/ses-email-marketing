@@ -282,6 +282,21 @@ def api_verificar_ses():
 def configuracoes():
     return render_template('configuracoes.html')
 
+@app.route('/api/debug-credenciais')
+def debug_credenciais():
+    key_id = os.environ.get('AWS_ACCESS_KEY_ID', '')
+    secret = os.environ.get('AWS_SECRET_ACCESS_KEY', '')
+    region = os.environ.get('AWS_REGION', '')
+    def mascara(val):
+        if not val:
+            return '(vazia)'
+        return f'{val[:4]}...{val[-4:]} (len={len(val)}, spaces={val != val.strip()})'
+    return jsonify({
+        'AWS_ACCESS_KEY_ID': mascara(key_id),
+        'AWS_SECRET_ACCESS_KEY': mascara(secret),
+        'AWS_REGION': region or '(vazia)',
+    })
+
 init_db()
 
 if __name__ == '__main__':
