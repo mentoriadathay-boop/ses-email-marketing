@@ -99,29 +99,48 @@ function insertNome(containerId) {
 }
 
 // ─────────────────────────────────────────────
-// Alternar aba Visual / HTML
+// Alternar aba Texto / HTML / Preview
 // ─────────────────────────────────────────────
 function editorTab(tab, containerId, textareaId) {
   const quill = _quillMap.get(containerId);
   const textarea = document.getElementById(textareaId);
   const visualWrap = document.getElementById('visual-' + containerId);
   const htmlWrap = document.getElementById('html-' + containerId);
+  const previewWrap = document.getElementById('preview-' + containerId);
   const btnVisual = document.getElementById('tab-btn-visual-' + containerId);
   const btnHtml = document.getElementById('tab-btn-html-' + containerId);
+  const btnPreview = document.getElementById('tab-btn-preview-' + containerId);
+
+  [visualWrap, htmlWrap, previewWrap].forEach(el => el && el.classList.add('d-none'));
+  [btnVisual, btnHtml, btnPreview].forEach(el => el && el.classList.remove('active'));
 
   if (tab === 'html') {
-    // Quill → textarea
     textarea.value = quill && quill.root.innerHTML !== '<p><br></p>' ? quill.root.innerHTML : '';
-    visualWrap.classList.add('d-none');
     htmlWrap.classList.remove('d-none');
-    btnVisual.classList.remove('active');
     btnHtml.classList.add('active');
+  } else if (tab === 'preview') {
+    if (quill) {
+      textarea.value = quill.root.innerHTML === '<p><br></p>' ? '' : quill.root.innerHTML;
+    }
+    if (previewWrap) {
+      previewWrap.classList.remove('d-none');
+      const iframe = previewWrap.querySelector('iframe');
+      if (iframe) {
+        const html = textarea.value ||
+          '<p style="color:#999;font-style:italic;padding:16px">Nenhum conteúdo para visualizar.</p>';
+        iframe.srcdoc = html;
+        iframe.onload = function () {
+          try {
+            const h = iframe.contentDocument.body.scrollHeight;
+            if (h > 0) iframe.style.height = (h + 24) + 'px';
+          } catch (e) {}
+        };
+      }
+    }
+    btnPreview && btnPreview.classList.add('active');
   } else {
-    // textarea → Quill
     if (quill) quill.clipboard.dangerouslyPasteHTML(textarea.value || '');
-    htmlWrap.classList.add('d-none');
     visualWrap.classList.remove('d-none');
-    btnHtml.classList.remove('active');
     btnVisual.classList.add('active');
   }
 }
@@ -254,8 +273,11 @@ function initStepEditor(stepDiv) {
   stepDiv.querySelector('.btn-tab-visual')?.setAttribute('onclick', `editorTab('visual','${containerId}','${textareaId}')`);
   stepDiv.querySelector('.btn-tab-html')?.setAttribute('id', `tab-btn-html-${containerId}`);
   stepDiv.querySelector('.btn-tab-html')?.setAttribute('onclick', `editorTab('html','${containerId}','${textareaId}')`);
+  stepDiv.querySelector('.btn-tab-preview')?.setAttribute('id', `tab-btn-preview-${containerId}`);
+  stepDiv.querySelector('.btn-tab-preview')?.setAttribute('onclick', `editorTab('preview','${containerId}','${textareaId}')`);
   stepDiv.querySelector('.visual-wrap')?.setAttribute('id', `visual-${containerId}`);
   stepDiv.querySelector('.html-wrap')?.setAttribute('id', `html-${containerId}`);
+  stepDiv.querySelector('.preview-wrap')?.setAttribute('id', `preview-${containerId}`);
 
   // Atualiza subjectId para o modal de template deste passo
   const subjectInput = stepDiv.querySelector('input[name="step_subject[]"]');

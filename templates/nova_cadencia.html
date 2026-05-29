@@ -112,10 +112,13 @@
                   <!-- Abas do passo -->
                   <ul class="nav nav-tabs mb-0" style="font-size:.8rem">
                     <li class="nav-item">
-                      <button class="nav-link active py-1 btn-tab-visual" type="button">Visual</button>
+                      <button class="nav-link active py-1 btn-tab-visual" type="button">Texto</button>
                     </li>
                     <li class="nav-item">
                       <button class="nav-link py-1 btn-tab-html" type="button">HTML</button>
+                    </li>
+                    <li class="nav-item">
+                      <button class="nav-link py-1 btn-tab-preview" type="button">Preview</button>
                     </li>
                   </ul>
                   <div class="visual-wrap border border-top-0 rounded-bottom">
@@ -129,6 +132,12 @@
                   <div class="html-wrap d-none">
                     <textarea name="step_body[]" class="step-body-textarea form-control font-monospace border-top-0 rounded-top-0"
                               rows="7">{{ st.body_html }}</textarea>
+                  </div>
+                  <div class="preview-wrap d-none border border-top-0 rounded-bottom p-2 bg-light">
+                    <div class="d-flex justify-content-center">
+                      <iframe style="width:600px;min-height:200px;border:1px solid #dee2e6;border-radius:4px;background:#fff"
+                              frameborder="0"></iframe>
+                    </div>
                   </div>
                 </div>
 
@@ -225,10 +234,13 @@
       </div>
       <ul class="nav nav-tabs mb-0" style="font-size:.8rem">
         <li class="nav-item">
-          <button class="nav-link active py-1 btn-tab-visual" type="button">Visual</button>
+          <button class="nav-link active py-1 btn-tab-visual" type="button">Texto</button>
         </li>
         <li class="nav-item">
           <button class="nav-link py-1 btn-tab-html" type="button">HTML</button>
+        </li>
+        <li class="nav-item">
+          <button class="nav-link py-1 btn-tab-preview" type="button">Preview</button>
         </li>
       </ul>
       <div class="visual-wrap border border-top-0 rounded-bottom">
@@ -242,6 +254,12 @@
       <div class="html-wrap d-none">
         <textarea name="step_body[]" class="step-body-textarea form-control font-monospace border-top-0 rounded-top-0"
                   rows="7" placeholder="<p>Ola <strong>{nome}</strong>,</p>"></textarea>
+      </div>
+      <div class="preview-wrap d-none border border-top-0 rounded-bottom p-2 bg-light">
+        <div class="d-flex justify-content-center">
+          <iframe style="width:600px;min-height:200px;border:1px solid #dee2e6;border-radius:4px;background:#fff"
+                  frameborder="0"></iframe>
+        </div>
       </div>
     </div>
 

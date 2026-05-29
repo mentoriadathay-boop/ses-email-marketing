@@ -90,19 +90,26 @@
               <button class="nav-link active py-1" type="button"
                       id="tab-btn-visual-quill-main"
                       onclick="editorTab('visual','quill-main','textarea-main')">
-                <i class="bi bi-eye me-1"></i> Editor Visual
+                <i class="bi bi-fonts me-1"></i> Texto
               </button>
             </li>
             <li class="nav-item">
               <button class="nav-link py-1" type="button"
                       id="tab-btn-html-quill-main"
                       onclick="editorTab('html','quill-main','textarea-main')">
-                <i class="bi bi-code-slash me-1"></i> Editar HTML
+                <i class="bi bi-code-slash me-1"></i> HTML
+              </button>
+            </li>
+            <li class="nav-item">
+              <button class="nav-link py-1" type="button"
+                      id="tab-btn-preview-quill-main"
+                      onclick="editorTab('preview','quill-main','textarea-main')">
+                <i class="bi bi-eye me-1"></i> Preview
               </button>
             </li>
           </ul>
 
-          <!-- Visual tab -->
+          <!-- Texto tab (Quill) -->
           <div id="visual-quill-main" class="border border-top-0 rounded-bottom">
             <div id="quill-main" style="min-height:220px"></div>
             <div class="editor-extra-btns px-2 pb-2 border-top bg-light rounded-bottom">
@@ -119,6 +126,14 @@
                       class="form-control font-monospace border-top-0 rounded-top-0"
                       rows="14"
                       placeholder="<p>Ola <strong>{nome}</strong>,</p>"></textarea>
+          </div>
+
+          <!-- Preview tab -->
+          <div id="preview-quill-main" class="d-none border border-top-0 rounded-bottom p-3 bg-light">
+            <div class="d-flex justify-content-center">
+              <iframe style="width:600px;min-height:300px;border:1px solid #dee2e6;border-radius:4px;background:#fff"
+                      frameborder="0"></iframe>
+            </div>
           </div>
         </div>
       </div>
