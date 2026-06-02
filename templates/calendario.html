@@ -1,0 +1,190 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="d-flex align-items-center justify-content-between mb-4">
+  <div>
+    <h4 class="fw-bold mb-0">Calendário de Envios</h4>
+    <small class="text-muted">Campanhas agendadas e passos de cadências previstos</small>
+  </div>
+  <div class="d-flex align-items-center gap-2">
+    <button class="btn btn-sm btn-outline-secondary" id="btn-prev">
+      <i class="bi bi-chevron-left"></i>
+    </button>
+    <span class="fw-semibold" id="month-label"
+          style="min-width:180px;text-align:center;font-size:1.05rem"></span>
+    <button class="btn btn-sm btn-outline-secondary" id="btn-next">
+      <i class="bi bi-chevron-right"></i>
+    </button>
+  </div>
+</div>
+
+<div class="d-flex gap-4 mb-3 small">
+  <span class="d-flex align-items-center gap-1">
+    <span class="rounded px-2 py-0 text-white fw-semibold" style="background:#4361ee;font-size:.7rem">✉</span>
+    Campanha
+  </span>
+  <span class="d-flex align-items-center gap-1">
+    <span class="rounded px-2 py-0 text-white fw-semibold" style="background:#10b981;font-size:.7rem">↻</span>
+    Cadência
+  </span>
+</div>
+
+<div class="card">
+  <div class="card-body p-0">
+    <!-- Header dos dias da semana -->
+    <div style="display:grid;grid-template-columns:repeat(7,1fr)">
+      {% for d in ['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'] %}
+      <div class="py-2 text-center fw-semibold small text-muted"
+           style="border-right:1px solid #dee2e6;border-bottom:1px solid #dee2e6">{{ d }}</div>
+      {% endfor %}
+    </div>
+    <!-- Grid dos dias -->
+    <div id="cal-grid" style="display:grid;grid-template-columns:repeat(7,1fr)">
+      <div class="text-center text-muted py-5" style="grid-column:span 7">
+        <span class="spinner-border spinner-border-sm me-2"></span> Carregando...
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal de detalhes do evento -->
+<div class="modal fade" id="eventModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header border-0 pb-0">
+        <h6 class="modal-title fw-bold" id="eventModalTitle"></h6>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body" id="eventModalBody"></div>
+      <div class="modal-footer border-0 pt-0">
+        <a href="#" id="eventModalLink" class="btn btn-sm btn-primary">
+          Ver Detalhes <i class="bi bi-arrow-right ms-1"></i>
+        </a>
+        <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">Fechar</button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const MONTH_NAMES = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho',
+                     'Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+const STATUS_LABELS = {
+  scheduled: 'Agendada', running: 'Enviando', done: 'Concluída',
+  pending: 'Pendente', error: 'Erro'
+};
+
+let currentYear = new Date().getFullYear();
+let currentMonth = new Date().getMonth() + 1;
+
+async function loadEvents() {
+  try {
+    const resp = await fetch(`/api/calendario/eventos?year=${currentYear}&month=${currentMonth}`);
+    const events = await resp.json();
+    renderCalendar(events);
+  } catch(e) {
+    document.getElementById('cal-grid').innerHTML =
+      '<div class="text-center text-danger py-5" style="grid-column:span 7">Erro ao carregar eventos.</div>';
+  }
+}
+
+function renderCalendar(events) {
+  document.getElementById('month-label').textContent =
+    `${MONTH_NAMES[currentMonth - 1]} ${currentYear}`;
+
+  const firstDay = new Date(currentYear, currentMonth - 1, 1).getDay();
+  const daysInMonth = new Date(currentYear, currentMonth, 0).getDate();
+
+  const byDate = {};
+  events.forEach(ev => {
+    if (!byDate[ev.date]) byDate[ev.date] = [];
+    byDate[ev.date].push(ev);
+  });
+
+  const now = new Date();
+  const todayStr = [
+    now.getFullYear(),
+    String(now.getMonth() + 1).padStart(2, '0'),
+    String(now.getDate()).padStart(2, '0')
+  ].join('-');
+
+  const grid = document.getElementById('cal-grid');
+  grid.innerHTML = '';
+
+  let cells = [];
+  for (let i = 0; i < firstDay; i++) cells.push(null);
+  for (let d = 1; d <= daysInMonth; d++) cells.push(d);
+  while (cells.length % 7 !== 0) cells.push(null);
+
+  cells.forEach(d => {
+    const cell = document.createElement('div');
+    cell.style.cssText = 'min-height:110px;border-right:1px solid #dee2e6;border-bottom:1px solid #dee2e6;padding:8px;';
+
+    if (!d) {
+      cell.style.background = '#f8f9fa';
+    } else {
+      const dateStr = `${currentYear}-${String(currentMonth).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+      const isToday = dateStr === todayStr;
+
+      const label = document.createElement('div');
+      label.style.cssText = 'font-size:.85rem;font-weight:600;margin-bottom:4px;';
+      if (isToday) {
+        label.innerHTML = `<span style="background:#4361ee;color:#fff;border-radius:50%;display:inline-flex;
+          align-items:center;justify-content:center;width:22px;height:22px;font-size:.8rem">${d}</span>`;
+      } else {
+        label.textContent = d;
+        label.style.color = '#495057';
+      }
+      cell.appendChild(label);
+
+      (byDate[dateStr] || []).forEach(ev => {
+        const tag = document.createElement('div');
+        tag.style.cssText = `
+          background:${ev.type === 'campanha' ? '#4361ee' : '#10b981'};
+          color:#fff;border-radius:4px;padding:2px 6px;margin-bottom:3px;
+          font-size:.68rem;cursor:pointer;overflow:hidden;
+          white-space:nowrap;text-overflow:ellipsis;`;
+        tag.title = ev.title;
+        tag.textContent = `${ev.type === 'campanha' ? '✉' : '↻'} ${ev.title}`;
+        if (ev.count) tag.textContent += ` (${ev.count})`;
+        tag.addEventListener('click', () => openModal(ev));
+        cell.appendChild(tag);
+      });
+    }
+    grid.appendChild(cell);
+  });
+}
+
+function openModal(ev) {
+  document.getElementById('eventModalTitle').textContent = ev.title;
+  let html = '';
+  if (ev.type === 'campanha') {
+    html = `<p class="mb-1"><strong>Tipo:</strong> <span class="badge" style="background:#4361ee">Campanha</span></p>
+            <p class="mb-1"><strong>Status:</strong> ${STATUS_LABELS[ev.status] || ev.status}</p>
+            ${ev.time ? `<p class="mb-1"><strong>Horário:</strong> ${ev.time}</p>` : ''}
+            ${ev.count ? `<p class="mb-0"><strong>Contatos:</strong> ${ev.count}</p>` : ''}`;
+  } else {
+    html = `<p class="mb-1"><strong>Tipo:</strong> <span class="badge" style="background:#10b981">Cadência</span></p>
+            <p class="mb-0"><strong>Contatos agendados no dia:</strong> ${ev.count}</p>`;
+  }
+  document.getElementById('eventModalBody').innerHTML = html;
+  document.getElementById('eventModalLink').href = ev.url;
+  new bootstrap.Modal(document.getElementById('eventModal')).show();
+}
+
+document.getElementById('btn-prev').addEventListener('click', () => {
+  currentMonth--;
+  if (currentMonth < 1) { currentMonth = 12; currentYear--; }
+  loadEvents();
+});
+
+document.getElementById('btn-next').addEventListener('click', () => {
+  currentMonth++;
+  if (currentMonth > 12) { currentMonth = 1; currentYear++; }
+  loadEvents();
+});
+
+loadEvents();
+</script>
+{% endblock %}

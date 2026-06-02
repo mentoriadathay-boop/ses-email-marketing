@@ -31,12 +31,31 @@
             <textarea name="description" class="form-control" rows="2"
               placeholder="Descricao opcional">{{ seq.description if seq else '' }}</textarea>
           </div>
-          <div class="mb-0">
+          <div class="mb-3">
             <label class="form-label fw-semibold">E-mail Remetente *</label>
             <input type="email" name="sender_email" class="form-control" required
               placeholder="contato@seudominio.com.br"
               value="{{ seq.sender_email if seq else '' }}">
-            <div class="form-text">Deve estar verificado no Amazon SES.</div>
+            <div class="form-text">Deve estar verificado no Brevo/SES.</div>
+          </div>
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Data de Início</label>
+            <input type="date" name="start_date" class="form-control"
+              value="{{ seq.start_date|string|truncate(10, true, '') if seq and seq.start_date else '' }}">
+            <div class="form-text">Opcional. Se vazio, contatos entram imediatamente.</div>
+          </div>
+          <div class="mb-0">
+            <label class="form-label fw-semibold">Horário Preferencial</label>
+            <select name="preferred_hour" class="form-select">
+              <option value="">Flexível (melhor horário do contato)</option>
+              {% for h in range(24) %}
+              <option value="{{ h }}"
+                {% if seq and seq.preferred_hour is not none and seq.preferred_hour == h %}selected{% endif %}>
+                {{ '%02d:00'|format(h) }}
+              </option>
+              {% endfor %}
+            </select>
+            <div class="form-text">Define o horário de disparo de todos os passos.</div>
           </div>
         </div>
       </div>

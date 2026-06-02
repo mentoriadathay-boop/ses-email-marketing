@@ -218,10 +218,47 @@
         </div>
       </div>
 
+      <!-- Associar à Cadência -->
+      <div class="card mb-4">
+        <div class="card-body">
+          <h6 class="fw-semibold mb-3"><i class="bi bi-arrow-repeat me-2 text-primary"></i>Associar à Cadência</h6>
+          <select name="sequence_id" class="form-select form-select-sm">
+            <option value="">Não associar a nenhuma cadência</option>
+            {% for s in sequences %}
+            <option value="{{ s.id }}">{{ s.name }}</option>
+            {% endfor %}
+          </select>
+          <div class="form-text">Contatos serão adicionados automaticamente à cadência ao enviar.</div>
+        </div>
+      </div>
+
       <!-- Botao disparar -->
       <div class="card">
         <div class="card-body">
           <h6 class="fw-semibold mb-3"><i class="bi bi-send me-2 text-primary"></i>Disparar Campanha</h6>
+
+          <!-- Modo de agendamento -->
+          <div class="mb-3">
+            <label class="form-label fw-semibold small">Quando enviar</label>
+            <div class="d-flex gap-2">
+              <button type="button" class="btn btn-sm btn-primary" id="btn-sched-now"
+                      onclick="setScheduleMode('now')">
+                <i class="bi bi-lightning-fill me-1"></i> Agora
+              </button>
+              <button type="button" class="btn btn-sm btn-outline-secondary" id="btn-sched-later"
+                      onclick="setScheduleMode('scheduled')">
+                <i class="bi bi-calendar-event me-1"></i> Agendar
+              </button>
+            </div>
+            <input type="hidden" name="schedule_mode" id="schedule_mode" value="now">
+          </div>
+
+          <div id="schedule-datetime" class="mb-3 d-none">
+            <label class="form-label small fw-semibold">Data e hora do envio</label>
+            <input type="datetime-local" name="scheduled_at" id="scheduled_at"
+                   class="form-control form-control-sm">
+          </div>
+
           <div class="form-check mb-3">
             <input class="form-check-input" type="checkbox" id="confirma" required>
             <label class="form-check-label small" for="confirma">
@@ -229,7 +266,8 @@
             </label>
           </div>
           <button type="submit" class="btn btn-primary w-100 py-2 fw-semibold" id="btn-disparar">
-            <i class="bi bi-send-fill me-2"></i> Disparar Campanha
+            <i class="bi bi-send-fill me-2"></i>
+            <span id="btn-disparar-text">Disparar Campanha</span>
           </button>
         </div>
       </div>
@@ -308,9 +346,32 @@ function baixarExemplo() {
   return false;
 }
 
+function setScheduleMode(mode) {
+  document.getElementById('schedule_mode').value = mode;
+  const schedDt = document.getElementById('schedule-datetime');
+  const scheduledAt = document.getElementById('scheduled_at');
+  const btnNow = document.getElementById('btn-sched-now');
+  const btnLater = document.getElementById('btn-sched-later');
+  const btnText = document.getElementById('btn-disparar-text');
+  if (mode === 'scheduled') {
+    schedDt.classList.remove('d-none');
+    scheduledAt.setAttribute('required', '');
+    btnNow.className = 'btn btn-sm btn-outline-secondary';
+    btnLater.className = 'btn btn-sm btn-primary';
+    btnText.textContent = 'Agendar Campanha';
+  } else {
+    schedDt.classList.add('d-none');
+    scheduledAt.removeAttribute('required');
+    btnNow.className = 'btn btn-sm btn-primary';
+    btnLater.className = 'btn btn-sm btn-outline-secondary';
+    btnText.textContent = 'Disparar Campanha';
+  }
+}
+
 document.getElementById('campaign-form').addEventListener('submit', function(e) {
   const btn = document.getElementById('btn-disparar');
-  btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span> Enviando...';
+  const isScheduled = document.getElementById('schedule_mode').value === 'scheduled';
+  btn.innerHTML = `<span class="spinner-border spinner-border-sm me-2"></span> ${isScheduled ? 'Agendando...' : 'Enviando...'}`;
   btn.disabled = true;
 });
 

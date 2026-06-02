@@ -3,6 +3,7 @@ import csv
 import io
 import threading
 import uuid
+import calendar as cal_module
 from datetime import datetime, timedelta
 from urllib.parse import quote, unquote
 from flask import (Flask, render_template, request, jsonify, redirect,
@@ -44,28 +45,28 @@ PIXEL_GIF = (
 _DEFAULT_TEMPLATES = [
     ('Boas-vindas caloroso', 'Relacionamento',
      'Bem-vindo, {nome}! Estamos felizes em te ter aqui',
-     '<p>Olá, <strong>{nome}</strong>!</p><p>É um prazer tê-lo(a) conosco. Estou animado(a) para começar essa jornada juntos!</p><p>Nos próximos dias vou compartilhar conteúdos e oportunidades que podem agregar muito ao seu negócio.</p><p>Qualquer dúvida, basta responder este email.</p><p>Um abraço,<br><strong>Equipe ASA Marketing</strong></p>'),
+     '<p>Olá, <strong>{nome}</strong>!</p><p>É um prazer tê-lo(a) conosco. Estou animado(a) para começar essa jornada juntos!</p><p>Nos próximos dias vou compartilhar conteúdos e oportunidades que podem agregar muito ao seu negócio.</p><p>Qualquer dúvida, basta responder este email.</p><p>Um abraço,<br><strong>Equipe TFA</strong></p>'),
     ('Follow-up após 3 dias', 'Follow-up',
      '{nome}, ainda pensando na nossa conversa?',
-     '<p>Olá, <strong>{nome}</strong>,</p><p>Passaram alguns dias desde meu último contato e queria saber se você teve a chance de refletir sobre o que conversamos.</p><p>Fico à disposição para responder qualquer dúvida ou marcar uma conversa rápida de 15 minutos.</p><p>Me avise como posso ajudar!</p><p>Atenciosamente,<br><strong>Equipe ASA Marketing</strong></p>'),
+     '<p>Olá, <strong>{nome}</strong>,</p><p>Passaram alguns dias desde meu último contato e queria saber se você teve a chance de refletir sobre o que conversamos.</p><p>Fico à disposição para responder qualquer dúvida ou marcar uma conversa rápida de 15 minutos.</p><p>Me avise como posso ajudar!</p><p>Atenciosamente,<br><strong>Equipe TFA</strong></p>'),
     ('Apresentação de produto/serviço', 'Vendas',
      '{nome}, conheça nossa solução para o seu negócio',
-     '<p>Olá, <strong>{nome}</strong>!</p><p>Quero aproveitar para apresentar nossa solução que tem ajudado empresas como a sua a <strong>aumentar resultados</strong>.</p><ul><li>Atendimento personalizado</li><li>Resultados comprovados</li><li>Suporte dedicado</li></ul><p>Posso preparar uma apresentação personalizada para você?</p><p>Atenciosamente,<br><strong>Equipe ASA Marketing</strong></p>'),
+     '<p>Olá, <strong>{nome}</strong>!</p><p>Quero aproveitar para apresentar nossa solução que tem ajudado empresas como a sua a <strong>aumentar resultados</strong>.</p><ul><li>Atendimento personalizado</li><li>Resultados comprovados</li><li>Suporte dedicado</li></ul><p>Posso preparar uma apresentação personalizada para você?</p><p>Atenciosamente,<br><strong>Equipe TFA</strong></p>'),
     ('Convite para reunião', 'Relacionamento',
      '{nome}, podemos conversar 15 minutos?',
-     '<p>Olá, <strong>{nome}</strong>!</p><p>Gostaria de agendar uma conversa rápida de 15 minutos para entender melhor os desafios do seu negócio e mostrar como podemos ajudar.</p><p>Qual horário funciona melhor para você?</p><p>Aguardo seu retorno!</p><p>Atenciosamente,<br><strong>Equipe ASA Marketing</strong></p>'),
+     '<p>Olá, <strong>{nome}</strong>!</p><p>Gostaria de agendar uma conversa rápida de 15 minutos para entender melhor os desafios do seu negócio e mostrar como podemos ajudar.</p><p>Qual horário funciona melhor para você?</p><p>Aguardo seu retorno!</p><p>Atenciosamente,<br><strong>Equipe TFA</strong></p>'),
     ('Proposta comercial', 'Vendas',
      '{nome}, preparei uma proposta especial para você',
-     '<p>Olá, <strong>{nome}</strong>!</p><p>Conforme conversamos, preparei uma proposta personalizada pensando nas necessidades específicas do seu negócio.</p><ul><li>Solução sob medida para o seu segmento</li><li>Condições especiais de investimento</li><li>Implementação rápida e suporte completo</li></ul><p>Podemos agendar uma chamada para detalhar tudo?</p><p>Atenciosamente,<br><strong>Equipe ASA Marketing</strong></p>'),
+     '<p>Olá, <strong>{nome}</strong>!</p><p>Conforme conversamos, preparei uma proposta personalizada pensando nas necessidades específicas do seu negócio.</p><ul><li>Solução sob medida para o seu segmento</li><li>Condições especiais de investimento</li><li>Implementação rápida e suporte completo</li></ul><p>Podemos agendar uma chamada para detalhar tudo?</p><p>Atenciosamente,<br><strong>Equipe TFA</strong></p>'),
     ('Reengajamento de lead frio', 'Reengajamento',
      '{nome}, faz tempo que não nos falamos...',
-     '<p>Olá, <strong>{nome}</strong>!</p><p>Já faz algum tempo desde nosso último contato e queria saber como você está e como vai o seu negócio.</p><p>Temos novidades que podem ser relevantes para você agora.</p><p>Posso te enviar algumas informações?</p><p>Atenciosamente,<br><strong>Equipe ASA Marketing</strong></p>'),
+     '<p>Olá, <strong>{nome}</strong>!</p><p>Já faz algum tempo desde nosso último contato e queria saber como você está e como vai o seu negócio.</p><p>Temos novidades que podem ser relevantes para você agora.</p><p>Posso te enviar algumas informações?</p><p>Atenciosamente,<br><strong>Equipe TFA</strong></p>'),
     ('Agradecimento pós-reunião', 'Relacionamento',
      '{nome}, obrigado pelo seu tempo hoje!',
-     '<p>Olá, <strong>{nome}</strong>!</p><p>Quero agradecer pela conversa de hoje. Foi muito produtivo conhecer melhor o seu negócio e os desafios que você enfrenta.</p><p>Como combinado, vou preparar os próximos passos e enviar para você em breve.</p><p>Um abraço,<br><strong>Equipe ASA Marketing</strong></p>'),
+     '<p>Olá, <strong>{nome}</strong>!</p><p>Quero agradecer pela conversa de hoje. Foi muito produtivo conhecer melhor o seu negócio e os desafios que você enfrenta.</p><p>Como combinado, vou preparar os próximos passos e enviar para você em breve.</p><p>Um abraço,<br><strong>Equipe TFA</strong></p>'),
     ('Última tentativa de contato', 'Follow-up',
      '{nome}, última mensagem minha sobre isso',
-     '<p>Olá, <strong>{nome}</strong>,</p><p>Tentei entrar em contato algumas vezes e entendo que você deve estar ocupado(a).</p><p>Esta será minha última mensagem sobre este assunto.</p><p>Se em algum momento fizer sentido conversar, estarei aqui. Basta responder este email.</p><p>Sucesso no seu negócio!</p><p>Atenciosamente,<br><strong>Equipe ASA Marketing</strong></p>'),
+     '<p>Olá, <strong>{nome}</strong>,</p><p>Tentei entrar em contato algumas vezes e entendo que você deve estar ocupado(a).</p><p>Esta será minha última mensagem sobre este assunto.</p><p>Se em algum momento fizer sentido conversar, estarei aqui. Basta responder este email.</p><p>Sucesso no seu negócio!</p><p>Atenciosamente,<br><strong>Equipe TFA</strong></p>'),
 ]
 
 # ── Banco de dados (PostgreSQL) ─────────────────────────────────────────────
@@ -192,6 +193,11 @@ def init_db():
         "ALTER TABLE contacts ADD COLUMN product_interest TEXT",
         "ALTER TABLE contacts ADD COLUMN source TEXT",
         "ALTER TABLE campaigns ADD COLUMN mailing_id INTEGER",
+        "ALTER TABLE campaigns ADD COLUMN sequence_id INTEGER",
+        "ALTER TABLE campaigns ADD COLUMN scheduled_at TIMESTAMP",
+        "ALTER TABLE campaigns ADD COLUMN csv_filename TEXT",
+        "ALTER TABLE sequences ADD COLUMN start_date DATE",
+        "ALTER TABLE sequences ADD COLUMN preferred_hour INTEGER",
     ]:
         try:
             conn.execute(f"DO $$ BEGIN {col_sql}; EXCEPTION WHEN duplicate_column THEN NULL; END $$")
@@ -291,6 +297,44 @@ def update_score(email, delta, conn=None):
     if close: conn.commit(); conn.close()
     return new_score
 
+def enroll_contacts_in_sequence(seq_id, contacts, conn):
+    seq = conn.execute('SELECT * FROM sequences WHERE id=%s', (seq_id,)).fetchone()
+    if not seq:
+        return 0
+    first_step = conn.execute(
+        'SELECT * FROM sequence_steps WHERE sequence_id=%s ORDER BY step_number LIMIT 1',
+        (seq_id,)).fetchone()
+    if not first_step:
+        return 0
+    now = datetime.now()
+    start_base = now
+    sd = seq.get('start_date')
+    if sd:
+        try:
+            sd_dt = datetime.strptime(str(sd)[:10], '%Y-%m-%d') if not isinstance(sd, datetime) else sd
+            if sd_dt > now:
+                start_base = sd_dt
+        except Exception:
+            pass
+    next_dt = start_base + timedelta(days=first_step['day_offset'])
+    ph = seq.get('preferred_hour')
+    if ph is not None:
+        next_dt = next_dt.replace(hour=int(ph), minute=0, second=0, microsecond=0)
+    next_send = next_dt.strftime('%Y-%m-%d %H:%M:%S')
+    added = 0
+    for c in contacts:
+        if is_blacklisted(c['email'], conn):
+            continue
+        existing = conn.execute(
+            'SELECT id FROM sequence_contacts WHERE sequence_id=%s AND contact_email=%s',
+            (seq_id, c['email'])).fetchone()
+        if not existing:
+            conn.execute(
+                'INSERT INTO sequence_contacts (sequence_id,contact_email,contact_name,current_step,next_send_at) VALUES (%s,%s,%s,%s,%s)',
+                (seq_id, c['email'], c.get('name', ''), first_step['step_number'], next_send))
+            added += 1
+    return added
+
 def log_activity(email, type_, description, conn=None):
     close = conn is None
     if close: conn = get_db()
@@ -326,7 +370,7 @@ def send_email_brevo(sender, recipient_email, recipient_name, subject, body_html
     api_instance = sib_api_v3_sdk.TransactionalEmailsApi(sib_api_v3_sdk.ApiClient(configuration))
     email_obj = sib_api_v3_sdk.SendSmtpEmail(
         to=[{'email': recipient_email, 'name': recipient_name or ''}],
-        sender={'email': sender, 'name': 'ASA Marketing'},
+        sender={'email': sender, 'name': 'TFA Email Marketing'},
         subject=personalized_subject,
         html_content=personalized_body
     )
@@ -334,7 +378,7 @@ def send_email_brevo(sender, recipient_email, recipient_name, subject, body_html
 
 # ── Campanha ─────────────────────────────────────────────────────────────────
 
-def run_campaign(campaign_id, contacts, sender, subject, body_html):
+def run_campaign(campaign_id, contacts, sender, subject, body_html, sequence_id=None):
     conn = get_db()
     campaign_progress[campaign_id] = {'total': len(contacts), 'sent': 0, 'errors': 0, 'status': 'running', 'logs': []}
     conn.execute("UPDATE campaigns SET status='running',total_contacts=%s WHERE id=%s", (len(contacts), campaign_id))
@@ -368,6 +412,10 @@ def run_campaign(campaign_id, contacts, sender, subject, body_html):
             (campaign_id, email, name, status, campaign_progress[campaign_id]['logs'][-1]['error']))
         conn.commit()
 
+    if sequence_id:
+        enroll_contacts_in_sequence(int(sequence_id), contacts, conn)
+        conn.commit()
+
     campaign_progress[campaign_id]['status'] = 'done'
     conn.execute("UPDATE campaigns SET status='done',finished_at=NOW() WHERE id=%s", (campaign_id,))
     conn.commit()
@@ -379,7 +427,7 @@ def processar_cadencias():
     conn = get_db()
     now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
     cur = conn.execute('''
-        SELECT sc.*, s.sender_email AS seq_sender
+        SELECT sc.*, s.sender_email AS seq_sender, s.preferred_hour AS seq_preferred_hour
         FROM sequence_contacts sc
         JOIN sequences s ON s.id = sc.sequence_id
         WHERE sc.status = 'active' AND sc.next_send_at <= %s
@@ -478,8 +526,11 @@ def processar_cadencias():
                 started_at = datetime.now()
             next_dt = started_at + timedelta(days=next_step['day_offset'])
             best_hour = get_best_send_hour(email)
+            seq_preferred_hour = c.get('seq_preferred_hour')
             if best_hour is not None:
                 next_dt = next_dt.replace(hour=best_hour, minute=0, second=0)
+            elif seq_preferred_hour is not None:
+                next_dt = next_dt.replace(hour=int(seq_preferred_hour), minute=0, second=0)
             next_send = next_dt.strftime('%Y-%m-%d %H:%M:%S')
             conn.execute(
                 'UPDATE sequence_contacts SET current_step=%s,next_send_at=%s WHERE id=%s',
@@ -507,6 +558,49 @@ def calcular_scores_inativos():
         update_score(row['email'], -5, conn)
     conn.commit()
     conn.close()
+
+def processar_campanhas_agendadas():
+    conn = get_db()
+    now = datetime.now()
+    cur = conn.execute(
+        "SELECT * FROM campaigns WHERE status='scheduled' AND scheduled_at <= %s",
+        (now,))
+    scheduled = cur.fetchall()
+    conn.close()
+    for campaign in scheduled:
+        campaign_id = campaign['id']
+        sender = campaign['sender_email']
+        subject = campaign['subject']
+        body_html = campaign['body']
+        csv_filename = campaign.get('csv_filename')
+        mailing_id = campaign.get('mailing_id')
+        sequence_id = campaign.get('sequence_id')
+        contacts = []
+        if csv_filename:
+            filepath = os.path.join(app.config['UPLOAD_FOLDER'], csv_filename)
+            contacts = parse_csv(filepath)
+        elif mailing_id:
+            conn_m = get_db()
+            ml = conn_m.execute('SELECT * FROM mailings WHERE id=%s', (mailing_id,)).fetchone()
+            conn_m.close()
+            if ml:
+                filepath = os.path.join(app.config['UPLOAD_FOLDER'], ml['filename'])
+                contacts = parse_csv(filepath)
+        if not contacts:
+            conn2 = get_db()
+            conn2.execute("UPDATE campaigns SET status='error' WHERE id=%s", (campaign_id,))
+            conn2.commit()
+            conn2.close()
+            continue
+        conn2 = get_db()
+        conn2.execute("UPDATE campaigns SET total_contacts=%s WHERE id=%s", (len(contacts), campaign_id))
+        conn2.commit()
+        conn2.close()
+        t = threading.Thread(
+            target=run_campaign,
+            args=(campaign_id, contacts, sender, subject, body_html, sequence_id),
+            daemon=True)
+        t.start()
 
 # ── Guard: redireciona para setup se banco não estiver pronto ─────────────────
 
@@ -553,10 +647,16 @@ def nova_campanha():
         body_html = request.form.get('body_html', '').strip()
         send_mode = request.form.get('send_mode', 'csv')
         mailing_id = request.form.get('mailing_id', '').strip() or None
+        sequence_id = request.form.get('sequence_id', '').strip() or None
+        schedule_mode = request.form.get('schedule_mode', 'now')
+        scheduled_at_raw = request.form.get('scheduled_at', '').strip()
 
         if not all([name, sender, subject, body_html]):
             flash('Preencha todos os campos obrigatórios.', 'danger')
             return redirect(url_for('nova_campanha'))
+
+        csv_filename = None
+        contacts = []
 
         if send_mode == 'individual':
             ind_name = request.form.get('ind_name', '').strip()
@@ -565,6 +665,13 @@ def nova_campanha():
                 flash('Informe o email do destinatário.', 'danger')
                 return redirect(url_for('nova_campanha'))
             contacts = [{'name': ind_name, 'email': ind_email, 'tags': ''}]
+            temp_filename = f"campaign_{uuid.uuid4().hex}.csv"
+            temp_filepath = os.path.join(app.config['UPLOAD_FOLDER'], temp_filename)
+            with open(temp_filepath, 'w', newline='', encoding='utf-8') as f:
+                w = csv.writer(f)
+                w.writerow(['nome', 'email'])
+                w.writerow([ind_name, ind_email])
+            csv_filename = temp_filename
         elif send_mode == 'mailing':
             if not mailing_id:
                 flash('Selecione um mailing.', 'danger')
@@ -595,29 +702,51 @@ def nova_campanha():
             if not contacts:
                 flash('Nenhum contato válido encontrado no CSV.', 'danger')
                 return redirect(url_for('nova_campanha'))
+            csv_filename = filename
+
+        is_scheduled = schedule_mode == 'scheduled' and scheduled_at_raw
+        parsed_scheduled_at = None
+        campaign_status = 'pending'
+        if is_scheduled:
+            try:
+                parsed_scheduled_at = datetime.strptime(scheduled_at_raw, '%Y-%m-%dT%H:%M')
+                campaign_status = 'scheduled'
+            except ValueError:
+                flash('Data/hora de agendamento inválida.', 'danger')
+                return redirect(url_for('nova_campanha'))
 
         conn = get_db()
         cur = conn.execute(
-            "INSERT INTO campaigns (name,subject,body,sender_email,total_contacts,status,mailing_id) VALUES (%s,%s,%s,%s,%s,%s,%s) RETURNING id",
-            (name, subject, body_html, sender, len(contacts), 'pending', mailing_id))
+            "INSERT INTO campaigns (name,subject,body,sender_email,total_contacts,status,mailing_id,sequence_id,scheduled_at,csv_filename) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id",
+            (name, subject, body_html, sender,
+             0 if is_scheduled else len(contacts),
+             campaign_status, mailing_id, sequence_id, parsed_scheduled_at, csv_filename))
         campaign_id = cur.fetchone()['id']
         conn.commit()
         conn.close()
 
-        t = threading.Thread(target=run_campaign, args=(campaign_id, contacts, sender, subject, body_html), daemon=True)
+        if is_scheduled:
+            flash(f'Campanha agendada para {parsed_scheduled_at.strftime("%d/%m/%Y às %H:%M")}!', 'success')
+            return redirect(url_for('campanha_detalhe', campaign_id=campaign_id))
+
+        t = threading.Thread(target=run_campaign, args=(campaign_id, contacts, sender, subject, body_html, sequence_id), daemon=True)
         t.start()
         flash(f'Campanha iniciada! Enviando para {len(contacts)} contato(s).', 'success')
         return redirect(url_for('campanha_detalhe', campaign_id=campaign_id))
 
     conn = get_db()
     mailings = conn.execute('SELECT * FROM mailings ORDER BY created_at DESC').fetchall()
+    sequences = conn.execute("SELECT id, name FROM sequences WHERE status='active' ORDER BY name").fetchall()
     conn.close()
-    return render_template('nova_campanha.html', mailings=mailings)
+    return render_template('nova_campanha.html', mailings=mailings, sequences=sequences)
 
 @app.route('/campanha/<int:campaign_id>')
 def campanha_detalhe(campaign_id):
     conn = get_db()
-    campaign = conn.execute("SELECT * FROM campaigns WHERE id=%s", (campaign_id,)).fetchone()
+    campaign = conn.execute(
+        "SELECT c.*, s.name AS sequence_name FROM campaigns c "
+        "LEFT JOIN sequences s ON s.id = c.sequence_id WHERE c.id=%s",
+        (campaign_id,)).fetchone()
     logs = conn.execute(
         "SELECT * FROM campaign_logs WHERE campaign_id=%s ORDER BY id DESC LIMIT 200",
         (campaign_id,)).fetchall()
@@ -826,14 +955,18 @@ def nova_cadencia():
         ab_bodies_b = request.form.getlist('ab_body_b[]')
         ab_ratios = request.form.getlist('ab_ratio[]')
 
+        start_date = request.form.get('start_date', '').strip() or None
+        ph_str = request.form.get('preferred_hour', '').strip()
+        preferred_hour = int(ph_str) if ph_str.isdigit() and 0 <= int(ph_str) <= 23 else None
+
         if not name or not sender or not days:
             flash('Preencha nome, remetente e pelo menos um passo.', 'danger')
             return redirect(url_for('nova_cadencia'))
 
         conn = get_db()
         cur = conn.execute(
-            'INSERT INTO sequences (name,description,sender_email) VALUES (%s,%s,%s) RETURNING id',
-            (name, description, sender))
+            'INSERT INTO sequences (name,description,sender_email,start_date,preferred_hour) VALUES (%s,%s,%s,%s,%s) RETURNING id',
+            (name, description, sender, start_date, preferred_hour))
         seq_id = cur.fetchone()['id']
         for i, (day, subj, body, cond) in enumerate(zip(days, subjects, bodies, conditions), start=1):
             ab_b = ab_subjects_b[i-1] if i <= len(ab_subjects_b) else ''
@@ -897,6 +1030,9 @@ def editar_cadencia(seq_id):
         name = request.form.get('name', '').strip()
         description = request.form.get('description', '').strip()
         sender = request.form.get('sender_email', '').strip()
+        start_date = request.form.get('start_date', '').strip() or None
+        ph_str = request.form.get('preferred_hour', '').strip()
+        preferred_hour = int(ph_str) if ph_str.isdigit() and 0 <= int(ph_str) <= 23 else None
         days = request.form.getlist('step_day[]')
         subjects = request.form.getlist('step_subject[]')
         bodies = request.form.getlist('step_body[]')
@@ -905,8 +1041,8 @@ def editar_cadencia(seq_id):
         ab_bodies_b = request.form.getlist('ab_body_b[]')
         ab_ratios = request.form.getlist('ab_ratio[]')
 
-        conn.execute('UPDATE sequences SET name=%s,description=%s,sender_email=%s WHERE id=%s',
-                     (name, description, sender, seq_id))
+        conn.execute('UPDATE sequences SET name=%s,description=%s,sender_email=%s,start_date=%s,preferred_hour=%s WHERE id=%s',
+                     (name, description, sender, start_date, preferred_hour, seq_id))
         conn.execute('DELETE FROM sequence_steps WHERE sequence_id=%s', (seq_id,))
         for i, (day, subj, body, cond) in enumerate(zip(days, subjects, bodies, conditions), start=1):
             ab_b = ab_subjects_b[i-1] if i <= len(ab_subjects_b) else ''
@@ -956,7 +1092,20 @@ def adicionar_contatos_cadencia(seq_id):
         return redirect(url_for('cadencia_detalhe', seq_id=seq_id))
 
     now = datetime.now()
-    next_send = (now + timedelta(days=first_step['day_offset'])).strftime('%Y-%m-%d %H:%M:%S')
+    start_base = now
+    sd = seq.get('start_date')
+    if sd:
+        try:
+            sd_dt = datetime.strptime(str(sd)[:10], '%Y-%m-%d') if not isinstance(sd, datetime) else sd
+            if sd_dt > now:
+                start_base = sd_dt
+        except Exception:
+            pass
+    next_dt = start_base + timedelta(days=first_step['day_offset'])
+    ph = seq.get('preferred_hour')
+    if ph is not None:
+        next_dt = next_dt.replace(hour=int(ph), minute=0, second=0, microsecond=0)
+    next_send = next_dt.strftime('%Y-%m-%d %H:%M:%S')
     added = 0
     for c in all_contacts:
         if is_blacklisted(c['email'], conn):
@@ -1303,6 +1452,60 @@ def api_dashboard_stats():
     conn.close()
     return jsonify({'sends_by_day': sends_by_day, 'seq_stats': seq_stats, 'heatmap': heatmap})
 
+@app.route('/calendario')
+def calendario():
+    return render_template('calendario.html')
+
+@app.route('/api/calendario/eventos')
+def api_calendario_eventos():
+    year = request.args.get('year', type=int) or datetime.now().year
+    month = request.args.get('month', type=int) or datetime.now().month
+    _, days_in_month = cal_module.monthrange(year, month)
+    start = datetime(year, month, 1)
+    end = datetime(year, month, days_in_month, 23, 59, 59)
+    conn = get_db()
+    events = []
+    camps = conn.execute(
+        "SELECT id, name, scheduled_at, total_contacts, status FROM campaigns "
+        "WHERE scheduled_at BETWEEN %s AND %s",
+        (start, end)).fetchall()
+    for c in camps:
+        dt = c['scheduled_at']
+        if dt:
+            date_str = dt.strftime('%Y-%m-%d') if hasattr(dt, 'strftime') else str(dt)[:10]
+            time_str = dt.strftime('%H:%M') if hasattr(dt, 'strftime') else ''
+            events.append({
+                'type': 'campanha',
+                'title': c['name'],
+                'date': date_str,
+                'time': time_str,
+                'count': c['total_contacts'] or 0,
+                'status': c['status'],
+                'id': c['id'],
+                'url': url_for('campanha_detalhe', campaign_id=c['id'])
+            })
+    rows = conn.execute('''
+        SELECT sc.sequence_id, s.name AS seq_name,
+               DATE(sc.next_send_at) AS send_date, COUNT(*) AS contact_count
+        FROM sequence_contacts sc
+        JOIN sequences s ON s.id = sc.sequence_id
+        WHERE sc.status = 'active' AND sc.next_send_at BETWEEN %s AND %s
+        GROUP BY sc.sequence_id, s.name, DATE(sc.next_send_at)
+    ''', (start, end)).fetchall()
+    for r in rows:
+        sd = r['send_date']
+        date_str = sd.strftime('%Y-%m-%d') if hasattr(sd, 'strftime') else str(sd)
+        events.append({
+            'type': 'cadencia',
+            'title': r['seq_name'],
+            'date': date_str,
+            'count': r['contact_count'],
+            'id': r['sequence_id'],
+            'url': url_for('cadencia_detalhe', seq_id=r['sequence_id'])
+        })
+    conn.close()
+    return jsonify(events)
+
 _db_ready = False
 _db_error = ''
 
@@ -1335,6 +1538,7 @@ if not app.debug or os.environ.get('WERKZEUG_RUN_MAIN') == 'true':
     if _db_ready:
         _scheduler = BackgroundScheduler(daemon=True)
         _scheduler.add_job(processar_cadencias, 'interval', minutes=30)
+        _scheduler.add_job(processar_campanhas_agendadas, 'interval', minutes=5)
         _scheduler.add_job(calcular_scores_inativos, 'interval', hours=24)
         _scheduler.start()
 

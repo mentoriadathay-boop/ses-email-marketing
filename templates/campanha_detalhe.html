@@ -10,6 +10,32 @@
   </div>
 </div>
 
+{% if campaign.status == 'scheduled' and campaign.scheduled_at %}
+<div class="alert alert-info d-flex align-items-center mb-4">
+  <i class="bi bi-calendar-event fs-5 me-3"></i>
+  <div>
+    <strong>Envio agendado para:</strong> {{ campaign.scheduled_at.strftime('%d/%m/%Y às %H:%M') if campaign.scheduled_at else '' }}
+    <div class="small text-muted">O sistema verificará e disparará automaticamente a cada 5 minutos.</div>
+  </div>
+</div>
+{% endif %}
+
+{% if campaign.sequence_name %}
+<div class="card mb-4">
+  <div class="card-body d-flex align-items-center justify-content-between py-3">
+    <div>
+      <i class="bi bi-arrow-repeat me-2 text-primary"></i>
+      <span class="fw-semibold">Cadência Associada:</span>
+      <span class="ms-2 text-muted">{{ campaign.sequence_name }}</span>
+    </div>
+    <a href="{{ url_for('cadencia_detalhe', seq_id=campaign.sequence_id) }}"
+       class="btn btn-sm btn-outline-primary">
+      Ver Cadência <i class="bi bi-arrow-right ms-1"></i>
+    </a>
+  </div>
+</div>
+{% endif %}
+
 <!-- Cards de status em tempo real -->
 <div class="row g-3 mb-4" id="status-cards">
   <div class="col-md-3">
@@ -35,7 +61,9 @@
       <div class="opacity-75 small">Status</div>
       <div class="fs-5 fw-bold" id="status-text">
         {% if campaign.status == 'running' %}Enviando...
-        {% elif campaign.status == 'done' %}Concluida
+        {% elif campaign.status == 'done' %}Concluída
+        {% elif campaign.status == 'scheduled' %}Agendada
+        {% elif campaign.status == 'error' %}Erro
         {% else %}{{ campaign.status }}{% endif %}
       </div>
     </div>

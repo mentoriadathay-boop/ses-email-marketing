@@ -111,34 +111,51 @@ function editorTab(tab, containerId, textareaId) {
   const btnHtml = document.getElementById('tab-btn-html-' + containerId);
   const btnPreview = document.getElementById('tab-btn-preview-' + containerId);
 
+  // Captura qual aba estava ativa ANTES de ocultar tudo
+  const fromVisual = visualWrap && !visualWrap.classList.contains('d-none');
+
   [visualWrap, htmlWrap, previewWrap].forEach(el => el && el.classList.add('d-none'));
   [btnVisual, btnHtml, btnPreview].forEach(el => el && el.classList.remove('active'));
 
   if (tab === 'html') {
-    textarea.value = quill && quill.root.innerHTML !== '<p><br></p>' ? quill.root.innerHTML : '';
+    // Só sincroniza Quill→textarea se vinha da aba Texto
+    if (fromVisual && quill) {
+      textarea.value = quill.root.innerHTML === '<p><br></p>' ? '' : quill.root.innerHTML;
+    }
     htmlWrap.classList.remove('d-none');
     btnHtml.classList.add('active');
   } else if (tab === 'preview') {
-    if (quill) {
+    // Se vinha da aba Texto, sincroniza Quill→textarea primeiro
+    if (fromVisual && quill) {
       textarea.value = quill.root.innerHTML === '<p><br></p>' ? '' : quill.root.innerHTML;
     }
+    // Lê direto do textarea pelo ID — funciona vindo da aba HTML ou Texto
+    const conteudo = document.getElementById(textareaId)?.value || '';
     if (previewWrap) {
       previewWrap.classList.remove('d-none');
       const iframe = previewWrap.querySelector('iframe');
       if (iframe) {
-        const html = textarea.value ||
-          '<p style="color:#999;font-style:italic;padding:16px">Nenhum conteúdo para visualizar.</p>';
-        iframe.srcdoc = html;
-        iframe.onload = function () {
+        const vazio = '<p style="color:#999;font-style:italic;padding:16px">Nenhum conteúdo para visualizar.</p>';
+        // Injeta <base> para resolver URLs relativas (imagens, CSS local)
+        const base = `<base href="${window.location.origin}/">`;
+        const html = conteudo
+          ? (conteudo.includes('<base') ? conteudo : base + conteudo)
+          : vazio;
+        iframe.removeAttribute('srcdoc');
+        iframe.contentDocument.open();
+        iframe.contentDocument.write(html);
+        iframe.contentDocument.close();
+        setTimeout(() => {
           try {
-            const h = iframe.contentDocument.body.scrollHeight;
+            const h = iframe.contentDocument.body?.scrollHeight || 0;
             if (h > 0) iframe.style.height = (h + 24) + 'px';
           } catch (e) {}
-        };
+        }, 150);
       }
     }
     btnPreview && btnPreview.classList.add('active');
   } else {
+    // Voltando para aba Texto: carrega textarea no Quill
     if (quill) quill.clipboard.dangerouslyPasteHTML(textarea.value || '');
     visualWrap.classList.remove('d-none');
     btnVisual.classList.add('active');
