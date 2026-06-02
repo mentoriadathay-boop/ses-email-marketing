@@ -21,9 +21,9 @@
     <a href="{{ url_for('editar_cadencia', seq_id=seq.id) }}" class="btn btn-sm btn-outline-secondary">
       <i class="bi bi-pencil me-1"></i> Editar
     </a>
-    <button class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#modalCSV">
-      <i class="bi bi-upload me-1"></i> Importar Contatos
-    </button>
+    <a href="#disparar-panel" class="btn btn-sm btn-primary">
+      <i class="bi bi-send me-1"></i> Disparar Cadência
+    </a>
   </div>
 </div>
 
@@ -198,41 +198,150 @@
     <div class="text-center py-5 text-muted">
       <i class="bi bi-people fs-1 d-block mb-2"></i>
       Nenhum contato ainda.
-      <button class="btn btn-link p-0" data-bs-toggle="modal" data-bs-target="#modalCSV">
-        Importe um CSV para comecar.
-      </button>
+      <a href="#disparar-panel" class="btn btn-link p-0">Use o painel abaixo para disparar.</a>
     </div>
     {% endif %}
   </div>
 </div>
 
-<!-- Modal import CSV -->
-<div class="modal fade" id="modalCSV" tabindex="-1">
-  <div class="modal-dialog">
-    <div class="modal-content">
-      <div class="modal-header">
-        <h5 class="modal-title"><i class="bi bi-upload me-2"></i>Importar Contatos</h5>
-        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+<!-- Painel Disparar Cadência -->
+<div class="card mt-4" id="disparar-panel">
+  <div class="card-header bg-white border-0 pt-4 pb-0 px-4">
+    <h5 class="fw-bold mb-0"><i class="bi bi-send me-2 text-primary"></i>Disparar Cadência</h5>
+    <p class="text-muted small mt-1 mb-0">Importe contatos e inicie a cadência imediatamente ou agende para depois.</p>
+  </div>
+  <div class="card-body px-4 pb-4">
+    <form method="POST" action="{{ url_for('adicionar_contatos_cadencia', seq_id=seq.id) }}"
+          enctype="multipart/form-data" id="form-disparar">
+
+      <!-- Origem dos contatos -->
+      <div class="mb-4">
+        <label class="form-label fw-semibold">Origem dos contatos</label>
+        <div class="d-flex gap-4">
+          <div class="form-check">
+            <input class="form-check-input" type="radio" name="source" id="src-mailing" value="mailing"
+                   {% if mailings %}checked{% endif %} onchange="toggleSource()">
+            <label class="form-check-label" for="src-mailing">
+              <i class="bi bi-collection me-1"></i> Mailing salvo
+            </label>
+          </div>
+          <div class="form-check">
+            <input class="form-check-input" type="radio" name="source" id="src-csv" value="csv"
+                   {% if not mailings %}checked{% endif %} onchange="toggleSource()">
+            <label class="form-check-label" for="src-csv">
+              <i class="bi bi-file-earmark-text me-1"></i> Upload CSV
+            </label>
+          </div>
+        </div>
       </div>
-      <form method="POST" action="{{ url_for('adicionar_contatos_cadencia', seq_id=seq.id) }}" enctype="multipart/form-data">
-        <div class="modal-body">
-          <p class="text-muted small">CSV com colunas <code>nome</code> e <code>email</code>. Contatos ja existentes na cadencia serao ignorados.</p>
-          <div class="mb-3">
-            <label class="form-label fw-semibold">Arquivo CSV *</label>
-            <input type="file" name="csv_file" class="form-control" accept=".csv" required>
+
+      <!-- Mailing dropdown -->
+      <div class="mb-3" id="div-mailing" {% if not mailings %}style="display:none"{% endif %}>
+        <label class="form-label fw-semibold">Selecionar Mailing</label>
+        {% if mailings %}
+        <select name="mailing_id" class="form-select" id="sel-mailing">
+          <option value="">— selecione um mailing —</option>
+          {% for m in mailings %}
+          <option value="{{ m.id }}">{{ m.name }} &mdash; {{ m.contact_count }} contatos</option>
+          {% endfor %}
+        </select>
+        {% else %}
+        <div class="alert alert-warning py-2 px-3 small mb-0">
+          Nenhum mailing salvo ainda.
+          <a href="{{ url_for('lista_mailings') }}" class="alert-link">Criar mailing</a>
+        </div>
+        {% endif %}
+      </div>
+
+      <!-- CSV upload -->
+      <div class="mb-3" id="div-csv" {% if mailings %}style="display:none"{% endif %}>
+        <label class="form-label fw-semibold">Arquivo CSV</label>
+        <input type="file" name="csv_file" class="form-control" accept=".csv" id="inp-csv"
+               {% if not mailings %}required{% endif %}>
+        <div class="form-text">Colunas: <code>nome</code> e <code>email</code>. Contatos já existentes na cadência são ignorados.</div>
+      </div>
+
+      <!-- Filtro por tag -->
+      <div class="mb-4">
+        <label class="form-label fw-semibold">
+          Filtrar por Tag
+          <span class="text-muted fw-normal">(opcional)</span>
+        </label>
+        <input type="text" name="tag_filter" class="form-control" placeholder="Ex: lead-quente, cliente-2024">
+        <div class="form-text">Deixe em branco para importar todos os contatos da origem.</div>
+      </div>
+
+      <hr class="my-4">
+
+      <!-- Quando iniciar -->
+      <div class="mb-4">
+        <label class="form-label fw-semibold">Quando iniciar</label>
+        <div class="d-flex gap-4 mb-3">
+          <div class="form-check">
+            <input class="form-check-input" type="radio" name="start_mode" id="start-now" value="now"
+                   checked onchange="toggleSchedule()">
+            <label class="form-check-label" for="start-now">
+              <i class="bi bi-lightning me-1"></i> Imediatamente
+            </label>
           </div>
+          <div class="form-check">
+            <input class="form-check-input" type="radio" name="start_mode" id="start-sched" value="scheduled"
+                   onchange="toggleSchedule()">
+            <label class="form-check-label" for="start-sched">
+              <i class="bi bi-calendar-event me-1"></i> Agendar
+            </label>
+          </div>
+        </div>
+        <div class="d-none" id="div-datetime">
+          <label class="form-label small text-muted">Data e hora de início</label>
+          <input type="datetime-local" name="scheduled_at" class="form-control" id="inp-datetime" style="max-width:280px">
+          <div class="form-text">O primeiro passo será enviado a partir desta data/hora.</div>
+        </div>
+        <div id="div-info-now">
           <div class="alert alert-info py-2 px-3 small mb-0">
-            O primeiro passo sera agendado de acordo com o dia configurado (dia 0 = proximo ciclo em ate 30 min).
+            <i class="bi bi-info-circle me-1"></i>
+            O primeiro envio ocorre no próximo ciclo do agendador (até 30 min), respeitando o horário preferencial da cadência.
           </div>
         </div>
-        <div class="modal-footer">
-          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
-          <button type="submit" class="btn btn-primary">
-            <i class="bi bi-upload me-1"></i> Importar
-          </button>
-        </div>
-      </form>
-    </div>
+      </div>
+
+      <button type="submit" class="btn btn-primary btn-lg px-4" onclick="return validarForm()">
+        <i class="bi bi-send me-2"></i> Disparar Cadência
+      </button>
+    </form>
   </div>
 </div>
+
+<script>
+function toggleSource() {
+  const isMailing = document.getElementById('src-mailing').checked;
+  document.getElementById('div-mailing').style.display = isMailing ? '' : 'none';
+  document.getElementById('div-csv').style.display = isMailing ? 'none' : '';
+  document.getElementById('inp-csv').required = !isMailing;
+}
+
+function toggleSchedule() {
+  const isScheduled = document.getElementById('start-sched').checked;
+  document.getElementById('div-datetime').classList.toggle('d-none', !isScheduled);
+  document.getElementById('div-info-now').classList.toggle('d-none', isScheduled);
+  document.getElementById('inp-datetime').required = isScheduled;
+}
+
+function validarForm() {
+  const isMailing = document.getElementById('src-mailing').checked;
+  if (isMailing) {
+    const sel = document.getElementById('sel-mailing');
+    if (sel && !sel.value) {
+      alert('Selecione um mailing para disparar a cadência.');
+      return false;
+    }
+  }
+  const isScheduled = document.getElementById('start-sched').checked;
+  if (isScheduled && !document.getElementById('inp-datetime').value) {
+    alert('Informe a data e hora de início agendado.');
+    return false;
+  }
+  return true;
+}
+</script>
 {% endblock %}

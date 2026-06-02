@@ -1014,10 +1014,12 @@ def cadencia_detalhe(seq_id):
             (seq_id, sn)).fetchone()['n']
         step_metrics.append({'step': st, 'sent_a': s_a, 'sent_b': s_b, 'opens': o_a,
                               'open_rate': round(o_a / (s_a + s_b) * 100, 1) if (s_a + s_b) > 0 else 0})
+    mailings = conn.execute('SELECT * FROM mailings ORDER BY created_at DESC').fetchall()
     conn.close()
     return render_template('cadencia_detalhe.html', seq=seq, steps=steps, contacts=contacts,
                            total=total, active=active, finished=finished,
-                           sent_total=sent_total, open_rate=open_rate, step_metrics=step_metrics)
+                           sent_total=sent_total, open_rate=open_rate, step_metrics=step_metrics,
+                           mailings=mailings)
 
 @app.route('/cadencias/<int:seq_id>/editar', methods=['GET', 'POST'])
 def editar_cadencia(seq_id):
@@ -1067,19 +1069,35 @@ def adicionar_contatos_cadencia(seq_id):
     if not seq:
         conn.close(); return redirect(url_for('cadencias'))
 
+    source = request.form.get('source', 'csv')
     tag_filter = request.form.get('tag_filter', '').strip()
+    start_mode = request.form.get('start_mode', 'now')
+    scheduled_at_raw = request.form.get('scheduled_at', '').strip()
 
-    if 'csv_file' not in request.files or request.files['csv_file'].filename == '':
-        flash('Selecione um arquivo CSV.', 'danger'); conn.close(); return redirect(url_for('cadencia_detalhe', seq_id=seq_id))
-
-    file = request.files['csv_file']
-    if not allowed_file(file.filename):
-        flash('Arquivo deve ser .csv', 'danger'); conn.close(); return redirect(url_for('cadencia_detalhe', seq_id=seq_id))
-
-    filename = secure_filename(file.filename)
-    filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-    file.save(filepath)
-    all_contacts = parse_csv(filepath)
+    all_contacts = []
+    if source == 'mailing':
+        mailing_id = request.form.get('mailing_id', '').strip()
+        if not mailing_id:
+            flash('Selecione um mailing.', 'danger'); conn.close()
+            return redirect(url_for('cadencia_detalhe', seq_id=seq_id))
+        ml = conn.execute('SELECT * FROM mailings WHERE id=%s', (mailing_id,)).fetchone()
+        if not ml:
+            flash('Mailing não encontrado.', 'danger'); conn.close()
+            return redirect(url_for('cadencia_detalhe', seq_id=seq_id))
+        filepath = os.path.join(app.config['UPLOAD_FOLDER'], ml['filename'])
+        all_contacts = parse_csv(filepath)
+    else:
+        if 'csv_file' not in request.files or request.files['csv_file'].filename == '':
+            flash('Selecione um arquivo CSV.', 'danger'); conn.close()
+            return redirect(url_for('cadencia_detalhe', seq_id=seq_id))
+        file = request.files['csv_file']
+        if not allowed_file(file.filename):
+            flash('Arquivo deve ser .csv', 'danger'); conn.close()
+            return redirect(url_for('cadencia_detalhe', seq_id=seq_id))
+        filename = secure_filename(file.filename)
+        filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+        file.save(filepath)
+        all_contacts = parse_csv(filepath)
 
     if tag_filter:
         all_contacts = [c for c in all_contacts if tag_filter.lower() in (c.get('tags') or '').lower()]
@@ -1092,20 +1110,29 @@ def adicionar_contatos_cadencia(seq_id):
         return redirect(url_for('cadencia_detalhe', seq_id=seq_id))
 
     now = datetime.now()
-    start_base = now
-    sd = seq.get('start_date')
-    if sd:
+    if start_mode == 'scheduled' and scheduled_at_raw:
         try:
-            sd_dt = datetime.strptime(str(sd)[:10], '%Y-%m-%d') if not isinstance(sd, datetime) else sd
-            if sd_dt > now:
-                start_base = sd_dt
-        except Exception:
-            pass
+            start_base = datetime.strptime(scheduled_at_raw, '%Y-%m-%dT%H:%M')
+        except ValueError:
+            flash('Data/hora de agendamento inválida.', 'danger'); conn.close()
+            return redirect(url_for('cadencia_detalhe', seq_id=seq_id))
+    else:
+        start_base = now
+        sd = seq.get('start_date')
+        if sd:
+            try:
+                sd_dt = datetime.strptime(str(sd)[:10], '%Y-%m-%d') if not isinstance(sd, datetime) else sd
+                if sd_dt > now:
+                    start_base = sd_dt
+            except Exception:
+                pass
+
     next_dt = start_base + timedelta(days=first_step['day_offset'])
     ph = seq.get('preferred_hour')
     if ph is not None:
         next_dt = next_dt.replace(hour=int(ph), minute=0, second=0, microsecond=0)
     next_send = next_dt.strftime('%Y-%m-%d %H:%M:%S')
+
     added = 0
     for c in all_contacts:
         if is_blacklisted(c['email'], conn):
@@ -1116,8 +1143,8 @@ def adicionar_contatos_cadencia(seq_id):
         if not existing:
             conn.execute(
                 'INSERT INTO sequence_contacts (sequence_id,contact_email,contact_name,current_step,next_send_at) VALUES (%s,%s,%s,%s,%s)',
-                (seq_id, c['email'], c['name'], first_step['step_number'], next_send))
-            upsert_contact(c['email'], c['name'], c.get('tags', ''), conn)
+                (seq_id, c['email'], c.get('name', ''), first_step['step_number'], next_send))
+            upsert_contact(c['email'], c.get('name', ''), c.get('tags', ''), conn)
             added += 1
 
     conn.commit(); conn.close()
