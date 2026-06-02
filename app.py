@@ -1508,6 +1508,7 @@ def api_calendario_eventos():
 
 _db_ready = False
 _db_error = ''
+_scheduler = None
 
 def _try_init_db():
     global _db_ready, _db_error
@@ -1525,22 +1526,33 @@ def _try_init_db():
 
 _try_init_db()
 
+def _start_scheduler():
+    global _scheduler
+    if _scheduler is not None and _scheduler.running:
+        return
+    _scheduler = BackgroundScheduler(daemon=True)
+    _scheduler.add_job(processar_cadencias, 'interval', minutes=30)
+    _scheduler.add_job(processar_campanhas_agendadas, 'interval', minutes=5)
+    _scheduler.add_job(calcular_scores_inativos, 'interval', hours=24)
+    _scheduler.start()
+    print("APScheduler iniciado.", flush=True)
+
 @app.route('/health')
 def health():
+    if _db_ready and (_scheduler is None or not _scheduler.running):
+        _start_scheduler()
+    scheduler_running = _scheduler is not None and _scheduler.running
     return jsonify({
         'status': 'ok' if _db_ready else 'error',
         'db_url_set': bool(DATABASE_URL),
         'brevo_set': bool(BREVO_API_KEY),
         'db_error': _db_error if not _db_ready else None,
+        'scheduler_running': scheduler_running,
     }), 200 if _db_ready else 503
 
 if not app.debug or os.environ.get('WERKZEUG_RUN_MAIN') == 'true':
     if _db_ready:
-        _scheduler = BackgroundScheduler(daemon=True)
-        _scheduler.add_job(processar_cadencias, 'interval', minutes=30)
-        _scheduler.add_job(processar_campanhas_agendadas, 'interval', minutes=5)
-        _scheduler.add_job(calcular_scores_inativos, 'interval', hours=24)
-        _scheduler.start()
+        _start_scheduler()
 
 if __name__ == '__main__':
     print("\nASA Email Marketing rodando em: http://127.0.0.1:5000\n")
