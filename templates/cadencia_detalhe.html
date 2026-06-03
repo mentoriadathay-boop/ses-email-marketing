@@ -21,6 +21,13 @@
     <a href="{{ url_for('editar_cadencia', seq_id=seq.id) }}" class="btn btn-sm btn-outline-secondary">
       <i class="bi bi-pencil me-1"></i> Editar
     </a>
+    {% if active > 0 %}
+    <form method="POST" action="{{ url_for('processar_cadencia_agora', seq_id=seq.id) }}" class="d-inline">
+      <button class="btn btn-sm btn-outline-success" title="Força o envio imediato dos emails pendentes">
+        <i class="bi bi-lightning-fill me-1"></i> Enviar Agora
+      </button>
+    </form>
+    {% endif %}
     <a href="#disparar-panel" class="btn btn-sm btn-primary">
       <i class="bi bi-send me-1"></i> Disparar Cadência
     </a>

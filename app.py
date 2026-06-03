@@ -11,6 +11,7 @@ from flask import (Flask, render_template, request, jsonify, redirect,
 from werkzeug.utils import secure_filename
 import psycopg2
 import psycopg2.extras
+import requests as http_requests
 import sib_api_v3_sdk
 from sib_api_v3_sdk.rest import ApiException
 from apscheduler.schedulers.background import BackgroundScheduler
@@ -180,6 +181,14 @@ def init_db():
             filename TEXT NOT NULL, contact_count INTEGER DEFAULT 0,
             created_at TIMESTAMP DEFAULT NOW()
         )''',
+        '''CREATE TABLE IF NOT EXISTS mailing_contacts (
+            id SERIAL PRIMARY KEY,
+            mailing_id INTEGER NOT NULL,
+            email TEXT NOT NULL,
+            name TEXT DEFAULT '',
+            tags TEXT DEFAULT '',
+            UNIQUE(mailing_id, email)
+        )''',
     ]
     for sql in tables:
         conn.execute(sql)
@@ -214,6 +223,38 @@ def init_db():
                 (name, cat, subj, body))
         conn.commit()
 
+    # Migrar mailings existentes: re-parsear CSV se mailing_contacts estiver vazio para este mailing
+    mailings_sem_contatos = conn.execute('''
+        SELECT m.id, m.filename FROM mailings m
+        WHERE NOT EXISTS (SELECT 1 FROM mailing_contacts mc WHERE mc.mailing_id = m.id)
+    ''').fetchall()
+    for ml in mailings_sem_contatos:
+        filepath = os.path.join(os.path.dirname(__file__), 'uploads', ml['filename'])
+        if os.path.exists(filepath):
+            try:
+                csv_contacts = []
+                import csv as _csv
+                for enc in ['utf-8-sig', 'utf-8', 'latin-1', 'cp1252']:
+                    try:
+                        with open(filepath, newline='', encoding=enc) as f:
+                            for row in _csv.DictReader(f):
+                                em = (row.get('email') or row.get('Email') or row.get('EMAIL') or '').strip()
+                                nm = (row.get('nome') or row.get('Nome') or row.get('name') or '').strip()
+                                tg = (row.get('tags') or row.get('Tags') or '').strip()
+                                if em:
+                                    csv_contacts.append((ml['id'], em, nm, tg))
+                        break
+                    except UnicodeDecodeError:
+                        continue
+                for row in csv_contacts:
+                    conn.execute(
+                        'INSERT INTO mailing_contacts (mailing_id,email,name,tags) VALUES (%s,%s,%s,%s) ON CONFLICT (mailing_id,email) DO NOTHING',
+                        row)
+                if csv_contacts:
+                    conn.commit()
+            except Exception:
+                pass
+
     conn.close()
 
 # ── Helpers ─────────────────────────────────────────────────────────────────
@@ -223,34 +264,72 @@ campaign_progress = {}
 def allowed_file(f): return '.' in f and f.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 def allowed_image(f): return '.' in f and f.rsplit('.', 1)[1].lower() in ALLOWED_IMAGE_EXT
 
+def _col(row, *keys):
+    for k in keys:
+        v = row.get(k)
+        if v and str(v).strip():
+            return str(v).strip()
+    return ''
+
 def parse_csv(filepath):
+    if not os.path.exists(filepath):
+        raise FileNotFoundError(f'Arquivo CSV não encontrado: {filepath}')
     contacts = []
     for enc in ['utf-8-sig', 'utf-8', 'latin-1', 'cp1252']:
         try:
             with open(filepath, newline='', encoding=enc) as f:
                 for row in csv.DictReader(f):
-                    name = (row.get('nome') or row.get('Nome') or row.get('name') or
-                            row.get('Name') or row.get('NOME') or '').strip()
-                    email = (row.get('email') or row.get('Email') or row.get('EMAIL') or
-                             row.get('e-mail') or row.get('E-mail') or '').strip()
-                    tags = (row.get('tags') or row.get('Tags') or row.get('TAGS') or '').strip()
-                    if email:
-                        contacts.append({'name': name, 'email': email, 'tags': tags})
+                    email = _col(row, 'email', 'Email', 'EMAIL', 'e-mail', 'E-mail', 'E-Mail')
+                    if not email:
+                        continue
+                    contacts.append({
+                        'email':            email,
+                        'name':             _col(row, 'nome', 'Nome', 'NOME', 'name', 'Name'),
+                        'phone':            _col(row, 'telefone', 'Telefone', 'phone', 'Phone', 'tel', 'Tel'),
+                        'company':          _col(row, 'empresa', 'Empresa', 'company', 'Company'),
+                        'position':         _col(row, 'cargo', 'Cargo', 'position', 'Position'),
+                        'tags':             _col(row, 'tags', 'Tags', 'TAGS'),
+                        'notes':            _col(row, 'notas', 'Notas', 'notes', 'Notes'),
+                        'product_interest': _col(row, 'produto', 'Produto', 'product_interest'),
+                        'source':           _col(row, 'fonte', 'Fonte', 'source', 'Source'),
+                        'status':           _col(row, 'status', 'Status') or 'lead',
+                    })
             return contacts
-        except (UnicodeDecodeError, Exception):
+        except UnicodeDecodeError:
+            continue
+        except Exception:
             continue
     return contacts
 
-def upsert_contact(email, name='', tags='', conn=None):
+def get_mailing_contacts_db(mailing_id, conn):
+    rows = conn.execute(
+        'SELECT email, name, tags FROM mailing_contacts WHERE mailing_id=%s ORDER BY id',
+        (mailing_id,)).fetchall()
+    return [{'email': r['email'], 'name': r['name'] or '', 'tags': r['tags'] or ''} for r in rows]
+
+def upsert_contact(email, name='', tags='', conn=None, **extra):
+    """Insere ou atualiza contato no CRM.
+    extra: phone, company, position, notes, product_interest, source, status
+    Regra: só preenche campos que estão vazios/NULL no registro existente.
+    Tags são sempre mescladas (nunca sobrescritas).
+    """
     close = conn is None
     if close: conn = get_db()
+
     conn.execute(
-        'INSERT INTO contacts (email,name,tags) VALUES (%s,%s,%s) ON CONFLICT (email) DO NOTHING',
-        (email, name, tags))
-    if name:
-        conn.execute(
-            "UPDATE contacts SET name=%s,updated_at=NOW() WHERE email=%s AND (name IS NULL OR name='')",
-            (name, email))
+        'INSERT INTO contacts (email,name,tags,status) VALUES (%s,%s,%s,%s) ON CONFLICT (email) DO NOTHING',
+        (email, name, tags, extra.get('status') or 'lead'))
+
+    # Atualiza cada campo simples apenas se o existente estiver vazio
+    for field in ('name', 'phone', 'company', 'position', 'notes', 'product_interest', 'source'):
+        value = name if field == 'name' else extra.get(field, '')
+        if value:
+            conn.execute(
+                f"UPDATE contacts SET {field}=%s, updated_at=NOW() "
+                f"WHERE email=%s AND ({field} IS NULL OR {field}='')",
+                (value, email))
+
+    # Tags: mescla sem duplicar
     if tags:
         cur = conn.execute('SELECT tags FROM contacts WHERE email=%s', (email,))
         existing = cur.fetchone()
@@ -260,6 +339,7 @@ def upsert_contact(email, name='', tags='', conn=None):
         else:
             merged = tags
         conn.execute('UPDATE contacts SET tags=%s WHERE email=%s', (merged, email))
+
     if close: conn.commit(); conn.close()
 
 def is_blacklisted(email, conn=None):
@@ -439,6 +519,7 @@ def processar_cadencias():
         return
 
     if not BREVO_API_KEY:
+        print(f"[processar_cadencias] ERRO: BREVO_API_KEY não configurada — {len(pending)} envio(s) pendente(s) não processado(s).", flush=True)
         conn.close()
         return
 
@@ -581,11 +662,14 @@ def processar_campanhas_agendadas():
             contacts = parse_csv(filepath)
         elif mailing_id:
             conn_m = get_db()
-            ml = conn_m.execute('SELECT * FROM mailings WHERE id=%s', (mailing_id,)).fetchone()
+            contacts = get_mailing_contacts_db(int(mailing_id), conn_m)
+            if not contacts:
+                ml = conn_m.execute('SELECT * FROM mailings WHERE id=%s', (mailing_id,)).fetchone()
+                if ml:
+                    filepath = os.path.join(app.config['UPLOAD_FOLDER'], ml['filename'])
+                    if os.path.exists(filepath):
+                        contacts = parse_csv(filepath)
             conn_m.close()
-            if ml:
-                filepath = os.path.join(app.config['UPLOAD_FOLDER'], ml['filename'])
-                contacts = parse_csv(filepath)
         if not contacts:
             conn2 = get_db()
             conn2.execute("UPDATE campaigns SET status='error' WHERE id=%s", (campaign_id,))
@@ -682,10 +766,15 @@ def nova_campanha():
             if not ml:
                 flash('Mailing não encontrado.', 'danger')
                 return redirect(url_for('nova_campanha'))
-            filepath = os.path.join(app.config['UPLOAD_FOLDER'], ml['filename'])
-            contacts = parse_csv(filepath)
+            conn_c = get_db()
+            contacts = get_mailing_contacts_db(int(mailing_id), conn_c)
+            conn_c.close()
             if not contacts:
-                flash('Nenhum contato válido no mailing selecionado.', 'danger')
+                filepath = os.path.join(app.config['UPLOAD_FOLDER'], ml['filename'])
+                if os.path.exists(filepath):
+                    contacts = parse_csv(filepath)
+            if not contacts:
+                flash(f'Mailing "{ml["name"]}" não tem contatos. Faça o re-upload em Mailings.', 'danger')
                 return redirect(url_for('nova_campanha'))
         else:
             if 'csv_file' not in request.files or request.files['csv_file'].filename == '':
@@ -1308,8 +1397,15 @@ def adicionar_contatos_cadencia(seq_id):
         if not ml:
             flash('Mailing não encontrado.', 'danger'); conn.close()
             return redirect(url_for('cadencia_detalhe', seq_id=seq_id))
-        filepath = os.path.join(app.config['UPLOAD_FOLDER'], ml['filename'])
-        all_contacts = parse_csv(filepath)
+        all_contacts = get_mailing_contacts_db(int(mailing_id), conn)
+        if not all_contacts:
+            filepath = os.path.join(app.config['UPLOAD_FOLDER'], ml['filename'])
+            if os.path.exists(filepath):
+                all_contacts = parse_csv(filepath)
+        if not all_contacts:
+            flash(f'Mailing "{ml["name"]}" não tem contatos. Faça o re-upload em Mailings.', 'danger')
+            conn.close()
+            return redirect(url_for('cadencia_detalhe', seq_id=seq_id))
     else:
         if 'csv_file' not in request.files or request.files['csv_file'].filename == '':
             flash('Selecione um arquivo CSV.', 'danger'); conn.close()
@@ -1358,8 +1454,11 @@ def adicionar_contatos_cadencia(seq_id):
     next_send = next_dt.strftime('%Y-%m-%d %H:%M:%S')
 
     added = 0
+    skipped_existing = 0
+    skipped_blacklist = 0
     for c in all_contacts:
         if is_blacklisted(c['email'], conn):
+            skipped_blacklist += 1
             continue
         existing = conn.execute(
             'SELECT id FROM sequence_contacts WHERE sequence_id=%s AND contact_email=%s',
@@ -1370,12 +1469,27 @@ def adicionar_contatos_cadencia(seq_id):
                 (seq_id, c['email'], c.get('name', ''), first_step['step_number'], next_send))
             upsert_contact(c['email'], c.get('name', ''), c.get('tags', ''), conn)
             added += 1
+        else:
+            skipped_existing += 1
 
     conn.commit(); conn.close()
+    extras = []
+    if skipped_existing: extras.append(f'{skipped_existing} já estavam na cadência')
+    if skipped_blacklist: extras.append(f'{skipped_blacklist} na blacklist')
+    detail = f' ({", ".join(extras)})' if extras else ''
     if start_mode == 'scheduled' and scheduled_at_raw:
-        flash(f'{added} contato(s) adicionado(s) — primeiro envio agendado para {start_base.strftime("%d/%m/%Y às %H:%M")}.', 'success')
+        flash(f'{added} contato(s) adicionado(s) — primeiro envio agendado para {start_base.strftime("%d/%m/%Y às %H:%M")}.{detail}',
+              'success' if added > 0 else 'warning')
     else:
-        flash(f'{added} contato(s) adicionado(s) à cadência.', 'success')
+        flash(f'{added} contato(s) adicionado(s) à cadência.{detail}',
+              'success' if added > 0 else 'warning')
+    return redirect(url_for('cadencia_detalhe', seq_id=seq_id))
+
+@app.route('/cadencias/<int:seq_id>/processar-agora', methods=['POST'])
+def processar_cadencia_agora(seq_id):
+    t = threading.Thread(target=processar_cadencias, daemon=True)
+    t.start()
+    flash('Processamento de emails disparado — aguarde alguns segundos e recarregue.', 'info')
     return redirect(url_for('cadencia_detalhe', seq_id=seq_id))
 
 @app.route('/cadencias/<int:seq_id>/pausar', methods=['POST'])
@@ -1601,11 +1715,27 @@ def upload_mailing():
     file.save(filepath)
     contacts = parse_csv(filepath)
     conn = get_db()
-    conn.execute('INSERT INTO mailings (name,filename,contact_count) VALUES (%s,%s,%s)',
-                 (name, filename, len(contacts)))
+    cur = conn.execute(
+        'INSERT INTO mailings (name,filename,contact_count) VALUES (%s,%s,%s) RETURNING id',
+        (name, filename, len(contacts)))
+    mailing_id = cur.fetchone()['id']
+    novos_no_crm = 0
+    for c in contacts:
+        conn.execute(
+            'INSERT INTO mailing_contacts (mailing_id,email,name,tags) VALUES (%s,%s,%s,%s) ON CONFLICT (mailing_id,email) DO NOTHING',
+            (mailing_id, c['email'], c['name'], c['tags']))
+        existia = conn.execute('SELECT id FROM contacts WHERE email=%s', (c['email'],)).fetchone()
+        upsert_contact(c['email'], c['name'], c['tags'], conn,
+                       phone=c.get('phone'), company=c.get('company'),
+                       position=c.get('position'), notes=c.get('notes'),
+                       product_interest=c.get('product_interest'),
+                       source=c.get('source'), status=c.get('status'))
+        if not existia:
+            novos_no_crm += 1
     conn.commit()
     conn.close()
-    flash(f'Mailing "{name}" salvo com {len(contacts)} contatos!', 'success')
+    crm_msg = f' ({novos_no_crm} novo(s) adicionado(s) ao CRM)' if novos_no_crm else ' (todos já estavam no CRM)'
+    flash(f'Mailing "{name}" salvo com {len(contacts)} contatos!{crm_msg}', 'success')
     return redirect(url_for('lista_mailings'))
 
 @app.route('/mailings/<int:mailing_id>/deletar', methods=['POST'])
@@ -1616,6 +1746,7 @@ def deletar_mailing(mailing_id):
         filepath = os.path.join(app.config['UPLOAD_FOLDER'], ml['filename'])
         if os.path.exists(filepath):
             os.remove(filepath)
+        conn.execute('DELETE FROM mailing_contacts WHERE mailing_id=%s', (mailing_id,))
         conn.execute('DELETE FROM mailings WHERE id=%s', (mailing_id,))
         conn.commit()
         flash(f'Mailing "{ml["name"]}" removido.', 'success')
