@@ -143,7 +143,7 @@
 <!-- Tabela de passos -->
 <div class="card mb-4">
   <div class="card-header bg-white fw-semibold border-0 pt-4 pb-0 px-4">
-    <i class="bi bi-list-ol me-2"></i> Passos da Cadencia
+    <i class="bi bi-list-ol me-2"></i> Passos da Cadência
   </div>
   <div class="card-body p-0">
     {% if step_metrics %}
@@ -155,23 +155,31 @@
             <th>Dia</th>
             <th>Assunto</th>
             <th>Data Prevista</th>
-            <th>Status</th>
-            <th>Condicao</th>
-            <th>Env. A</th>
-            <th>Env. B</th>
-            <th>Aberturas</th>
+            <th class="text-center">Enviados</th>
+            <th class="text-center">Abertos</th>
             <th>Taxa</th>
+            <th>Próximo Disparo</th>
+            <th>Condição</th>
           </tr>
         </thead>
         <tbody>
           {% for m in step_metrics %}
           <tr>
-            <td class="ps-4"><span class="badge bg-primary">{{ m.step.step_number }}</span></td>
+            <td class="ps-4">
+              <span class="badge bg-primary">{{ m.step.step_number }}</span>
+              {% if m.step_status == 'Concluído' %}
+                <span class="badge ms-1" style="background:#d1fae5;color:#065f46;font-size:.68rem">Concluído</span>
+              {% elif m.step_status == 'Em andamento' %}
+                <span class="badge ms-1" style="background:#fef9c3;color:#854d0e;font-size:.68rem">Ativo</span>
+              {% else %}
+                <span class="badge ms-1" style="background:#dbeafe;color:#1e40af;font-size:.68rem">Pendente</span>
+              {% endif %}
+            </td>
             <td class="text-muted small">Dia {{ m.step.day_offset }}</td>
-            <td class="small fw-semibold">
-              {{ m.step.subject[:50] }}{% if m.step.subject|length > 50 %}...{% endif %}
+            <td class="small fw-semibold" style="max-width:220px">
+              {{ m.step.subject[:55] }}{% if m.step.subject|length > 55 %}...{% endif %}
               {% if m.step.ab_subject_b %}
-              <div class="text-muted mt-1" style="font-size:.72rem">
+              <div class="text-muted mt-1" style="font-size:.7rem">
                 <span class="badge bg-warning text-dark me-1">B</span>
                 {{ m.step.ab_subject_b[:40] }}{% if m.step.ab_subject_b|length > 40 %}...{% endif %}
               </div>
@@ -179,28 +187,35 @@
             </td>
             <td class="small" style="white-space:nowrap">
               {% if m.step_status == 'Concluído' and m.first_sent_date %}
-                <span class="text-success"><i class="bi bi-check-circle me-1"></i>Enviado em {{ m.first_sent_date }}</span>
-              {% elif m.step_status == 'Em andamento' and m.first_sent_date %}
-                <span style="color:#854d0e"><i class="bi bi-arrow-repeat me-1"></i>Desde {{ m.first_sent_date }}</span>
+                <span class="text-success"><i class="bi bi-check-circle me-1"></i>{{ m.first_sent_date }}</span>
               {% elif m.predicted_date %}
                 <i class="bi bi-calendar3 me-1 text-muted"></i>{{ m.predicted_date }}
               {% else %}
                 <span class="text-muted">—</span>
               {% endif %}
             </td>
+            <td class="text-center fw-semibold">
+              {{ m.sent_total }}
+              {% if m.step.ab_subject_b and m.sent_total > 0 %}
+              <div class="text-muted" style="font-size:.68rem">A:{{ m.sent_a }} B:{{ m.sent_b }}</div>
+              {% endif %}
+            </td>
+            <td class="text-center">{{ m.opens }}</td>
             <td>
-              {% if m.step_status == 'Concluído' %}
-                <span class="badge" style="background:#d1fae5;color:#065f46">
-                  <i class="bi bi-check-circle me-1"></i>Concluído
-                </span>
-              {% elif m.step_status == 'Em andamento' %}
-                <span class="badge" style="background:#fef9c3;color:#854d0e">
-                  <i class="bi bi-arrow-repeat me-1"></i>Em andamento
-                </span>
+              <div class="d-flex align-items-center gap-2" style="min-width:70px">
+                <div class="progress flex-fill" style="height:5px">
+                  <div class="progress-bar bg-warning" style="width:{{ m.open_rate }}%"></div>
+                </div>
+                <span class="small fw-semibold">{{ m.open_rate }}%</span>
+              </div>
+            </td>
+            <td class="small" style="white-space:nowrap">
+              {% if m.step_next_fire %}
+                <i class="bi bi-alarm me-1 text-primary"></i><strong>{{ m.step_next_fire }}</strong>
+              {% elif m.step_status != 'Concluído' and m.predicted_date %}
+                <span class="text-muted"><i class="bi bi-calendar3 me-1"></i>{{ m.predicted_date }}</span>
               {% else %}
-                <span class="badge" style="background:#dbeafe;color:#1e40af">
-                  <i class="bi bi-clock me-1"></i>Aguardando
-                </span>
+                <span class="text-muted">—</span>
               {% endif %}
             </td>
             <td>
@@ -209,25 +224,8 @@
               {% elif m.step.condition == 'only_if_opened' %}
                 <span class="badge" style="background:#d1fae5;color:#065f46">Se abriu</span>
               {% else %}
-                <span class="badge" style="background:#fef3c7;color:#92400e">Se nao abriu</span>
+                <span class="badge" style="background:#fef3c7;color:#92400e">Não abriu</span>
               {% endif %}
-            </td>
-            <td><span class="badge bg-light text-dark border">{{ m.sent_a }}</span></td>
-            <td>
-              {% if m.step.ab_subject_b %}
-              <span class="badge bg-warning text-dark">{{ m.sent_b }}</span>
-              {% else %}
-              <span class="text-muted small">—</span>
-              {% endif %}
-            </td>
-            <td>{{ m.opens }}</td>
-            <td>
-              <div class="d-flex align-items-center gap-2">
-                <div class="progress flex-fill" style="height:6px;width:50px">
-                  <div class="progress-bar bg-warning" style="width:{{ m.open_rate }}%"></div>
-                </div>
-                <span class="small">{{ m.open_rate }}%</span>
-              </div>
             </td>
           </tr>
           {% endfor %}
@@ -244,55 +242,135 @@
   </div>
 </div>
 
+<!-- Alerta envios atrasados -->
+{% if delayed_count > 0 %}
+<div class="alert alert-danger d-flex align-items-center gap-3 mb-3 py-3" style="border-radius:12px">
+  <i class="bi bi-exclamation-octagon fs-3 flex-shrink-0"></i>
+  <div class="flex-fill">
+    <div class="fw-semibold">⚠️ {{ delayed_count }} envio(s) atrasado(s) — verificar scheduler</div>
+    <div class="small mt-1">Contato(s) com próximo envio no passado que ainda não receberam o e-mail.</div>
+  </div>
+  <a href="{{ url_for('diagnostico_cadencia', seq_id=seq.id) }}" target="_blank"
+     class="btn btn-sm btn-outline-danger flex-shrink-0">Diagnóstico JSON</a>
+</div>
+{% endif %}
+
 <!-- Tabela de contatos -->
-<div class="card">
-  <div class="card-header bg-white border-0 pt-4 pb-0 px-4 d-flex justify-content-between align-items-center">
-    <span class="fw-semibold"><i class="bi bi-people me-2"></i>Contatos</span>
-    <span class="badge bg-secondary">{{ contacts|length }}</span>
+<div class="card" id="contatos-card">
+  <div class="card-header bg-white border-0 pt-4 pb-3 px-4">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+      <span class="fw-semibold"><i class="bi bi-people me-2"></i>Contatos da Cadência</span>
+      <span class="badge bg-secondary" id="badge-count">{{ contact_details|length }}</span>
+    </div>
+    <div class="row g-2">
+      <div class="col-md-4">
+        <input type="text" class="form-control form-control-sm" id="filtro-busca"
+               placeholder="Buscar por nome ou email..." oninput="filtrarContatos()">
+      </div>
+      <div class="col-auto">
+        <select class="form-select form-select-sm" id="filtro-status" onchange="filtrarContatos()">
+          <option value="">Todos os status</option>
+          <option value="active">Ativo</option>
+          <option value="finished">Finalizado</option>
+          <option value="paused">Pausado</option>
+          <option value="unsubscribed">Descadastrado</option>
+          <option value="stopped">Parado</option>
+        </select>
+      </div>
+      <div class="col-auto">
+        <select class="form-select form-select-sm" id="filtro-passo" onchange="filtrarContatos()">
+          <option value="">Todos os passos</option>
+          {% for m in step_metrics %}
+          <option value="{{ m.step.step_number }}">Passo {{ m.step.step_number }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-auto">
+        <button class="btn btn-sm btn-outline-secondary" onclick="limparFiltros()">
+          <i class="bi bi-x-circle me-1"></i>Limpar
+        </button>
+      </div>
+    </div>
   </div>
   <div class="card-body p-0">
-    {% if contacts %}
-    <div style="max-height:480px;overflow-y:auto">
-      <table class="table table-sm table-hover mb-0 align-middle">
+    {% if contact_details %}
+    <div style="max-height:520px;overflow-y:auto">
+      <table class="table table-sm table-hover mb-0 align-middle" id="tabela-contatos">
         <thead class="table-light sticky-top">
           <tr>
-            <th class="ps-4">E-mail</th>
-            <th>Nome</th>
-            <th>Passo Atual</th>
+            <th class="ps-3">Nome / Email</th>
+            <th class="text-center">Passo</th>
             <th>Status</th>
-            <th>Proximo Envio</th>
+            <th>Último Envio</th>
+            <th>Email</th>
+            <th style="white-space:nowrap">Próximo Envio</th>
+            <th class="text-center">Score</th>
             <th></th>
           </tr>
         </thead>
-        <tbody>
-          {% for c in contacts %}
-          <tr>
-            <td class="ps-4 small">{{ c.contact_email }}</td>
-            <td class="small">{{ c.contact_name or '—' }}</td>
+        <tbody id="tbody-contatos">
+          {% for d in contact_details %}
+          <tr class="contato-row"
+              data-status="{{ d.contact.status }}"
+              data-step="{{ d.contact.current_step }}"
+              data-search="{{ (d.contact.contact_name or '') | lower }} {{ d.contact.contact_email | lower }}"
+              style="cursor:pointer"
+              onclick="abrirHistorico('{{ d.contact.contact_email | e }}', '{{ (d.contact.contact_name or d.contact.contact_email) | e }}')">
+            <td class="ps-3">
+              <div class="small fw-semibold">{{ d.contact.contact_name or '—' }}</div>
+              <div class="text-muted" style="font-size:.73rem">{{ d.contact.contact_email }}</div>
+            </td>
             <td class="text-center">
-              <span class="badge bg-light text-dark border">{{ c.current_step }}</span>
+              <span class="badge bg-light text-dark border">{{ d.contact.current_step }}</span>
             </td>
             <td>
-              {% if c.status == 'active' %}
+              {% if d.contact.status == 'active' %}
                 <span class="badge" style="background:#d1fae5;color:#065f46">Ativo</span>
-              {% elif c.status == 'finished' %}
+              {% elif d.contact.status == 'finished' %}
                 <span class="badge" style="background:#dbeafe;color:#1e40af">Finalizado</span>
-              {% elif c.status == 'paused' %}
+              {% elif d.contact.status == 'paused' %}
                 <span class="badge" style="background:#fef3c7;color:#92400e">Pausado</span>
-              {% elif c.status == 'unsubscribed' %}
+              {% elif d.contact.status == 'unsubscribed' %}
                 <span class="badge" style="background:#fee2e2;color:#991b1b">Descadastrado</span>
-              {% elif c.status == 'stopped' %}
+              {% elif d.contact.status == 'stopped' %}
                 <span class="badge bg-secondary">Parado</span>
               {% else %}
-                <span class="badge bg-secondary">{{ c.status }}</span>
+                <span class="badge bg-secondary">{{ d.contact.status }}</span>
               {% endif %}
             </td>
-            <td class="small text-muted">{{ c.next_send_at or '—' }}</td>
-            <td>
-              {% if c.status == 'active' %}
-              <form method="POST" action="{{ url_for('parar_contato_cadencia', seq_id=seq.id, email=c.contact_email) }}"
-                    onsubmit="return confirm('Parar cadencia para {{ c.contact_email }}?')">
-                <button class="btn btn-xs btn-outline-danger py-0 px-1" style="font-size:.7rem">
+            <td class="small text-muted">{{ d.last_email_date or '—' }}</td>
+            <td class="small">
+              {% if d.last_email_status == 'opened' %}
+                <span class="text-success fw-semibold">✅ Aberto</span>
+              {% elif d.last_email_status == 'sent' %}
+                <span style="color:#2563eb">📨 Enviado</span>
+              {% elif d.last_email_status == 'error' %}
+                <span class="text-danger">❌ Erro</span>
+              {% else %}
+                <span class="text-muted">—</span>
+              {% endif %}
+            </td>
+            <td class="small" style="white-space:nowrap">
+              {% if d.is_delayed %}
+                <span class="text-danger fw-semibold"><i class="bi bi-exclamation-triangle me-1"></i>Atrasado</span>
+              {% elif d.next_send_fmt %}
+                {{ d.next_send_fmt }}
+              {% else %}
+                <span class="text-muted">—</span>
+              {% endif %}
+            </td>
+            <td class="text-center">
+              {% if d.contact.score %}
+              <span class="badge rounded-pill" style="background:#fef3c7;color:#92400e">{{ d.contact.score }}</span>
+              {% else %}
+              <span class="text-muted small">—</span>
+              {% endif %}
+            </td>
+            <td onclick="event.stopPropagation()">
+              {% if d.contact.status == 'active' %}
+              <form method="POST" action="{{ url_for('parar_contato_cadencia', seq_id=seq.id, email=d.contact.contact_email) }}"
+                    onsubmit="return confirm('Parar cadência para {{ d.contact.contact_email }}?')">
+                <button class="btn btn-outline-danger py-0 px-1" style="font-size:.7rem" title="Parar">
                   <i class="bi bi-stop-fill"></i>
                 </button>
               </form>
@@ -303,6 +381,9 @@
         </tbody>
       </table>
     </div>
+    <div class="text-center py-3 text-muted small d-none" id="sem-resultados">
+      Nenhum contato encontrado com os filtros aplicados.
+    </div>
     {% else %}
     <div class="text-center py-5 text-muted">
       <i class="bi bi-people fs-1 d-block mb-2"></i>
@@ -310,6 +391,24 @@
       <a href="#disparar-panel" class="btn btn-link p-0">Use o painel abaixo para disparar.</a>
     </div>
     {% endif %}
+  </div>
+</div>
+
+<!-- Modal histórico -->
+<div class="modal fade" id="modalHistorico" tabindex="-1">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header border-0 pb-0">
+        <div>
+          <h5 class="modal-title mb-0"><i class="bi bi-clock-history me-2 text-primary"></i>Histórico do Contato</h5>
+          <div class="text-muted small mt-1" id="modal-email-label"></div>
+        </div>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body" id="modal-historico-body">
+        <div class="text-center py-4 text-muted">Carregando...</div>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -422,35 +521,107 @@
 </div>
 
 <script>
+// ── Form disparar ─────────────────────────────────────────────────────────
 function toggleSource() {
   const isMailing = document.getElementById('src-mailing').checked;
   document.getElementById('div-mailing').style.display = isMailing ? '' : 'none';
   document.getElementById('div-csv').style.display = isMailing ? 'none' : '';
   document.getElementById('inp-csv').required = !isMailing;
 }
-
 function toggleSchedule() {
   const isScheduled = document.getElementById('start-sched').checked;
   document.getElementById('div-datetime').classList.toggle('d-none', !isScheduled);
   document.getElementById('div-info-now').classList.toggle('d-none', isScheduled);
   document.getElementById('inp-datetime').required = isScheduled;
 }
-
 function validarForm() {
   const isMailing = document.getElementById('src-mailing').checked;
   if (isMailing) {
     const sel = document.getElementById('sel-mailing');
-    if (sel && !sel.value) {
-      alert('Selecione um mailing para disparar a cadência.');
-      return false;
-    }
+    if (sel && !sel.value) { alert('Selecione um mailing para disparar a cadência.'); return false; }
   }
   const isScheduled = document.getElementById('start-sched').checked;
   if (isScheduled && !document.getElementById('inp-datetime').value) {
-    alert('Informe a data e hora de início agendado.');
-    return false;
+    alert('Informe a data e hora de início agendado.'); return false;
   }
   return true;
+}
+
+// ── Filtros da tabela de contatos ─────────────────────────────────────────
+function filtrarContatos() {
+  const busca = (document.getElementById('filtro-busca').value || '').toLowerCase();
+  const status = document.getElementById('filtro-status').value;
+  const passo = document.getElementById('filtro-passo').value;
+  const rows = document.querySelectorAll('.contato-row');
+  let visible = 0;
+  rows.forEach(tr => {
+    const ok = (!busca || tr.dataset.search.includes(busca))
+            && (!status || tr.dataset.status === status)
+            && (!passo  || tr.dataset.step === passo);
+    tr.style.display = ok ? '' : 'none';
+    if (ok) visible++;
+  });
+  document.getElementById('badge-count').textContent = visible;
+  const sem = document.getElementById('sem-resultados');
+  if (sem) sem.classList.toggle('d-none', visible > 0 || rows.length === 0);
+}
+function limparFiltros() {
+  document.getElementById('filtro-busca').value = '';
+  document.getElementById('filtro-status').value = '';
+  document.getElementById('filtro-passo').value = '';
+  filtrarContatos();
+}
+
+// ── Modal histórico do contato ────────────────────────────────────────────
+function abrirHistorico(email, label) {
+  document.getElementById('modal-email-label').textContent = label || email;
+  const body = document.getElementById('modal-historico-body');
+  body.innerHTML = '<div class="text-center py-4 text-muted"><span class="spinner-border spinner-border-sm me-2"></span>Carregando...</div>';
+  new bootstrap.Modal(document.getElementById('modalHistorico')).show();
+
+  fetch('/api/cadencias/{{ seq.id }}/contato/' + encodeURIComponent(email) + '/historico')
+    .then(r => r.json())
+    .then(data => {
+      if (!data.timeline || data.timeline.length === 0) {
+        body.innerHTML = '<div class="text-center py-4 text-muted"><i class="bi bi-inbox fs-2 d-block mb-2"></i>Nenhum envio registrado.</div>';
+        return;
+      }
+      const items = data.timeline;
+      let html = '';
+      items.forEach((item, idx) => {
+        const sentDate = (item.sent_at || '').replace('T', ' ').substring(0, 16);
+        const hasOpen = item.opened_at && item.opened_at.length > 0;
+        const openDate = hasOpen ? item.opened_at[0].replace('T', ' ').substring(0, 16) : null;
+        const isLast = idx === items.length - 1;
+        const icon = item.status === 'sent' ? (hasOpen ? '✅' : '📨') : '❌';
+        const statusLabel = item.status === 'sent' ? (hasOpen ? '<span class="text-success fw-semibold">Aberto</span>' : '<span style="color:#2563eb">Enviado</span>') : '<span class="text-danger">Erro</span>';
+        const dot_bg = item.status === 'sent' ? (hasOpen ? '#dcfce7' : '#dbeafe') : '#fee2e2';
+        html += `<div class="d-flex gap-3 mb-0">
+          <div class="d-flex flex-column align-items-center" style="width:36px">
+            <div class="rounded-circle d-flex align-items-center justify-content-center flex-shrink-0"
+                 style="width:34px;height:34px;background:${dot_bg};font-size:.9rem;border:2px solid #fff;box-shadow:0 0 0 2px #e2e8f0">${icon}</div>
+            ${!isLast ? '<div style="width:2px;background:#e2e8f0;flex:1;min-height:24px;margin-top:2px"></div>' : ''}
+          </div>
+          <div class="flex-fill pb-4">
+            <div class="d-flex justify-content-between align-items-start flex-wrap gap-1">
+              <div>
+                <span class="badge bg-primary me-1">Passo ${item.step}</span>
+                ${item.ab_version && item.ab_version !== 'A' ? `<span class="badge bg-warning text-dark me-1">${item.ab_version}</span>` : ''}
+                ${statusLabel}
+              </div>
+              <span class="text-muted small">${sentDate}</span>
+            </div>
+            ${item.subject ? `<div class="small text-muted mt-1">${item.subject}</div>` : ''}
+            ${hasOpen ? `<div class="small text-success mt-1"><i class="bi bi-eye me-1"></i>Aberto em ${openDate}</div>` : ''}
+            ${item.error ? `<div class="small text-danger mt-1"><i class="bi bi-exclamation-circle me-1"></i>${item.error}</div>` : ''}
+          </div>
+        </div>`;
+      });
+      body.innerHTML = html;
+    })
+    .catch(() => {
+      body.innerHTML = '<div class="alert alert-danger py-2 mb-0">Erro ao carregar histórico.</div>';
+    });
 }
 </script>
 {% endblock %}

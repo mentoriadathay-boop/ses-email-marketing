@@ -989,9 +989,27 @@ def cadencia_detalhe(seq_id):
         flash('Cadência não encontrada.', 'danger'); conn.close(); return redirect(url_for('cadencias'))
 
     steps = conn.execute('SELECT * FROM sequence_steps WHERE sequence_id=%s ORDER BY step_number', (seq_id,)).fetchall()
-    contacts = conn.execute(
-        'SELECT sc.*, cs.score FROM sequence_contacts sc LEFT JOIN contact_scores cs ON cs.email=sc.contact_email WHERE sc.sequence_id=%s ORDER BY sc.started_at DESC LIMIT 200',
+    raw_contacts = conn.execute(
+        'SELECT sc.*, cs.score FROM sequence_contacts sc LEFT JOIN contact_scores cs ON cs.email=sc.contact_email WHERE sc.sequence_id=%s ORDER BY sc.started_at DESC LIMIT 300',
         (seq_id,)).fetchall()
+
+    # Bulk pre-load last logs and opens to avoid N+1 queries
+    _all_last_logs = conn.execute(
+        'SELECT DISTINCT ON (contact_email) contact_email, step_number, status, sent_at, error_message'
+        ' FROM sequence_logs WHERE sequence_id=%s ORDER BY contact_email, sent_at DESC',
+        (seq_id,)).fetchall()
+    last_log_by_email = {r['contact_email']: r for r in _all_last_logs}
+
+    _all_opens = conn.execute(
+        'SELECT contact_email, step_number, COUNT(*) as cnt FROM email_opens WHERE sequence_id=%s GROUP BY contact_email, step_number',
+        (seq_id,)).fetchall()
+    opens_by_email_step = {(r['contact_email'], r['step_number']): r['cnt'] for r in _all_opens}
+
+    _step_fires = conn.execute(
+        "SELECT current_step, MIN(next_send_at) as min_next FROM sequence_contacts"
+        " WHERE sequence_id=%s AND status='active' AND next_send_at > NOW() GROUP BY current_step",
+        (seq_id,)).fetchall()
+    step_next_fire_map = {r['current_step']: r['min_next'] for r in _step_fires}
 
     total = conn.execute('SELECT COUNT(*) as n FROM sequence_contacts WHERE sequence_id=%s', (seq_id,)).fetchone()['n']
     active = conn.execute("SELECT COUNT(*) as n FROM sequence_contacts WHERE sequence_id=%s AND status='active'", (seq_id,)).fetchone()['n']
@@ -1080,10 +1098,56 @@ def cadencia_detalhe(seq_id):
             first_sent_date = (_fd.strftime('%d/%m/%Y') if isinstance(_fd, datetime)
                                else datetime.strptime(str(_fd)[:10], '%Y-%m-%d').strftime('%d/%m/%Y'))
 
-        step_metrics.append({'step': st, 'sent_a': s_a, 'sent_b': s_b, 'opens': o_a,
+        _snf = step_next_fire_map.get(sn)
+        step_next_fire = ((_snf.strftime('%d/%m/%Y às %H:%M') if isinstance(_snf, datetime)
+                           else str(_snf)[:16].replace('T', ' ')) if _snf else None)
+
+        step_metrics.append({'step': st, 'sent_a': s_a, 'sent_b': s_b, 'sent_total': s_a + s_b,
+                              'opens': o_a,
                               'open_rate': round(o_a / (s_a + s_b) * 100, 1) if (s_a + s_b) > 0 else 0,
                               'predicted_date': predicted_date, 'step_status': step_status,
-                              'first_sent_date': first_sent_date})
+                              'first_sent_date': first_sent_date, 'step_next_fire': step_next_fire})
+
+    now_dt = datetime.now()
+    delayed_count = 0
+    contact_details = []
+    for c in raw_contacts:
+        email = c['contact_email']
+        ll = last_log_by_email.get(email)
+
+        ns = c['next_send_at']
+        if ns:
+            next_send_fmt = (ns.strftime('%d/%m/%Y às %H:%M') if isinstance(ns, datetime)
+                             else str(ns)[:16].replace('T', ' '))
+        else:
+            next_send_fmt = None
+
+        last_email_date = None
+        last_email_status = None
+        if ll:
+            ld = ll['sent_at']
+            last_email_date = ld.strftime('%d/%m/%Y') if isinstance(ld, datetime) else str(ld)[:10]
+            if ll['status'] == 'sent':
+                was_opened = opens_by_email_step.get((email, ll['step_number']), 0)
+                last_email_status = 'opened' if was_opened > 0 else 'sent'
+            else:
+                last_email_status = 'error'
+
+        is_delayed = False
+        if c['status'] == 'active' and ns:
+            ns_dt = ns if isinstance(ns, datetime) else datetime.strptime(str(ns)[:19], '%Y-%m-%d %H:%M:%S')
+            if ns_dt < now_dt:
+                ll_step = ll['step_number'] if ll and ll['status'] == 'sent' else 0
+                if ll_step < c['current_step']:
+                    is_delayed = True
+                    delayed_count += 1
+
+        contact_details.append({
+            'contact': c, 'last_email_date': last_email_date,
+            'last_email_status': last_email_status, 'next_send_fmt': next_send_fmt,
+            'is_delayed': is_delayed,
+        })
+
     mailings = conn.execute('SELECT * FROM mailings ORDER BY created_at DESC').fetchall()
     nd = conn.execute(
         "SELECT MIN(next_send_at) as next_dt, COUNT(*) as pending"
@@ -1094,13 +1158,92 @@ def cadencia_detalhe(seq_id):
     next_fire_subject = next(
         (s['subject'] for s in steps if next_fire_step and s['step_number'] == next_fire_step), None)
     conn.close()
-    return render_template('cadencia_detalhe.html', seq=seq, steps=steps, contacts=contacts,
+    return render_template('cadencia_detalhe.html', seq=seq, steps=steps,
+                           contact_details=contact_details, delayed_count=delayed_count,
                            total=total, active=active, finished=finished,
                            sent_total=sent_total, open_rate=open_rate, step_metrics=step_metrics,
                            mailings=mailings, next_dispatch=next_dispatch, pending_count=pending_count,
                            paused_count=paused_count, sent_today=sent_today,
                            next_fire_step=next_fire_step, next_fire_time=next_fire_time,
                            next_fire_count=next_fire_count, next_fire_subject=next_fire_subject)
+
+
+@app.route('/api/cadencias/<int:seq_id>/contato/<path:email>/historico')
+def api_contato_historico(seq_id, email):
+    conn = get_db()
+    logs = conn.execute(
+        'SELECT sl.*, ss.subject as step_subject FROM sequence_logs sl'
+        ' LEFT JOIN sequence_steps ss ON ss.sequence_id=sl.sequence_id AND ss.step_number=sl.step_number'
+        ' WHERE sl.sequence_id=%s AND sl.contact_email=%s ORDER BY sl.sent_at ASC',
+        (seq_id, email)).fetchall()
+    opens = conn.execute(
+        'SELECT step_number, opened_at FROM email_opens WHERE sequence_id=%s AND contact_email=%s ORDER BY opened_at ASC',
+        (seq_id, email)).fetchall()
+    opens_by_step = {}
+    for o in opens:
+        oa = o['opened_at']
+        opens_by_step.setdefault(o['step_number'], []).append(
+            oa.isoformat() if isinstance(oa, datetime) else str(oa))
+    timeline = []
+    for lg in logs:
+        sa = lg['sent_at']
+        timeline.append({
+            'step': lg['step_number'],
+            'subject': lg.get('step_subject') or '',
+            'status': lg['status'],
+            'ab_version': lg.get('ab_version') or 'A',
+            'sent_at': sa.isoformat() if isinstance(sa, datetime) else str(sa),
+            'opened_at': opens_by_step.get(lg['step_number'], []),
+            'error': lg.get('error_message') or '',
+        })
+    conn.close()
+    return jsonify({'email': email, 'timeline': timeline})
+
+
+@app.route('/diagnostico/cadencia/<int:seq_id>')
+def diagnostico_cadencia(seq_id):
+    conn = get_db()
+    seq = conn.execute('SELECT * FROM sequences WHERE id=%s', (seq_id,)).fetchone()
+    if not seq:
+        conn.close()
+        return jsonify({'error': 'Cadência não encontrada'}), 404
+    now_dt = datetime.now()
+    contacts = conn.execute(
+        "SELECT * FROM sequence_contacts WHERE sequence_id=%s AND status='active' ORDER BY next_send_at ASC",
+        (seq_id,)).fetchall()
+    _last_logs = conn.execute(
+        'SELECT DISTINCT ON (contact_email) contact_email, step_number, status'
+        ' FROM sequence_logs WHERE sequence_id=%s ORDER BY contact_email, sent_at DESC',
+        (seq_id,)).fetchall()
+    last_log_map = {r['contact_email']: r for r in _last_logs}
+    result = []
+    for c in contacts:
+        ns = c['next_send_at']
+        ns_str = ns.isoformat() if isinstance(ns, datetime) else (str(ns) if ns else None)
+        is_delayed = False
+        overdue_h = 0
+        if ns:
+            ns_dt = ns if isinstance(ns, datetime) else datetime.strptime(str(ns)[:19], '%Y-%m-%d %H:%M:%S')
+            if ns_dt < now_dt:
+                ll = last_log_map.get(c['contact_email'])
+                ll_step = ll['step_number'] if ll and ll['status'] == 'sent' else 0
+                if ll_step < c['current_step']:
+                    is_delayed = True
+                    overdue_h = round((now_dt - ns_dt).total_seconds() / 3600, 1)
+        result.append({
+            'email': c['contact_email'], 'name': c['contact_name'] or '',
+            'current_step': c['current_step'], 'next_send_at': ns_str,
+            'is_delayed': is_delayed, 'overdue_hours': overdue_h,
+        })
+    conn.close()
+    return jsonify({
+        'seq_id': seq_id, 'name': seq['name'],
+        'total_active': len(contacts),
+        'delayed': sum(1 for r in result if r['is_delayed']),
+        'contacts': result,
+        'checked_at': now_dt.isoformat(),
+    })
+
 
 @app.route('/cadencias/<int:seq_id>/editar', methods=['GET', 'POST'])
 def editar_cadencia(seq_id):
