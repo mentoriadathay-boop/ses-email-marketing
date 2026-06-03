@@ -1015,11 +1015,17 @@ def cadencia_detalhe(seq_id):
         step_metrics.append({'step': st, 'sent_a': s_a, 'sent_b': s_b, 'opens': o_a,
                               'open_rate': round(o_a / (s_a + s_b) * 100, 1) if (s_a + s_b) > 0 else 0})
     mailings = conn.execute('SELECT * FROM mailings ORDER BY created_at DESC').fetchall()
+    nd = conn.execute(
+        "SELECT MIN(next_send_at) as next_dt, COUNT(*) as pending"
+        " FROM sequence_contacts WHERE sequence_id=%s AND status='active' AND next_send_at > NOW()",
+        (seq_id,)).fetchone()
+    next_dispatch = nd['next_dt'] if nd and nd['next_dt'] else None
+    pending_count = nd['pending'] if nd else 0
     conn.close()
     return render_template('cadencia_detalhe.html', seq=seq, steps=steps, contacts=contacts,
                            total=total, active=active, finished=finished,
                            sent_total=sent_total, open_rate=open_rate, step_metrics=step_metrics,
-                           mailings=mailings)
+                           mailings=mailings, next_dispatch=next_dispatch, pending_count=pending_count)
 
 @app.route('/cadencias/<int:seq_id>/editar', methods=['GET', 'POST'])
 def editar_cadencia(seq_id):
@@ -1148,7 +1154,10 @@ def adicionar_contatos_cadencia(seq_id):
             added += 1
 
     conn.commit(); conn.close()
-    flash(f'{added} contatos adicionados à cadência.', 'success')
+    if start_mode == 'scheduled' and scheduled_at_raw:
+        flash(f'{added} contato(s) adicionado(s) — primeiro envio agendado para {start_base.strftime("%d/%m/%Y às %H:%M")}.', 'success')
+    else:
+        flash(f'{added} contato(s) adicionado(s) à cadência.', 'success')
     return redirect(url_for('cadencia_detalhe', seq_id=seq_id))
 
 @app.route('/cadencias/<int:seq_id>/pausar', methods=['POST'])
