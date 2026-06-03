@@ -59,26 +59,84 @@
   </div>
 </div>
 
-{% if next_dispatch %}
+{% if next_fire_step %}
+<div class="card mb-3" style="border-left:4px solid #4361ee;background:#f8faff">
+  <div class="card-body py-3 px-4">
+    <div class="d-flex align-items-center gap-3">
+      <i class="bi bi-send-check fs-2 text-primary flex-shrink-0"></i>
+      <div>
+        <div class="fw-semibold text-primary" style="font-size:.7rem;letter-spacing:.06em;text-transform:uppercase">Próximo Disparo</div>
+        <div class="d-flex flex-wrap gap-3 align-items-center mt-1">
+          <span class="small">
+            <span class="badge bg-primary me-1">Passo {{ next_fire_step }}</span>
+            {% if next_fire_subject %}
+              <span class="text-dark fw-semibold">{{ next_fire_subject[:70] }}{% if next_fire_subject|length > 70 %}…{% endif %}</span>
+            {% endif %}
+          </span>
+          <span class="small text-muted"><i class="bi bi-people me-1"></i><strong class="text-dark">{{ next_fire_count }}</strong> contato(s)</span>
+          {% if next_fire_time %}
+          <span class="small text-muted"><i class="bi bi-clock me-1"></i><strong class="text-dark">{{ next_fire_time }}</strong></span>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endif %}
+
+{% if active == 0 and paused_count > 0 %}
+<div class="alert d-flex align-items-center gap-3 mb-4 py-3"
+     style="background:#fef9c3;border:1px solid #fde047;color:#854d0e;border-radius:12px">
+  <i class="bi bi-pause-circle fs-3 flex-shrink-0"></i>
+  <div class="flex-fill fw-semibold">⏸ Cadência pausada — {{ paused_count }} contato(s) em espera</div>
+  <span class="badge rounded-pill bg-warning text-dark" style="font-size:.8rem;padding:.4em .8em">Pausada</span>
+</div>
+{% elif total == 0 %}
+<div class="alert d-flex align-items-center gap-3 mb-4 py-3"
+     style="background:#fffbeb;border:1px solid #fde68a;color:#92400e;border-radius:12px">
+  <i class="bi bi-exclamation-triangle fs-3 flex-shrink-0"></i>
+  <div class="flex-fill fw-semibold">⚠️ Nenhum contato adicionado ainda</div>
+  <a href="#disparar-panel" class="btn btn-sm btn-warning">Disparar agora</a>
+</div>
+{% elif sent_today > 0 %}
+<div class="alert d-flex align-items-center gap-3 mb-4 py-3"
+     style="background:#f0fdf4;border:1px solid #86efac;color:#166534;border-radius:12px">
+  <i class="bi bi-rocket-takeoff fs-3 flex-shrink-0"></i>
+  <div class="flex-fill">
+    <div class="fw-semibold">🚀 Cadência ativa — {{ sent_today }} e-mail(s) enviado(s) hoje</div>
+    {% if next_fire_time %}
+    <div class="small mt-1">Próximo disparo: <strong>{{ next_fire_time }}</strong> para <strong>{{ next_fire_count }}</strong> contato(s)</div>
+    {% endif %}
+  </div>
+  <span class="badge rounded-pill bg-success" style="font-size:.8rem;padding:.4em .8em">Ativa</span>
+</div>
+{% elif pending_count > 0 %}
 <div class="alert d-flex align-items-center gap-3 mb-4 py-3"
      style="background:#eff6ff;border:1px solid #bfdbfe;color:#1e40af;border-radius:12px">
   <i class="bi bi-calendar-check fs-3 flex-shrink-0"></i>
   <div class="flex-fill">
-    <div class="fw-semibold">Próximo disparo agendado</div>
-    <div class="small mt-1">
-      <strong>{{ pending_count }}</strong> contato(s) aguardando envio a partir de
-      <strong>
-        {% if next_dispatch is string %}
-          {{ next_dispatch[:16] | replace('T', ' ') }}
-        {% else %}
-          {{ next_dispatch.strftime('%d/%m/%Y às %H:%M') }}
-        {% endif %}
-      </strong>
-    </div>
+    <div class="fw-semibold">📅 {{ pending_count }} contato(s) aguardando envio</div>
+    {% if next_fire_time %}
+    <div class="small mt-1">Próximo disparo em <strong>{{ next_fire_time }}</strong></div>
+    {% elif next_dispatch %}
+    <div class="small mt-1">Próximo disparo em <strong>{% if next_dispatch is string %}{{ next_dispatch[:16]|replace('T',' ') }}{% else %}{{ next_dispatch.strftime('%d/%m/%Y às %H:%M') }}{% endif %}</strong></div>
+    {% endif %}
   </div>
-  <span class="badge rounded-pill" style="background:#1e40af;font-size:.8rem;padding:.4em .8em">
-    Aguardando
-  </span>
+  <span class="badge rounded-pill" style="background:#1e40af;font-size:.8rem;padding:.4em .8em">Aguardando</span>
+</div>
+{% elif active > 0 %}
+<div class="alert d-flex align-items-center gap-3 mb-4 py-3"
+     style="background:#f0fdf4;border:1px solid #86efac;color:#166534;border-radius:12px">
+  <i class="bi bi-check-circle fs-3 flex-shrink-0"></i>
+  <div class="flex-fill fw-semibold">✅ Cadência ativa — {{ active }} contato(s) em andamento</div>
+  <span class="badge rounded-pill bg-success" style="font-size:.8rem;padding:.4em .8em">Ativa</span>
+</div>
+{% elif finished > 0 %}
+<div class="alert d-flex align-items-center gap-3 mb-4 py-3"
+     style="background:#f1f5f9;border:1px solid #cbd5e1;color:#475569;border-radius:12px">
+  <i class="bi bi-check2-all fs-3 flex-shrink-0"></i>
+  <div class="flex-fill fw-semibold">✅ Cadência concluída — {{ finished }} contato(s) finalizados</div>
+  <span class="badge rounded-pill bg-secondary" style="font-size:.8rem;padding:.4em .8em">Concluída</span>
 </div>
 {% endif %}
 
@@ -96,6 +154,8 @@
             <th class="ps-4">Passo</th>
             <th>Dia</th>
             <th>Assunto</th>
+            <th>Data Prevista</th>
+            <th>Status</th>
             <th>Condicao</th>
             <th>Env. A</th>
             <th>Env. B</th>
@@ -115,6 +175,32 @@
                 <span class="badge bg-warning text-dark me-1">B</span>
                 {{ m.step.ab_subject_b[:40] }}{% if m.step.ab_subject_b|length > 40 %}...{% endif %}
               </div>
+              {% endif %}
+            </td>
+            <td class="small" style="white-space:nowrap">
+              {% if m.step_status == 'Concluído' and m.first_sent_date %}
+                <span class="text-success"><i class="bi bi-check-circle me-1"></i>Enviado em {{ m.first_sent_date }}</span>
+              {% elif m.step_status == 'Em andamento' and m.first_sent_date %}
+                <span style="color:#854d0e"><i class="bi bi-arrow-repeat me-1"></i>Desde {{ m.first_sent_date }}</span>
+              {% elif m.predicted_date %}
+                <i class="bi bi-calendar3 me-1 text-muted"></i>{{ m.predicted_date }}
+              {% else %}
+                <span class="text-muted">—</span>
+              {% endif %}
+            </td>
+            <td>
+              {% if m.step_status == 'Concluído' %}
+                <span class="badge" style="background:#d1fae5;color:#065f46">
+                  <i class="bi bi-check-circle me-1"></i>Concluído
+                </span>
+              {% elif m.step_status == 'Em andamento' %}
+                <span class="badge" style="background:#fef9c3;color:#854d0e">
+                  <i class="bi bi-arrow-repeat me-1"></i>Em andamento
+                </span>
+              {% else %}
+                <span class="badge" style="background:#dbeafe;color:#1e40af">
+                  <i class="bi bi-clock me-1"></i>Aguardando
+                </span>
               {% endif %}
             </td>
             <td>

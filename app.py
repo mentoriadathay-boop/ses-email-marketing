@@ -1000,6 +1000,46 @@ def cadencia_detalhe(seq_id):
     opens_total = conn.execute('SELECT COUNT(*) as n FROM email_opens WHERE sequence_id=%s', (seq_id,)).fetchone()['n']
     open_rate = round(opens_total / sent_total * 100, 1) if sent_total > 0 else 0
 
+    paused_count = conn.execute(
+        "SELECT COUNT(*) as n FROM sequence_contacts WHERE sequence_id=%s AND status='paused'",
+        (seq_id,)).fetchone()['n']
+    sent_today = conn.execute(
+        "SELECT COUNT(*) as n FROM sequence_logs WHERE sequence_id=%s AND status='sent' AND sent_at >= CURRENT_DATE",
+        (seq_id,)).fetchone()['n']
+    _nf = conn.execute(
+        """SELECT current_step, MIN(next_send_at) as next_at, COUNT(*) as cnt
+           FROM sequence_contacts
+           WHERE sequence_id=%s AND status='active' AND next_send_at IS NOT NULL
+           GROUP BY current_step ORDER BY MIN(next_send_at) ASC LIMIT 1""",
+        (seq_id,)).fetchone()
+    next_fire_step = _nf['current_step'] if _nf and _nf['next_at'] else None
+    _nft = _nf['next_at'] if _nf and _nf['next_at'] else None
+    if _nft:
+        next_fire_time = _nft.strftime('%d/%m/%Y às %H:%M') if isinstance(_nft, datetime) else str(_nft)[:16].replace('T', ' ')
+    else:
+        next_fire_time = None
+    next_fire_count = int(_nf['cnt']) if _nf and _nf['next_at'] else 0
+
+    # Data de referência para prever quando cada passo vai disparar
+    seq_start = None
+    if seq.get('start_date'):
+        try:
+            sd = seq['start_date']
+            seq_start = (datetime.strptime(str(sd)[:10], '%Y-%m-%d')
+                         if not isinstance(sd, datetime)
+                         else sd.replace(hour=0, minute=0, second=0, microsecond=0))
+        except Exception:
+            pass
+    if not seq_start:
+        earliest = conn.execute(
+            'SELECT MIN(started_at) as d FROM sequence_contacts WHERE sequence_id=%s',
+            (seq_id,)).fetchone()
+        if earliest and earliest['d']:
+            d = earliest['d']
+            seq_start = d if isinstance(d, datetime) else datetime.strptime(str(d)[:19], '%Y-%m-%d %H:%M:%S')
+            seq_start = seq_start.replace(hour=0, minute=0, second=0, microsecond=0)
+    ph = seq.get('preferred_hour')
+
     step_metrics = []
     for st in steps:
         sn = st['step_number']
@@ -1012,8 +1052,38 @@ def cadencia_detalhe(seq_id):
         o_a = conn.execute(
             'SELECT COUNT(*) as n FROM email_opens WHERE sequence_id=%s AND step_number=%s',
             (seq_id, sn)).fetchone()['n']
+
+        predicted_date = None
+        if seq_start:
+            pred_dt = seq_start + timedelta(days=st['day_offset'])
+            if ph is not None:
+                pred_dt = pred_dt.replace(hour=int(ph), minute=0, second=0, microsecond=0)
+            predicted_date = pred_dt.strftime('%d/%m/%Y às %H:%M')
+
+        at_step = conn.execute(
+            "SELECT COUNT(*) as n FROM sequence_contacts WHERE sequence_id=%s AND current_step=%s AND status='active'",
+            (seq_id, sn)).fetchone()['n']
+        total_sent = s_a + s_b
+        if total_sent > 0 and at_step == 0:
+            step_status = 'Concluído'
+        elif at_step > 0:
+            step_status = 'Em andamento'
+        else:
+            step_status = 'Aguardando'
+
+        _fs = conn.execute(
+            "SELECT MIN(sent_at) as d FROM sequence_logs WHERE sequence_id=%s AND step_number=%s AND status='sent'",
+            (seq_id, sn)).fetchone()
+        first_sent_date = None
+        if _fs and _fs['d']:
+            _fd = _fs['d']
+            first_sent_date = (_fd.strftime('%d/%m/%Y') if isinstance(_fd, datetime)
+                               else datetime.strptime(str(_fd)[:10], '%Y-%m-%d').strftime('%d/%m/%Y'))
+
         step_metrics.append({'step': st, 'sent_a': s_a, 'sent_b': s_b, 'opens': o_a,
-                              'open_rate': round(o_a / (s_a + s_b) * 100, 1) if (s_a + s_b) > 0 else 0})
+                              'open_rate': round(o_a / (s_a + s_b) * 100, 1) if (s_a + s_b) > 0 else 0,
+                              'predicted_date': predicted_date, 'step_status': step_status,
+                              'first_sent_date': first_sent_date})
     mailings = conn.execute('SELECT * FROM mailings ORDER BY created_at DESC').fetchall()
     nd = conn.execute(
         "SELECT MIN(next_send_at) as next_dt, COUNT(*) as pending"
@@ -1021,11 +1091,16 @@ def cadencia_detalhe(seq_id):
         (seq_id,)).fetchone()
     next_dispatch = nd['next_dt'] if nd and nd['next_dt'] else None
     pending_count = nd['pending'] if nd else 0
+    next_fire_subject = next(
+        (s['subject'] for s in steps if next_fire_step and s['step_number'] == next_fire_step), None)
     conn.close()
     return render_template('cadencia_detalhe.html', seq=seq, steps=steps, contacts=contacts,
                            total=total, active=active, finished=finished,
                            sent_total=sent_total, open_rate=open_rate, step_metrics=step_metrics,
-                           mailings=mailings, next_dispatch=next_dispatch, pending_count=pending_count)
+                           mailings=mailings, next_dispatch=next_dispatch, pending_count=pending_count,
+                           paused_count=paused_count, sent_today=sent_today,
+                           next_fire_step=next_fire_step, next_fire_time=next_fire_time,
+                           next_fire_count=next_fire_count, next_fire_subject=next_fire_subject)
 
 @app.route('/cadencias/<int:seq_id>/editar', methods=['GET', 'POST'])
 def editar_cadencia(seq_id):
