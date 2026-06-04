@@ -223,38 +223,6 @@ def init_db():
                 (name, cat, subj, body))
         conn.commit()
 
-    # Migrar mailings existentes: re-parsear CSV se mailing_contacts estiver vazio para este mailing
-    mailings_sem_contatos = conn.execute('''
-        SELECT m.id, m.filename FROM mailings m
-        WHERE NOT EXISTS (SELECT 1 FROM mailing_contacts mc WHERE mc.mailing_id = m.id)
-    ''').fetchall()
-    for ml in mailings_sem_contatos:
-        filepath = os.path.join(os.path.dirname(__file__), 'uploads', ml['filename'])
-        if os.path.exists(filepath):
-            try:
-                csv_contacts = []
-                import csv as _csv
-                for enc in ['utf-8-sig', 'utf-8', 'latin-1', 'cp1252']:
-                    try:
-                        with open(filepath, newline='', encoding=enc) as f:
-                            for row in _csv.DictReader(f):
-                                em = (row.get('email') or row.get('Email') or row.get('EMAIL') or '').strip()
-                                nm = (row.get('nome') or row.get('Nome') or row.get('name') or '').strip()
-                                tg = (row.get('tags') or row.get('Tags') or '').strip()
-                                if em:
-                                    csv_contacts.append((ml['id'], em, nm, tg))
-                        break
-                    except UnicodeDecodeError:
-                        continue
-                for row in csv_contacts:
-                    conn.execute(
-                        'INSERT INTO mailing_contacts (mailing_id,email,name,tags) VALUES (%s,%s,%s,%s) ON CONFLICT (mailing_id,email) DO NOTHING',
-                        row)
-                if csv_contacts:
-                    conn.commit()
-            except Exception:
-                pass
-
     conn.close()
 
 # ── Helpers ─────────────────────────────────────────────────────────────────
