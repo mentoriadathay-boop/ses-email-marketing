@@ -64,6 +64,9 @@
       <a href="{{ url_for('lista_tags') }}" class="nav-link {% if request.endpoint == 'lista_tags' %}active{% endif %}">
         <i class="bi bi-tags"></i> Tags
       </a>
+      <a href="{{ url_for('prospeccao') }}" class="nav-link {% if request.endpoint == 'prospeccao' %}active{% endif %}">
+        <i class="bi bi-search"></i> Prospecção
+      </a>
       <a href="{{ url_for('lista_mailings') }}" class="nav-link {% if 'mailing' in request.endpoint %}active{% endif %}">
         <i class="bi bi-database"></i> Mailings
       </a>

@@ -15,6 +15,21 @@ import requests as http_requests
 import sib_api_v3_sdk
 from sib_api_v3_sdk.rest import ApiException
 from apscheduler.schedulers.background import BackgroundScheduler
+import re
+
+try:
+    from bs4 import BeautifulSoup
+    BS4_OK = True
+except ImportError:
+    BS4_OK = False
+
+try:
+    import anthropic as _anthropic
+    ANTHROPIC_OK = True
+except ImportError:
+    ANTHROPIC_OK = False
+
+EMAIL_RE = re.compile(r'\b[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}\b')
 
 app = Flask(__name__)
 app.secret_key = os.urandom(24)
@@ -231,6 +246,7 @@ def init_db():
 # ── Helpers ─────────────────────────────────────────────────────────────────
 
 campaign_progress = {}
+extraction_jobs = {}
 
 def allowed_file(f): return '.' in f and f.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 def allowed_image(f): return '.' in f and f.rsplit('.', 1)[1].lower() in ALLOWED_IMAGE_EXT
@@ -426,6 +442,145 @@ def send_email_brevo(sender, recipient_email, recipient_name, subject, body_html
         html_content=personalized_body
     )
     return api_instance.send_transac_email(email_obj)
+
+# ── Prospecção / Extração de Leads ───────────────────────────────────────────
+
+def _robots_permite(url):
+    from urllib.robotparser import RobotFileParser
+    from urllib.parse import urlparse
+    try:
+        p = urlparse(url)
+        rp = RobotFileParser()
+        rp.set_url(f"{p.scheme}://{p.netloc}/robots.txt")
+        rp.read()
+        return rp.can_fetch('*', url)
+    except Exception:
+        return True
+
+def _proximas_paginas(soup, base_url, ja_vistas):
+    from urllib.parse import urljoin
+    candidatos = set()
+    for a in soup.find_all('a', rel=lambda r: r and 'next' in r):
+        h = a.get('href', '')
+        if h: candidatos.add(urljoin(base_url, h))
+    for a in soup.find_all('a', href=True):
+        txt = a.get_text(strip=True).lower()
+        if txt in ('próxima', 'próximo', 'proximo', 'next', '>>', '›', '→', 'avançar'):
+            candidatos.add(urljoin(base_url, a['href']))
+    return [u for u in candidatos if u not in ja_vistas]
+
+def _enriquecer_claude(texto, url):
+    api_key = os.environ.get('ANTHROPIC_API_KEY', '')
+    if not api_key or not ANTHROPIC_OK:
+        return []
+    try:
+        client = _anthropic.Anthropic(api_key=api_key)
+        resposta = client.messages.create(
+            model='claude-haiku-4-5-20251001',
+            max_tokens=2048,
+            messages=[{'role': 'user', 'content': (
+                f"Analise o texto desta página web ({url}) e extraia TODOS os contatos/leads.\n"
+                "Para cada contato retorne um objeto JSON com os campos disponíveis:\n"
+                "email, nome, telefone, empresa, cargo.\n"
+                "Retorne SOMENTE um array JSON válido, sem markdown. Se não houver, retorne [].\n\n"
+                f"Texto:\n{texto[:6000]}"
+            )}]
+        )
+        raw = resposta.content[0].text.strip()
+        s, e = raw.find('['), raw.rfind(']') + 1
+        if s >= 0 and e > s:
+            import json as _json
+            return _json.loads(raw[s:e])
+    except Exception:
+        pass
+    return []
+
+def _extrair_pagina_html(url):
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        'Accept-Language': 'pt-BR,pt;q=0.9,en;q=0.8',
+    }
+    r = http_requests.get(url, headers=headers, timeout=15, allow_redirects=True)
+    r.raise_for_status()
+    return r.text
+
+def _leads_da_pagina(html, url):
+    """Extrai emails com regex + contexto. Retorna (lista_leads, soup_ou_None)."""
+    ignore = {'example.com', 'seudominio', 'yoursite', 'wordpress.org',
+              'schema.org', 'w3.org', 'wpcf7', 'googleapis'}
+    if BS4_OK:
+        soup = BeautifulSoup(html, 'lxml')
+        for tag in soup(['script', 'style', 'meta', 'noscript']):
+            tag.decompose()
+        text = soup.get_text(separator=' ')
+    else:
+        soup = None
+        text = html
+    emails = {e.lower() for e in EMAIL_RE.findall(text)
+              if not any(ign in e.lower() for ign in ignore)}
+    leads = [{'email': e, 'nome': '', 'telefone': '', 'empresa': '', 'cargo': ''}
+             for e in emails]
+    return leads, soup
+
+def _run_extracao(job_id, url, max_pages, ignorar_robots):
+    job = extraction_jobs[job_id]
+    try:
+        if not ignorar_robots and not _robots_permite(url):
+            job['status'] = 'robots_blocked'
+            return
+
+        job['status'] = 'running'
+        fila = [url]
+        vistas = set()
+        todos = {}   # email -> lead dict
+
+        while fila and len(vistas) < max_pages:
+            cur_url = fila.pop(0)
+            if cur_url in vistas:
+                continue
+            vistas.add(cur_url)
+            job['pages_done'] = len(vistas)
+            job['msg'] = f'Página {len(vistas)} — {cur_url[:60]}…'
+
+            try:
+                html = _extrair_pagina_html(cur_url)
+            except Exception as ex:
+                job.setdefault('erros', []).append(str(ex))
+                continue
+
+            leads_regex, soup = _leads_da_pagina(html, cur_url)
+            texto = (soup.get_text(separator=' ') if soup else html)[:8000]
+
+            # Claude enriquece
+            leads_claude = _enriquecer_claude(texto, cur_url)
+            for lc in leads_claude:
+                em = lc.get('email', '').strip().lower()
+                if em and EMAIL_RE.match(em):
+                    todos[em] = {
+                        'email': em,
+                        'nome':     lc.get('nome') or lc.get('name', ''),
+                        'telefone': lc.get('telefone') or lc.get('phone', ''),
+                        'empresa':  lc.get('empresa') or lc.get('company', ''),
+                        'cargo':    lc.get('cargo') or lc.get('position', ''),
+                    }
+            for lr in leads_regex:
+                if lr['email'] not in todos:
+                    todos[lr['email']] = lr
+
+            # Paginação
+            if soup:
+                for prox in _proximas_paginas(soup, cur_url, vistas):
+                    if prox not in fila:
+                        fila.append(prox)
+            job['total_pages'] = min(len(vistas) + len(fila), max_pages)
+
+        job['leads'] = list(todos.values())
+        job['status'] = 'done'
+        job['msg'] = f'{len(job["leads"])} lead(s) em {len(vistas)} página(s)'
+    except Exception as ex:
+        job['status'] = 'error'
+        job['msg'] = str(ex)
 
 # ── Campanha ─────────────────────────────────────────────────────────────────
 
@@ -1861,6 +2016,80 @@ def api_calendario_eventos():
         })
     conn.close()
     return jsonify(events)
+
+# ── Rotas de Prospecção ───────────────────────────────────────────────────────
+
+@app.route('/prospeccao')
+def prospeccao():
+    return render_template('prospeccao.html')
+
+@app.route('/prospeccao/extrair', methods=['POST'])
+def prospeccao_extrair():
+    data = request.get_json() or {}
+    url = data.get('url', '').strip()
+    if not url:
+        return jsonify({'error': 'URL obrigatória'}), 400
+    if not url.startswith(('http://', 'https://')):
+        url = 'https://' + url
+    max_pages = max(1, min(int(data.get('max_pages', 1)), 50))
+    ignorar = bool(data.get('ignorar_robots', False))
+    job_id = uuid.uuid4().hex
+    extraction_jobs[job_id] = {
+        'status': 'starting', 'pages_done': 0,
+        'total_pages': max_pages, 'leads': [],
+        'msg': 'Iniciando…', 'robots_blocked': False,
+    }
+    threading.Thread(target=_run_extracao,
+                     args=(job_id, url, max_pages, ignorar),
+                     daemon=True).start()
+    return jsonify({'job_id': job_id})
+
+@app.route('/prospeccao/status/<job_id>')
+def prospeccao_status(job_id):
+    job = extraction_jobs.get(job_id)
+    if not job:
+        return jsonify({'error': 'não encontrado'}), 404
+    return jsonify(job)
+
+@app.route('/prospeccao/criar-mailing', methods=['POST'])
+def prospeccao_criar_mailing():
+    data = request.get_json() or {}
+    nome = data.get('nome', '').strip()
+    leads = data.get('leads', [])
+    if not nome:
+        return jsonify({'error': 'Nome obrigatório'}), 400
+    if not leads:
+        return jsonify({'error': 'Nenhum lead selecionado'}), 400
+
+    filename = f"mailing_{uuid.uuid4().hex}.csv"
+    filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+    with open(filepath, 'w', newline='', encoding='utf-8') as f:
+        w = csv.DictWriter(f, fieldnames=['nome', 'email', 'telefone', 'empresa', 'cargo'])
+        w.writeheader()
+        for ld in leads:
+            w.writerow({k: ld.get(k, '') for k in ['nome', 'email', 'telefone', 'empresa', 'cargo']})
+
+    conn = get_db()
+    cur = conn.execute(
+        'INSERT INTO mailings (name,filename,contact_count) VALUES (%s,%s,%s) RETURNING id',
+        (nome, filename, len(leads)))
+    mid = cur.fetchone()['id']
+    novos = 0
+    for ld in leads:
+        em = ld.get('email', '').strip().lower()
+        if not em: continue
+        conn.execute(
+            'INSERT INTO mailing_contacts (mailing_id,email,name,tags) VALUES (%s,%s,%s,%s) ON CONFLICT (mailing_id,email) DO NOTHING',
+            (mid, em, ld.get('nome', ''), ''))
+        existia = conn.execute('SELECT id FROM contacts WHERE email=%s', (em,)).fetchone()
+        upsert_contact(em, ld.get('nome', ''), '', conn,
+                       phone=ld.get('telefone', ''),
+                       company=ld.get('empresa', ''),
+                       position=ld.get('cargo', ''))
+        if not existia: novos += 1
+    conn.commit(); conn.close()
+    return jsonify({'ok': True, 'mailing_id': mid, 'novos_crm': novos,
+                    'redirect': url_for('lista_mailings')})
 
 _db_ready = False
 _db_error = ''

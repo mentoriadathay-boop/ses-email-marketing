@@ -1,0 +1,407 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="d-flex align-items-center gap-3 mb-4">
+  <div class="stat-card d-flex align-items-center justify-content-center"
+       style="width:48px;height:48px;background:linear-gradient(135deg,#4361ee,#7209b7);border-radius:12px;flex-shrink:0;">
+    <i class="bi bi-search fs-5 text-white"></i>
+  </div>
+  <div>
+    <h4 class="mb-0 fw-bold">Prospecção</h4>
+    <small class="text-muted">Extraia leads automaticamente de qualquer site</small>
+  </div>
+</div>
+
+<!-- Formulário de extração -->
+<div class="card mb-4">
+  <div class="card-body p-4">
+    <h6 class="fw-semibold mb-3"><i class="bi bi-link-45deg me-2 text-primary"></i>Configurar Extração</h6>
+    <div class="row g-3 align-items-end">
+      <div class="col-md-6">
+        <label class="form-label fw-semibold">URL do Site</label>
+        <div class="input-group">
+          <span class="input-group-text bg-light border-end-0"><i class="bi bi-globe2 text-muted"></i></span>
+          <input type="url" id="inputUrl" class="form-control border-start-0"
+                 placeholder="https://exemplo.com.br/contatos" autocomplete="off">
+        </div>
+        <div class="form-text">Cole a URL da página ou site a ser analisado</div>
+      </div>
+      <div class="col-md-4">
+        <label class="form-label fw-semibold">
+          Máximo de páginas:
+          <span id="maxPagesLabel" class="text-primary fw-bold">1</span>
+        </label>
+        <input type="range" class="form-range" id="maxPages" min="1" max="50" value="1"
+               oninput="document.getElementById('maxPagesLabel').textContent=this.value">
+        <div class="d-flex justify-content-between">
+          <small class="text-muted">1</small>
+          <small class="text-muted">50</small>
+        </div>
+      </div>
+      <div class="col-md-2 d-flex flex-column gap-2">
+        <div class="form-check">
+          <input class="form-check-input" type="checkbox" id="checkTodasPaginas">
+          <label class="form-check-label small" for="checkTodasPaginas">
+            Todas as páginas <small class="text-muted">(máx. 50)</small>
+          </label>
+        </div>
+        <div class="form-check">
+          <input class="form-check-input" type="checkbox" id="checkIgnorarRobots">
+          <label class="form-check-label small" for="checkIgnorarRobots">
+            Ignorar robots.txt
+          </label>
+        </div>
+      </div>
+    </div>
+    <div class="mt-3 d-flex gap-2 align-items-center flex-wrap">
+      <button class="btn btn-primary px-4" id="btnExtrair" onclick="iniciarExtracao()">
+        <i class="bi bi-play-fill me-1"></i> Iniciar Extração
+      </button>
+      <button class="btn btn-outline-secondary" id="btnCancelar" style="display:none" onclick="cancelarPolling()">
+        <i class="bi bi-x-circle me-1"></i> Cancelar
+      </button>
+      <span id="statusBadge" class="badge rounded-pill fs-6 d-none"></span>
+    </div>
+  </div>
+</div>
+
+<!-- Alerta robots.txt bloqueado -->
+<div id="alertaRobots" class="alert alert-warning d-flex align-items-start gap-3 d-none" role="alert">
+  <i class="bi bi-shield-exclamation fs-4 flex-shrink-0 mt-1"></i>
+  <div>
+    <strong>Acesso bloqueado pelo robots.txt</strong>
+    <p class="mb-1 small">Este site proíbe a leitura automatizada via robots.txt. Para continuar mesmo assim, marque
+      <em>Ignorar robots.txt</em> e extraia novamente.</p>
+    <button class="btn btn-sm btn-warning" onclick="ignorarRobotsEExtrair()">
+      <i class="bi bi-arrow-clockwise me-1"></i> Tentar mesmo assim
+    </button>
+  </div>
+</div>
+
+<!-- Progresso -->
+<div id="blocoProgresso" class="card mb-4 d-none">
+  <div class="card-body p-4">
+    <div class="d-flex justify-content-between align-items-center mb-2">
+      <h6 class="fw-semibold mb-0"><i class="bi bi-hourglass-split me-2 text-primary"></i>Progresso</h6>
+      <small id="msgProgresso" class="text-muted">Iniciando…</small>
+    </div>
+    <div class="progress" style="height:10px;border-radius:8px;">
+      <div id="barraProgresso" class="progress-bar progress-bar-striped progress-bar-animated"
+           role="progressbar" style="width:0%;background:#4361ee;border-radius:8px;"></div>
+    </div>
+    <small class="text-muted mt-1 d-block" id="textoProgresso">Página 0 de 0</small>
+  </div>
+</div>
+
+<!-- Resultados -->
+<div id="blocoResultados" class="card d-none">
+  <div class="card-body p-4">
+    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+      <h6 class="fw-semibold mb-0">
+        <i class="bi bi-table me-2 text-primary"></i>
+        Leads encontrados
+        <span id="badgeTotal" class="badge rounded-pill ms-1" style="background:#4361ee;">0</span>
+      </h6>
+      <div class="d-flex gap-2 flex-wrap align-items-center">
+        <input type="text" id="filtroLeads" class="form-control form-control-sm" style="width:200px;"
+               placeholder="Filtrar por texto…" oninput="filtrarLeads(this.value)">
+        <button class="btn btn-sm btn-outline-secondary" onclick="selecionarTodos(true)">
+          <i class="bi bi-check-all me-1"></i>Todos
+        </button>
+        <button class="btn btn-sm btn-outline-secondary" onclick="selecionarTodos(false)">
+          <i class="bi bi-square me-1"></i>Nenhum
+        </button>
+      </div>
+    </div>
+
+    <div class="table-responsive mb-3" style="max-height:420px;overflow-y:auto;">
+      <table class="table table-sm table-hover align-middle" id="tabelaLeads">
+        <thead class="table-light sticky-top">
+          <tr>
+            <th style="width:36px;">
+              <input type="checkbox" class="form-check-input" id="chkTodos"
+                     onchange="selecionarTodos(this.checked)">
+            </th>
+            <th>Nome</th>
+            <th>Email</th>
+            <th>Telefone</th>
+            <th>Empresa</th>
+            <th>Cargo</th>
+          </tr>
+        </thead>
+        <tbody id="corpoTabela"></tbody>
+      </table>
+    </div>
+
+    <!-- Criar mailing -->
+    <div class="border-top pt-3">
+      <div class="row g-2 align-items-end">
+        <div class="col-md-5">
+          <label class="form-label fw-semibold">Nome do mailing</label>
+          <input type="text" id="nomeMailing" class="form-control"
+                 placeholder="Ex: Leads site empresa X">
+        </div>
+        <div class="col-auto">
+          <button class="btn btn-success px-4" id="btnCriarMailing" onclick="criarMailing()">
+            <i class="bi bi-database-add me-1"></i> Criar Mailing
+            <span id="badgeSelecionados" class="badge bg-white text-success ms-1">0</span>
+          </button>
+        </div>
+        <div class="col-auto">
+          <span id="feedbackMailing" class="small text-muted"></span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Alerta de erro -->
+<div id="alertaErro" class="alert alert-danger d-flex align-items-center gap-2 d-none" role="alert">
+  <i class="bi bi-exclamation-triangle-fill flex-shrink-0"></i>
+  <span id="textoErro"></span>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  let _jobId = null;
+  let _polling = null;
+  let _leadsGlobal = [];
+
+  // Checkbox "todas as páginas" leva o slider para 50
+  document.getElementById('checkTodasPaginas').addEventListener('change', function () {
+    const slider = document.getElementById('maxPages');
+    if (this.checked) {
+      slider.value = 50;
+      document.getElementById('maxPagesLabel').textContent = '50';
+    }
+  });
+
+  function iniciarExtracao() {
+    const url = document.getElementById('inputUrl').value.trim();
+    if (!url) { alertaSimples('Informe a URL do site.', 'warning'); return; }
+
+    const maxPages = parseInt(document.getElementById('maxPages').value);
+    const ignorarRobots = document.getElementById('checkIgnorarRobots').checked;
+
+    resetarUI();
+    document.getElementById('blocoProgresso').classList.remove('d-none');
+    document.getElementById('btnExtrair').disabled = true;
+    document.getElementById('btnCancelar').style.display = '';
+    setStatus('running');
+
+    fetch('/prospeccao/extrair', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url, max_pages: maxPages, ignorar_robots: ignorarRobots })
+    })
+    .then(r => r.json())
+    .then(data => {
+      if (data.error) { mostrarErro(data.error); return; }
+      _jobId = data.job_id;
+      _polling = setInterval(() => pollStatus(), 1500);
+    })
+    .catch(err => mostrarErro('Falha na requisição: ' + err));
+  }
+
+  function ignorarRobotsEExtrair() {
+    document.getElementById('checkIgnorarRobots').checked = true;
+    document.getElementById('alertaRobots').classList.add('d-none');
+    iniciarExtracao();
+  }
+
+  function cancelarPolling() {
+    if (_polling) clearInterval(_polling);
+    _polling = null;
+    document.getElementById('btnExtrair').disabled = false;
+    document.getElementById('btnCancelar').style.display = 'none';
+    setStatus(null);
+  }
+
+  function pollStatus() {
+    if (!_jobId) return;
+    fetch('/prospeccao/status/' + _jobId)
+      .then(r => r.json())
+      .then(job => {
+        const total = job.total_pages || 1;
+        const done = job.pages_done || 0;
+        const pct = Math.min(100, Math.round(done / total * 100));
+
+        document.getElementById('barraProgresso').style.width = pct + '%';
+        document.getElementById('msgProgresso').textContent = job.msg || '';
+        document.getElementById('textoProgresso').textContent =
+          `Página ${done} de ${total} — ${(job.leads || []).length} lead(s) até agora`;
+
+        if (job.status === 'done') {
+          clearInterval(_polling); _polling = null;
+          document.getElementById('btnExtrair').disabled = false;
+          document.getElementById('btnCancelar').style.display = 'none';
+          setStatus('done');
+          renderLeads(job.leads || []);
+        } else if (job.status === 'robots_blocked') {
+          clearInterval(_polling); _polling = null;
+          document.getElementById('btnExtrair').disabled = false;
+          document.getElementById('btnCancelar').style.display = 'none';
+          document.getElementById('blocoProgresso').classList.add('d-none');
+          document.getElementById('alertaRobots').classList.remove('d-none');
+          setStatus(null);
+        } else if (job.status === 'error') {
+          clearInterval(_polling); _polling = null;
+          document.getElementById('btnExtrair').disabled = false;
+          document.getElementById('btnCancelar').style.display = 'none';
+          mostrarErro(job.msg || 'Erro desconhecido');
+          setStatus('error');
+        }
+      })
+      .catch(() => {});
+  }
+
+  function renderLeads(leads) {
+    _leadsGlobal = leads;
+    const tbody = document.getElementById('corpoTabela');
+    tbody.innerHTML = '';
+    document.getElementById('badgeTotal').textContent = leads.length;
+
+    if (!leads.length) {
+      tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted py-4"><i class="bi bi-inbox fs-4 d-block mb-2"></i>Nenhum lead encontrado nesta página.</td></tr>';
+      document.getElementById('blocoResultados').classList.remove('d-none');
+      return;
+    }
+
+    leads.forEach((ld, i) => {
+      const tr = document.createElement('tr');
+      tr.dataset.idx = i;
+      tr.dataset.texto = [ld.nome, ld.email, ld.telefone, ld.empresa, ld.cargo].join(' ').toLowerCase();
+      tr.innerHTML = `
+        <td><input type="checkbox" class="form-check-input chk-lead" data-idx="${i}" checked onchange="atualizarContador()"></td>
+        <td class="text-nowrap">${escapar(ld.nome) || '<span class="text-muted small">—</span>'}</td>
+        <td><a href="mailto:${escapar(ld.email)}" class="text-decoration-none">${escapar(ld.email)}</a></td>
+        <td class="text-nowrap">${escapar(ld.telefone) || '<span class="text-muted small">—</span>'}</td>
+        <td>${escapar(ld.empresa) || '<span class="text-muted small">—</span>'}</td>
+        <td>${escapar(ld.cargo) || '<span class="text-muted small">—</span>'}</td>`;
+      tbody.appendChild(tr);
+    });
+
+    document.getElementById('blocoResultados').classList.remove('d-none');
+    atualizarContador();
+  }
+
+  function filtrarLeads(q) {
+    const linhas = document.querySelectorAll('#corpoTabela tr[data-idx]');
+    const termo = q.toLowerCase();
+    linhas.forEach(tr => {
+      tr.style.display = (!termo || tr.dataset.texto.includes(termo)) ? '' : 'none';
+    });
+  }
+
+  function selecionarTodos(marcar) {
+    document.querySelectorAll('.chk-lead').forEach(c => c.checked = marcar);
+    document.getElementById('chkTodos').checked = marcar;
+    atualizarContador();
+  }
+
+  function atualizarContador() {
+    const qtd = document.querySelectorAll('.chk-lead:checked').length;
+    document.getElementById('badgeSelecionados').textContent = qtd;
+  }
+
+  function criarMailing() {
+    const nome = document.getElementById('nomeMailing').value.trim();
+    if (!nome) { alertaSimples('Informe o nome do mailing.', 'warning'); return; }
+
+    const selecionados = [];
+    document.querySelectorAll('.chk-lead:checked').forEach(chk => {
+      const idx = parseInt(chk.dataset.idx);
+      if (!isNaN(idx) && _leadsGlobal[idx]) selecionados.push(_leadsGlobal[idx]);
+    });
+
+    if (!selecionados.length) { alertaSimples('Selecione pelo menos um lead.', 'warning'); return; }
+
+    const btn = document.getElementById('btnCriarMailing');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Salvando…';
+
+    fetch('/prospeccao/criar-mailing', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ nome, leads: selecionados })
+    })
+    .then(r => r.json())
+    .then(data => {
+      btn.disabled = false;
+      btn.innerHTML = '<i class="bi bi-database-add me-1"></i> Criar Mailing <span id="badgeSelecionados" class="badge bg-white text-success ms-1">' + selecionados.length + '</span>';
+      if (data.ok) {
+        document.getElementById('feedbackMailing').innerHTML =
+          `<i class="bi bi-check-circle-fill text-success me-1"></i>
+           Mailing criado! ${data.novos_crm} novo(s) no CRM.
+           <a href="${data.redirect}" class="ms-2 btn btn-sm btn-outline-success">Ver Mailings</a>`;
+      } else {
+        document.getElementById('feedbackMailing').innerHTML =
+          `<span class="text-danger"><i class="bi bi-exclamation-circle me-1"></i>${data.error || 'Erro ao salvar.'}</span>`;
+      }
+    })
+    .catch(err => {
+      btn.disabled = false;
+      btn.innerHTML = '<i class="bi bi-database-add me-1"></i> Criar Mailing';
+      alertaSimples('Falha na requisição: ' + err, 'danger');
+    });
+  }
+
+  function resetarUI() {
+    _jobId = null;
+    _leadsGlobal = [];
+    document.getElementById('alertaRobots').classList.add('d-none');
+    document.getElementById('alertaErro').classList.add('d-none');
+    document.getElementById('blocoResultados').classList.add('d-none');
+    document.getElementById('blocoProgresso').classList.add('d-none');
+    document.getElementById('corpoTabela').innerHTML = '';
+    document.getElementById('badgeTotal').textContent = '0';
+    document.getElementById('feedbackMailing').innerHTML = '';
+    document.getElementById('nomeMailing').value = '';
+    document.getElementById('barraProgresso').style.width = '0%';
+    document.getElementById('textoProgresso').textContent = 'Página 0 de 0';
+    document.getElementById('statusBadge').className = 'badge rounded-pill fs-6 d-none';
+  }
+
+  function mostrarErro(msg) {
+    document.getElementById('textoErro').textContent = msg;
+    document.getElementById('alertaErro').classList.remove('d-none');
+  }
+
+  function setStatus(status) {
+    const badge = document.getElementById('statusBadge');
+    badge.className = 'badge rounded-pill fs-6';
+    if (status === 'running') {
+      badge.classList.add('text-bg-warning');
+      badge.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Extraindo…';
+    } else if (status === 'done') {
+      badge.classList.add('text-bg-success');
+      badge.innerHTML = '<i class="bi bi-check-circle-fill me-1"></i>Concluído';
+    } else if (status === 'error') {
+      badge.classList.add('text-bg-danger');
+      badge.innerHTML = '<i class="bi bi-x-circle-fill me-1"></i>Erro';
+    } else {
+      badge.classList.add('d-none');
+      return;
+    }
+    badge.classList.remove('d-none');
+  }
+
+  function escapar(str) {
+    if (!str) return '';
+    return String(str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+
+  function alertaSimples(msg, tipo) {
+    const div = document.createElement('div');
+    div.className = `alert alert-${tipo} alert-dismissible fade show position-fixed top-0 end-0 m-3`;
+    div.style.zIndex = 9999;
+    div.innerHTML = msg + '<button type="button" class="btn-close" data-bs-dismiss="alert"></button>';
+    document.body.appendChild(div);
+    setTimeout(() => div.remove(), 4000);
+  }
+</script>
+{% endblock %}
