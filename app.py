@@ -85,6 +85,9 @@ class DBConn:
     def commit(self):
         self._conn.commit()
 
+    def rollback(self):
+        self._conn.rollback()
+
     def close(self):
         self._conn.close()
 
@@ -211,7 +214,7 @@ def init_db():
         try:
             conn.execute(f"DO $$ BEGIN {col_sql}; EXCEPTION WHEN duplicate_column THEN NULL; END $$")
         except Exception:
-            pass
+            conn.rollback()  # evita InFailedSqlTransaction nas queries seguintes
 
     conn.commit()
 
