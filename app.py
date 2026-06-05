@@ -39,6 +39,7 @@ IMAGES_FOLDER = os.path.join(UPLOAD_FOLDER, 'imagens')
 ALLOWED_EXTENSIONS = {'csv'}
 ALLOWED_IMAGE_EXT = {'jpg', 'jpeg', 'png', 'gif', 'webp'}
 APP_URL = os.environ.get('APP_URL', 'http://127.0.0.1:5000').rstrip('/')
+UNSPLASH_ACCESS_KEY = os.environ.get('UNSPLASH_ACCESS_KEY', '')
 BREVO_API_KEY = os.environ.get('BREVO_API_KEY', '')
 DATABASE_URL = os.environ.get('DATABASE_URL', '')
 # psycopg2 exige postgresql:// mas Railway/Heroku fornecem postgres://
@@ -206,6 +207,24 @@ def init_db():
             name TEXT DEFAULT '',
             tags TEXT DEFAULT '',
             UNIQUE(mailing_id, email)
+        )''',
+        '''CREATE TABLE IF NOT EXISTS brand_kits (
+            id SERIAL PRIMARY KEY,
+            name TEXT NOT NULL,
+            logo_url TEXT,
+            slogan TEXT,
+            primary_color TEXT DEFAULT '#1a3a6b',
+            secondary_color TEXT DEFAULT '#D4AF37',
+            accent_color TEXT DEFAULT '#4361ee',
+            text_color TEXT DEFAULT '#333333',
+            bg_color TEXT DEFAULT '#ffffff',
+            font_primary TEXT DEFAULT 'Arial',
+            font_secondary TEXT DEFAULT 'Georgia',
+            tone_of_voice TEXT,
+            instagram TEXT, facebook TEXT, linkedin TEXT,
+            youtube TEXT, whatsapp TEXT, website TEXT,
+            signature_name TEXT, signature_role TEXT, signature_phone TEXT,
+            created_at TIMESTAMP DEFAULT NOW()
         )''',
     ]
     for sql in tables:
@@ -1059,9 +1078,21 @@ def api_assinatura():
     conn.close()
     return jsonify({'body_html': sig['body_html'] if sig else '', 'name': sig['name'] if sig else ''})
 
-@app.route('/api/templates')
+@app.route('/api/templates', methods=['GET', 'POST'])
 def api_templates():
     conn = get_db()
+    if request.method == 'POST':
+        data = request.get_json() or {}
+        name = data.get('name', '').strip()
+        if not name:
+            conn.close()
+            return jsonify({'error': 'Nome obrigatório'}), 400
+        conn.execute(
+            'INSERT INTO email_templates (name,category,subject,body_html) VALUES (%s,%s,%s,%s)',
+            (name, data.get('category', 'Geral'), data.get('subject', ''), data.get('body_html', '')))
+        conn.commit()
+        conn.close()
+        return jsonify({'ok': True})
     tpls = conn.execute('SELECT * FROM email_templates ORDER BY category, name').fetchall()
     conn.close()
     return jsonify([dict(t) for t in tpls])
@@ -2132,6 +2163,203 @@ def prospeccao_criar_mailing():
     conn.commit(); conn.close()
     return jsonify({'ok': True, 'mailing_id': mid, 'novos_crm': novos,
                     'redirect': url_for('lista_mailings')})
+
+# ── Kit de Marca ──────────────────────────────────────────────────────────────
+
+@app.route('/kit-marca')
+def kit_marca():
+    conn = get_db()
+    kits = conn.execute('SELECT * FROM brand_kits ORDER BY created_at DESC').fetchall()
+    conn.close()
+    return render_template('kit_marca.html', kits=kits)
+
+@app.route('/kit-marca/salvar', methods=['POST'])
+def salvar_kit_marca():
+    kit_id = request.form.get('kit_id', '').strip()
+    tone_items = request.form.getlist('tone_items')
+    tone_custom = request.form.get('tone_custom', '').strip()
+    tom = ', '.join(tone_items + ([tone_custom] if tone_custom else []))
+    dados = (
+        request.form.get('name', '').strip(),
+        request.form.get('logo_url', '').strip(),
+        request.form.get('slogan', '').strip(),
+        request.form.get('primary_color', '#1a3a6b'),
+        request.form.get('secondary_color', '#D4AF37'),
+        request.form.get('accent_color', '#4361ee'),
+        request.form.get('text_color', '#333333'),
+        request.form.get('bg_color', '#ffffff'),
+        request.form.get('font_primary', 'Arial'),
+        request.form.get('font_secondary', 'Georgia'),
+        tom,
+        request.form.get('instagram', '').strip(),
+        request.form.get('facebook', '').strip(),
+        request.form.get('linkedin', '').strip(),
+        request.form.get('youtube', '').strip(),
+        request.form.get('whatsapp', '').strip(),
+        request.form.get('website', '').strip(),
+        request.form.get('signature_name', '').strip(),
+        request.form.get('signature_role', '').strip(),
+        request.form.get('signature_phone', '').strip(),
+    )
+    if not dados[0]:
+        flash('Nome da empresa é obrigatório.', 'danger')
+        return redirect(url_for('kit_marca'))
+    conn = get_db()
+    if kit_id:
+        conn.execute('''UPDATE brand_kits SET name=%s,logo_url=%s,slogan=%s,primary_color=%s,
+            secondary_color=%s,accent_color=%s,text_color=%s,bg_color=%s,font_primary=%s,
+            font_secondary=%s,tone_of_voice=%s,instagram=%s,facebook=%s,linkedin=%s,
+            youtube=%s,whatsapp=%s,website=%s,signature_name=%s,signature_role=%s,signature_phone=%s
+            WHERE id=%s''', dados + (kit_id,))
+        flash('Kit de marca atualizado!', 'success')
+    else:
+        conn.execute('''INSERT INTO brand_kits (name,logo_url,slogan,primary_color,secondary_color,
+            accent_color,text_color,bg_color,font_primary,font_secondary,tone_of_voice,instagram,
+            facebook,linkedin,youtube,whatsapp,website,signature_name,signature_role,signature_phone)
+            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)''', dados)
+        flash('Kit de marca criado!', 'success')
+    conn.commit()
+    conn.close()
+    return redirect(url_for('kit_marca'))
+
+@app.route('/kit-marca/<int:kid>/deletar', methods=['POST'])
+def deletar_kit_marca(kid):
+    conn = get_db()
+    conn.execute('DELETE FROM brand_kits WHERE id=%s', (kid,))
+    conn.commit()
+    conn.close()
+    flash('Kit removido.', 'info')
+    return redirect(url_for('kit_marca'))
+
+@app.route('/api/brand-kits')
+def api_brand_kits():
+    conn = get_db()
+    kits = conn.execute('SELECT * FROM brand_kits ORDER BY name').fetchall()
+    conn.close()
+    return jsonify([dict(k) for k in kits])
+
+# ── Email com IA ──────────────────────────────────────────────────────────────
+
+@app.route('/email-ia')
+def email_ia():
+    conn = get_db()
+    kits = conn.execute('SELECT id, name FROM brand_kits ORDER BY name').fetchall()
+    conn.close()
+    return render_template('email_ia.html', kits=kits)
+
+@app.route('/ia/gerar-email', methods=['POST'])
+def ia_gerar_email():
+    if not ANTHROPIC_OK:
+        return jsonify({'erro': 'Anthropic SDK não instalado.'}), 500
+    api_key = os.environ.get('ANTHROPIC_API_KEY', '')
+    if not api_key:
+        return jsonify({'erro': 'ANTHROPIC_API_KEY não configurada no Railway.'}), 500
+
+    dados = request.get_json() or {}
+    kit = None
+    kit_info = ''
+    primary_color = '#1a3a6b'
+    kit_id = dados.get('kit_id')
+    if kit_id:
+        conn = get_db()
+        kit = conn.execute('SELECT * FROM brand_kits WHERE id=%s', (kit_id,)).fetchone()
+        conn.close()
+        if kit:
+            primary_color = kit['primary_color'] or '#1a3a6b'
+            social = ', '.join(filter(None, [
+                f"Instagram: {kit['instagram']}" if kit['instagram'] else '',
+                f"Facebook: {kit['facebook']}" if kit['facebook'] else '',
+                f"LinkedIn: {kit['linkedin']}" if kit['linkedin'] else '',
+                f"WhatsApp: {kit['whatsapp']}" if kit['whatsapp'] else '',
+                f"Site: {kit['website']}" if kit['website'] else '',
+            ]))
+            kit_info = f"""
+Kit de Marca — {kit['name']}:
+- Slogan: {kit['slogan'] or ''}
+- Cores: primária {kit['primary_color']}, secundária {kit['secondary_color']}, destaque {kit['accent_color']}, texto {kit['text_color']}, fundo {kit['bg_color']}
+- Fontes: {kit['font_primary']} (principal), {kit['font_secondary']} (secundária)
+- Tom de voz: {kit['tone_of_voice'] or 'Profissional'}
+- Redes sociais: {social or 'não informado'}
+- Assinatura: {kit['signature_name'] or ''} — {kit['signature_role'] or ''} | {kit['signature_phone'] or ''}
+"""
+
+    imagem_info = ''
+    imagem_url = dados.get('imagem_url', '').strip()
+    if imagem_url:
+        imagem_info = f'\nInserir esta imagem no corpo: <img src="{imagem_url}" alt="imagem" style="max-width:100%;border-radius:8px;margin:16px 0;">'
+
+    prompt = f"""Crie um email profissional de marketing em HTML com as seguintes características:
+
+Público-alvo: {dados.get('publico', '')}
+Faixa etária: {dados.get('faixa_etaria', '')}
+Nível de conhecimento: {dados.get('nivel', '')}
+Objetivo: {dados.get('objetivo', '')}
+Tema: {dados.get('tema', '')}
+Contexto: {dados.get('contexto', '')}
+Resultado esperado: {dados.get('resultado', '')}
+Formato: {dados.get('formato', '')}
+{kit_info}{imagem_info}
+
+Instruções obrigatórias:
+- Retorne APENAS o código HTML, sem explicações, sem markdown, sem blocos ```
+- Email responsivo, máximo 600px de largura, centralizado
+- Use SOMENTE inline CSS (style="...") — nenhuma tag <style> ou <link>
+- Cabeçalho colorido com a cor primária {primary_color}
+- Botão CTA claro com href="#LINK_CTA"
+- Rodapé com nome da empresa e redes sociais como emojis clicáveis
+- Use {{nome}} onde o destinatário deve ser personalizado
+- Estrutura: wrapper 600px → cabeçalho colorido → saudação com {{nome}} → corpo → CTA → assinatura → rodapé
+"""
+
+    try:
+        client = _anthropic.Anthropic(api_key=api_key)
+        resp = client.messages.create(
+            model='claude-haiku-4-5-20251001',
+            max_tokens=4096,
+            messages=[{'role': 'user', 'content': prompt}]
+        )
+        html = resp.content[0].text.strip()
+        html = re.sub(r'^```[a-z]*\n?', '', html)
+        html = re.sub(r'\n?```$', '', html).strip()
+        return jsonify({'html': html})
+    except Exception as e:
+        return jsonify({'erro': str(e)}), 500
+
+@app.route('/ia/buscar-imagem', methods=['POST'])
+def ia_buscar_imagem():
+    if not UNSPLASH_ACCESS_KEY:
+        return jsonify({'erro': 'UNSPLASH_ACCESS_KEY não configurada.'}), 500
+    data = request.get_json() or {}
+    query = data.get('query', '').strip()
+    if not query:
+        return jsonify({'erro': 'Descrição obrigatória.'}), 400
+    try:
+        r = http_requests.get(
+            'https://api.unsplash.com/search/photos',
+            params={'query': query, 'per_page': 6, 'orientation': 'landscape'},
+            headers={'Authorization': f'Client-ID {UNSPLASH_ACCESS_KEY}'},
+            timeout=10
+        )
+        r.raise_for_status()
+        results = r.json().get('results', [])
+        imagens = [{
+            'thumb': img['urls']['small'],
+            'full': img['urls']['regular'],
+            'desc': img.get('alt_description') or img.get('description') or query,
+            'autor': img['user']['name']
+        } for img in results]
+        return jsonify({'imagens': imagens})
+    except Exception as e:
+        return jsonify({'erro': str(e)}), 500
+
+# ── Templates Visuais ─────────────────────────────────────────────────────────
+
+@app.route('/templates-visuais')
+def templates_visuais():
+    conn = get_db()
+    kits = conn.execute('SELECT id, name FROM brand_kits ORDER BY name').fetchall()
+    conn.close()
+    return render_template('templates_visuais.html', kits=kits)
 
 _db_ready = False
 _db_error = ''

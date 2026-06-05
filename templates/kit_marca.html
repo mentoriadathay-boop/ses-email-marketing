@@ -1,0 +1,262 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="d-flex align-items-center gap-3 mb-4">
+  <div class="stat-card d-flex align-items-center justify-content-center"
+       style="width:48px;height:48px;background:linear-gradient(135deg,#4361ee,#7209b7);border-radius:12px;flex-shrink:0;">
+    <i class="bi bi-palette2 fs-5 text-white"></i>
+  </div>
+  <div>
+    <h4 class="mb-0 fw-bold">Kit de Marca</h4>
+    <small class="text-muted">Cores, tipografia, redes sociais e assinatura da sua empresa</small>
+  </div>
+  <button class="btn btn-primary ms-auto" onclick="abrirFormulario()">
+    <i class="bi bi-plus-circle me-1"></i> Novo Kit
+  </button>
+</div>
+
+<!-- Lista de kits existentes -->
+{% if kits %}
+<div class="row g-3 mb-4">
+  {% for k in kits %}
+  <div class="col-md-6 col-lg-4">
+    <div class="card h-100">
+      <div class="card-body">
+        <div class="d-flex align-items-center gap-3 mb-3">
+          {% if k.logo_url %}
+          <img src="{{ k.logo_url }}" alt="logo" style="width:48px;height:48px;object-fit:contain;border-radius:8px;border:1px solid #eee;">
+          {% else %}
+          <div style="width:48px;height:48px;background:{{ k.primary_color }};border-radius:8px;display:flex;align-items:center;justify-content:center;">
+            <i class="bi bi-building text-white fs-5"></i>
+          </div>
+          {% endif %}
+          <div>
+            <div class="fw-bold">{{ k.name }}</div>
+            <small class="text-muted">{{ k.slogan or '' }}</small>
+          </div>
+        </div>
+        <!-- Paleta -->
+        <div class="d-flex gap-1 mb-3">
+          {% for cor in [k.primary_color, k.secondary_color, k.accent_color, k.text_color, k.bg_color] %}
+          <div title="{{ cor }}" style="width:28px;height:28px;background:{{ cor }};border-radius:4px;border:1px solid #ddd;"></div>
+          {% endfor %}
+        </div>
+        <div class="small text-muted mb-1">
+          <i class="bi bi-type me-1"></i>{{ k.font_primary }} / {{ k.font_secondary }}
+        </div>
+        {% if k.tone_of_voice %}
+        <div class="small text-muted mb-2">
+          <i class="bi bi-chat-quote me-1"></i>{{ k.tone_of_voice }}
+        </div>
+        {% endif %}
+        <div class="d-flex gap-2 mt-3">
+          <button class="btn btn-sm btn-outline-primary flex-fill"
+                  onclick="editarKit({{ k|tojson }})">
+            <i class="bi bi-pencil me-1"></i>Editar
+          </button>
+          <form method="POST" action="{{ url_for('deletar_kit_marca', kid=k.id) }}" class="d-inline"
+                onsubmit="return confirm('Remover este kit de marca?')">
+            <button class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% else %}
+<div class="alert alert-info d-flex align-items-center gap-2 mb-4">
+  <i class="bi bi-info-circle-fill fs-5"></i>
+  <span>Nenhum kit criado ainda. Clique em <strong>Novo Kit</strong> para começar.</span>
+</div>
+{% endif %}
+
+<!-- Formulário (oculto por padrão) -->
+<div id="formKit" class="card d-none">
+  <div class="card-body p-4">
+    <h5 class="fw-bold mb-4" id="formTitulo"><i class="bi bi-plus-circle me-2 text-primary"></i>Novo Kit de Marca</h5>
+    <form method="POST" action="{{ url_for('salvar_kit_marca') }}">
+      <input type="hidden" name="kit_id" id="kit_id_hidden">
+
+      <!-- Identidade -->
+      <h6 class="text-muted fw-semibold mb-3 border-bottom pb-2">Identidade</h6>
+      <div class="row g-3 mb-4">
+        <div class="col-md-5">
+          <label class="form-label fw-semibold small">Nome da Empresa <span class="text-danger">*</span></label>
+          <input type="text" name="name" id="f_name" class="form-control" required placeholder="Ex: ASA Marketing">
+        </div>
+        <div class="col-md-5">
+          <label class="form-label fw-semibold small">Slogan</label>
+          <input type="text" name="slogan" id="f_slogan" class="form-control" placeholder="Ex: Resultados que transformam">
+        </div>
+        <div class="col-md-2">
+          <label class="form-label fw-semibold small">URL do Logo</label>
+          <div class="input-group">
+            <input type="url" name="logo_url" id="f_logo_url" class="form-control" placeholder="https://...">
+            <button type="button" class="btn btn-outline-secondary" onclick="document.getElementById('logoInput').click()" title="Subir imagem">
+              <i class="bi bi-upload"></i>
+            </button>
+          </div>
+          <input type="file" id="logoInput" class="d-none" accept="image/*" onchange="uploadLogo(this)">
+          <div id="logoPreview" class="mt-1"></div>
+        </div>
+      </div>
+
+      <!-- Paleta de cores -->
+      <h6 class="text-muted fw-semibold mb-3 border-bottom pb-2">Paleta de Cores</h6>
+      <div class="row g-3 mb-4">
+        {% set cores = [('primary_color','Cor Primária','#1a3a6b'),('secondary_color','Cor Secundária','#D4AF37'),('accent_color','Cor de Destaque','#4361ee'),('text_color','Cor do Texto','#333333'),('bg_color','Fundo do Email','#ffffff')] %}
+        {% for field, label, default in cores %}
+        <div class="col-md-2 col-sm-4">
+          <label class="form-label fw-semibold small">{{ label }}</label>
+          <div class="input-group">
+            <input type="color" name="{{ field }}" id="f_{{ field }}" class="form-control form-control-color p-1" value="{{ default }}" style="width:48px;min-width:48px;">
+            <input type="text" id="f_{{ field }}_txt" class="form-control form-control-sm font-monospace" value="{{ default }}"
+                   oninput="document.getElementById('f_{{ field }}').value=this.value">
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+
+      <!-- Tipografia -->
+      <h6 class="text-muted fw-semibold mb-3 border-bottom pb-2">Tipografia</h6>
+      <div class="row g-3 mb-4">
+        {% set fontes = ['Arial','Roboto','Open Sans','Montserrat','Playfair Display','Lato','Poppins','Georgia','Verdana','Tahoma'] %}
+        <div class="col-md-4">
+          <label class="form-label fw-semibold small">Fonte Principal</label>
+          <select name="font_primary" id="f_font_primary" class="form-select">
+            {% for f in fontes %}<option value="{{ f }}">{{ f }}</option>{% endfor %}
+          </select>
+        </div>
+        <div class="col-md-4">
+          <label class="form-label fw-semibold small">Fonte Secundária</label>
+          <select name="font_secondary" id="f_font_secondary" class="form-select">
+            {% for f in fontes %}<option value="{{ f }}">{{ f }}</option>{% endfor %}
+          </select>
+        </div>
+      </div>
+
+      <!-- Tom de voz -->
+      <h6 class="text-muted fw-semibold mb-3 border-bottom pb-2">Tom de Voz</h6>
+      <div class="d-flex flex-wrap gap-2 mb-3">
+        {% for tom in ['Profissional','Descontraído','Inspirador','Técnico','Amigável','Urgente','Sofisticado'] %}
+        <div class="form-check form-check-inline">
+          <input class="form-check-input tone-chk" type="checkbox" name="tone_items" value="{{ tom }}" id="tone_{{ loop.index }}">
+          <label class="form-check-label small" for="tone_{{ loop.index }}">{{ tom }}</label>
+        </div>
+        {% endfor %}
+      </div>
+      <div class="col-md-4 mb-4">
+        <input type="text" name="tone_custom" id="f_tone_custom" class="form-control form-control-sm" placeholder="Outro tom de voz...">
+      </div>
+
+      <!-- Redes sociais -->
+      <h6 class="text-muted fw-semibold mb-3 border-bottom pb-2">Redes Sociais</h6>
+      <div class="row g-3 mb-4">
+        {% set redes = [('instagram','Instagram','bi-instagram'),('facebook','Facebook','bi-facebook'),('linkedin','LinkedIn','bi-linkedin'),('youtube','YouTube','bi-youtube'),('whatsapp','WhatsApp','bi-whatsapp'),('website','Site','bi-globe')] %}
+        {% for field, label, icon in redes %}
+        <div class="col-md-4">
+          <label class="form-label fw-semibold small"><i class="bi {{ icon }} me-1"></i>{{ label }}</label>
+          <input type="text" name="{{ field }}" id="f_{{ field }}" class="form-control form-control-sm" placeholder="URL ou @usuario">
+        </div>
+        {% endfor %}
+      </div>
+
+      <!-- Assinatura -->
+      <h6 class="text-muted fw-semibold mb-3 border-bottom pb-2">Assinatura Padrão</h6>
+      <div class="row g-3 mb-4">
+        <div class="col-md-4">
+          <label class="form-label fw-semibold small">Nome</label>
+          <input type="text" name="signature_name" id="f_signature_name" class="form-control form-control-sm" placeholder="Ex: Maria Silva">
+        </div>
+        <div class="col-md-4">
+          <label class="form-label fw-semibold small">Cargo</label>
+          <input type="text" name="signature_role" id="f_signature_role" class="form-control form-control-sm" placeholder="Ex: Diretora de Marketing">
+        </div>
+        <div class="col-md-4">
+          <label class="form-label fw-semibold small">Telefone</label>
+          <input type="text" name="signature_phone" id="f_signature_phone" class="form-control form-control-sm" placeholder="(11) 99999-9999">
+        </div>
+      </div>
+
+      <div class="d-flex gap-2">
+        <button type="submit" class="btn btn-primary px-4">
+          <i class="bi bi-check-circle me-1"></i> Salvar Kit
+        </button>
+        <button type="button" class="btn btn-outline-secondary" onclick="fecharFormulario()">Cancelar</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  // Sincroniza color picker ↔ campo de texto
+  document.querySelectorAll('input[type=color]').forEach(picker => {
+    const txt = document.getElementById(picker.id + '_txt');
+    if (txt) picker.addEventListener('input', () => { txt.value = picker.value; });
+  });
+
+  function abrirFormulario() {
+    document.getElementById('formKit').classList.remove('d-none');
+    document.getElementById('formTitulo').innerHTML = '<i class="bi bi-plus-circle me-2 text-primary"></i>Novo Kit de Marca';
+    document.getElementById('kit_id_hidden').value = '';
+    document.getElementById('formKit').scrollIntoView({ behavior: 'smooth' });
+  }
+
+  function fecharFormulario() {
+    document.getElementById('formKit').classList.add('d-none');
+    document.getElementById('formKit').querySelectorAll('input,select,textarea').forEach(el => {
+      if (el.type !== 'submit' && el.type !== 'hidden' && el.type !== 'button') el.value = el.defaultValue || '';
+    });
+    document.querySelectorAll('.tone-chk').forEach(c => c.checked = false);
+  }
+
+  function editarKit(k) {
+    abrirFormulario();
+    document.getElementById('formTitulo').innerHTML = '<i class="bi bi-pencil me-2 text-warning"></i>Editar Kit de Marca';
+    document.getElementById('kit_id_hidden').value = k.id;
+    const campos = ['name','slogan','logo_url','primary_color','secondary_color','accent_color',
+                    'text_color','bg_color','font_primary','font_secondary','tone_custom',
+                    'instagram','facebook','linkedin','youtube','whatsapp','website',
+                    'signature_name','signature_role','signature_phone'];
+    campos.forEach(c => {
+      const el = document.getElementById('f_' + c);
+      if (el && k[c] != null) {
+        el.value = k[c];
+        const txt = document.getElementById('f_' + c + '_txt');
+        if (txt) txt.value = k[c];
+      }
+    });
+    // Preenche tom de voz checkboxes
+    const toms = (k.tone_of_voice || '').split(',').map(t => t.trim());
+    const checkboxLabels = ['Profissional','Descontraído','Inspirador','Técnico','Amigável','Urgente','Sofisticado'];
+    const customToms = toms.filter(t => t && !checkboxLabels.includes(t));
+    document.querySelectorAll('.tone-chk').forEach(chk => {
+      chk.checked = toms.includes(chk.value);
+    });
+    document.getElementById('f_tone_custom').value = customToms.join(', ');
+    // Select fontes
+    ['font_primary','font_secondary'].forEach(f => {
+      const sel = document.getElementById('f_' + f);
+      if (sel && k[f]) sel.value = k[f];
+    });
+  }
+
+  async function uploadLogo(input) {
+    const file = input.files[0];
+    if (!file) return;
+    const fd = new FormData();
+    fd.append('imagem', file);
+    const res = await fetch('/upload/imagem', { method: 'POST', body: fd });
+    const data = await res.json();
+    if (data.url) {
+      document.getElementById('f_logo_url').value = data.url;
+      document.getElementById('logoPreview').innerHTML =
+        `<img src="${data.url}" style="height:40px;border-radius:4px;margin-top:4px;">`;
+    } else {
+      alert('Erro no upload: ' + (data.erro || 'desconhecido'));
+    }
+  }
+</script>
+{% endblock %}

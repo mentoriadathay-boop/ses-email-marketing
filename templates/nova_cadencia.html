@@ -356,6 +356,23 @@ function removerPasso(btn) {
 document.addEventListener('DOMContentLoaded', function() {
   document.querySelectorAll('.passo-item').forEach(div => initStepEditor(div));
   atualizarNumeros();
+  // Pré-preenche o primeiro passo com conteúdo gerado pela IA, se disponível
+  const iaHtml = sessionStorage.getItem('ia_html');
+  const iaSubject = sessionStorage.getItem('ia_subject');
+  if (iaHtml) {
+    const primeiroStep = document.querySelector('.step-body-textarea');
+    if (primeiroStep) primeiroStep.value = iaHtml;
+    const quillId = primeiroStep && primeiroStep.id ? primeiroStep.id.replace('textarea-', 'quill-') : null;
+    if (quillId && _quillMap.has(quillId)) {
+      _quillMap.get(quillId).clipboard.dangerouslyPasteHTML(iaHtml);
+    }
+    sessionStorage.removeItem('ia_html');
+  }
+  if (iaSubject) {
+    const primeiroSubject = document.querySelector('input[name="step_subject[]"]');
+    if (primeiroSubject) primeiroSubject.value = iaSubject;
+    sessionStorage.removeItem('ia_subject');
+  }
 });
 </script>
 {% endblock %}

@@ -73,6 +73,17 @@
       <a href="{{ url_for('lista_blacklist') }}" class="nav-link {% if request.endpoint in ('lista_blacklist','remover_blacklist','adicionar_blacklist_manual') %}active{% endif %}">
         <i class="bi bi-slash-circle"></i> Blacklist
       </a>
+      <div style="border-top:1px solid #ffffff22;margin:8px 20px 4px;"></div>
+      <a href="{{ url_for('email_ia') }}" class="nav-link {% if request.endpoint == 'email_ia' %}active{% endif %}">
+        <i class="bi bi-stars"></i> Email com IA
+      </a>
+      <a href="{{ url_for('templates_visuais') }}" class="nav-link {% if request.endpoint == 'templates_visuais' %}active{% endif %}">
+        <i class="bi bi-grid-1x2"></i> Templates
+      </a>
+      <a href="{{ url_for('kit_marca') }}" class="nav-link {% if request.endpoint == 'kit_marca' %}active{% endif %}">
+        <i class="bi bi-palette2"></i> Kit de Marca
+      </a>
+      <div style="border-top:1px solid #ffffff22;margin:8px 20px 4px;"></div>
       <a href="{{ url_for('configuracoes') }}" class="nav-link {% if request.endpoint == 'configuracoes' %}active{% endif %}">
         <i class="bi bi-gear"></i> Configuracoes
       </a>

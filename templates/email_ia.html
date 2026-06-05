@@ -1,0 +1,511 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="d-flex align-items-center gap-3 mb-4">
+  <div class="stat-card d-flex align-items-center justify-content-center"
+       style="width:48px;height:48px;background:linear-gradient(135deg,#7209b7,#4361ee);border-radius:12px;flex-shrink:0;">
+    <i class="bi bi-stars fs-5 text-white"></i>
+  </div>
+  <div>
+    <h4 class="mb-0 fw-bold">Email com IA</h4>
+    <small class="text-muted">Responda as perguntas e deixe o Claude criar o email perfeito</small>
+  </div>
+</div>
+
+<div class="row g-4">
+  <!-- Coluna do formulário -->
+  <div class="col-lg-5">
+    <div class="card">
+      <div class="card-body p-4">
+        <!-- Steps indicator -->
+        <div class="d-flex align-items-center mb-4 gap-1" id="stepsBar">
+          {% for i in range(1,7) %}
+          <div class="step-dot {% if i == 1 %}active{% endif %}" id="dot{{ i }}"
+               style="flex:1;height:4px;border-radius:2px;background:{% if i==1 %}#4361ee{% else %}#e0e0e0{% endif %};transition:background .3s;">
+          </div>
+          {% endfor %}
+        </div>
+        <div class="text-muted small mb-3" id="stepLabel">Passo 1 de 6 — Sobre o público</div>
+
+        <!-- PASSO 1: Público -->
+        <div id="step1">
+          <h6 class="fw-bold mb-3">Quem vai receber este email?</h6>
+          <div class="mb-3">
+            <label class="form-label small fw-semibold">Descreva o público-alvo</label>
+            <input type="text" id="publico" class="form-control" placeholder="Ex: donos de pequenas empresas do setor de moda">
+          </div>
+          <div class="mb-3">
+            <label class="form-label small fw-semibold">Faixa etária aproximada</label>
+            <select id="faixa_etaria" class="form-select">
+              <option value="Todas as idades">Todas as idades</option>
+              <option value="18-25 anos">18-25 anos</option>
+              <option value="26-35 anos">26-35 anos</option>
+              <option value="36-45 anos">36-45 anos</option>
+              <option value="46-60 anos">46-60 anos</option>
+              <option value="60+ anos">60+ anos</option>
+            </select>
+          </div>
+          <div class="mb-3">
+            <label class="form-label small fw-semibold">Nível de conhecimento sobre o tema</label>
+            <div class="d-flex gap-2">
+              {% for n in ['Iniciante','Intermediário','Avançado'] %}
+              <div class="form-check flex-fill border rounded p-2 text-center" style="cursor:pointer"
+                   onclick="selectRadio('nivel','{{ n }}',this)">
+                <input class="form-check-input" type="radio" name="nivel" value="{{ n }}" id="nivel{{ loop.index }}" style="display:none">
+                <label class="form-check-label small fw-semibold" for="nivel{{ loop.index }}" style="cursor:pointer">{{ n }}</label>
+              </div>
+              {% endfor %}
+            </div>
+          </div>
+        </div>
+
+        <!-- PASSO 2: Objetivo -->
+        <div id="step2" class="d-none">
+          <h6 class="fw-bold mb-3">Qual é o objetivo deste email?</h6>
+          <div class="row g-2">
+            {% set objetivos = [('Educacional','📚'),('Inspiracional','💡'),('Conversão de vendas','🛒'),('Oferta especial','🎁'),('Lançamento','📣'),('Relacionamento','🤝'),('Convite','📅'),('Reengajamento','🔄')] %}
+            {% for obj, emoji in objetivos %}
+            <div class="col-6">
+              <div class="form-check border rounded p-2" style="cursor:pointer" onclick="toggleObjetivo('{{ obj }}',this)">
+                <input class="form-check-input obj-chk" type="checkbox" value="{{ obj }}" style="display:none">
+                <label class="form-check-label small" style="cursor:pointer">{{ emoji }} {{ obj }}</label>
+              </div>
+            </div>
+            {% endfor %}
+            <div class="col-12">
+              <input type="text" id="objetivo_custom" class="form-control form-control-sm" placeholder="✏️ Outro objetivo...">
+            </div>
+          </div>
+        </div>
+
+        <!-- PASSO 3: Tema e contexto -->
+        <div id="step3" class="d-none">
+          <h6 class="fw-bold mb-3">Sobre o que é este email?</h6>
+          <div class="mb-3">
+            <label class="form-label small fw-semibold">Tema principal</label>
+            <input type="text" id="tema" class="form-control" placeholder="Ex: como aumentar vendas com redes sociais">
+          </div>
+          <div class="mb-3">
+            <label class="form-label small fw-semibold">Contexto adicional</label>
+            <textarea id="contexto" class="form-control" rows="3"
+                      placeholder="Ex: estamos lançando um curso e quero preparar o público antes..."></textarea>
+          </div>
+          <div class="mb-3">
+            <label class="form-label small fw-semibold">O que você quer que o leitor faça após ler?</label>
+            <input type="text" id="resultado" class="form-control" placeholder="Ex: clicar no link e se inscrever na aula gratuita">
+          </div>
+        </div>
+
+        <!-- PASSO 4: Formato -->
+        <div id="step4" class="d-none">
+          <h6 class="fw-bold mb-3">Como deve ser o formato do email?</h6>
+          <div class="row g-2">
+            {% set formatos = [('Texto corrido','📝'),('Com títulos e subtítulos','📋'),('Checklist','✅'),('Com cases reais','📖'),('Email de vendas','🎯'),('Newsletter','💌'),('Curto e direto','⚡'),('Personalizado','✏️')] %}
+            {% for fmt, emoji in formatos %}
+            <div class="col-6">
+              <div class="form-check border rounded p-2" style="cursor:pointer"
+                   onclick="selectRadio('formato','{{ fmt }}',this)">
+                <input class="form-check-input" type="radio" name="formato" value="{{ fmt }}" style="display:none">
+                <label class="form-check-label small" style="cursor:pointer">{{ emoji }} {{ fmt }}</label>
+              </div>
+            </div>
+            {% endfor %}
+          </div>
+        </div>
+
+        <!-- PASSO 5: Kit de Marca -->
+        <div id="step5" class="d-none">
+          <h6 class="fw-bold mb-3">Kit de Marca <span class="badge bg-secondary">Opcional</span></h6>
+          <p class="text-muted small">Selecione um kit para aplicar cores, fontes e tom de voz da sua marca automaticamente.</p>
+          <select id="kit_id" class="form-select mb-3">
+            <option value="">Sem kit de marca (cores padrão)</option>
+            {% for k in kits %}
+            <option value="{{ k.id }}">{{ k.name }}</option>
+            {% endfor %}
+          </select>
+          {% if not kits %}
+          <div class="alert alert-light border small">
+            Nenhum kit criado. <a href="/kit-marca" target="_blank">Criar kit de marca</a>
+          </div>
+          {% endif %}
+        </div>
+
+        <!-- PASSO 6: Imagem -->
+        <div id="step6" class="d-none">
+          <h6 class="fw-bold mb-3">Imagem no email <span class="badge bg-secondary">Opcional</span></h6>
+          <div class="form-check form-switch mb-3">
+            <input class="form-check-input" type="checkbox" id="toggleImagem" onchange="toggleImagemSection()">
+            <label class="form-check-label" for="toggleImagem">Incluir imagem no email</label>
+          </div>
+          <div id="imagemSection" class="d-none">
+            <ul class="nav nav-tabs nav-sm mb-3" id="imgTabs">
+              <li class="nav-item">
+                <button class="nav-link active py-1 small" onclick="switchImgTab('upload',this)">Upload</button>
+              </li>
+              <li class="nav-item">
+                <button class="nav-link py-1 small" onclick="switchImgTab('unsplash',this)">Buscar no Unsplash</button>
+              </li>
+            </ul>
+            <!-- Upload -->
+            <div id="tabUpload">
+              <div class="mb-2">
+                <button type="button" class="btn btn-outline-secondary btn-sm" onclick="document.getElementById('imgUploadInput').click()">
+                  <i class="bi bi-upload me-1"></i>Escolher arquivo
+                </button>
+                <input type="file" id="imgUploadInput" class="d-none" accept="image/*" onchange="uploadImagem(this)">
+              </div>
+              <div id="uploadPreview"></div>
+            </div>
+            <!-- Unsplash -->
+            <div id="tabUnsplash" class="d-none">
+              <div class="input-group mb-2">
+                <input type="text" id="unsplashQuery" class="form-control form-control-sm"
+                       placeholder="Descreva a imagem... ex: team meeting office">
+                <button class="btn btn-primary btn-sm" onclick="buscarUnsplash()">
+                  <i class="bi bi-search"></i>
+                </button>
+              </div>
+              <div id="unsplashResults" class="row g-1"></div>
+            </div>
+          </div>
+          <input type="hidden" id="imagem_url" value="">
+        </div>
+
+        <!-- Botões de navegação -->
+        <div class="d-flex gap-2 mt-4">
+          <button class="btn btn-outline-secondary" id="btnAnterior" onclick="mudarStep(-1)" style="display:none">
+            <i class="bi bi-chevron-left"></i> Anterior
+          </button>
+          <button class="btn btn-primary flex-fill" id="btnProximo" onclick="mudarStep(1)">
+            Próximo <i class="bi bi-chevron-right"></i>
+          </button>
+          <button class="btn btn-success flex-fill d-none" id="btnGerar" onclick="gerarEmail()">
+            <i class="bi bi-stars me-1"></i> Gerar Email com IA
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Coluna do resultado -->
+  <div class="col-lg-7">
+    <!-- Placeholder inicial -->
+    <div id="placeholderIA" class="card h-100 d-flex align-items-center justify-content-center"
+         style="min-height:400px;border:2px dashed #dee2e6;">
+      <div class="text-center text-muted p-4">
+        <i class="bi bi-stars display-4 mb-3 d-block" style="color:#c0c0c0"></i>
+        <h6>Seu email aparecerá aqui</h6>
+        <p class="small">Preencha o formulário e clique em <strong>Gerar Email com IA</strong></p>
+      </div>
+    </div>
+
+    <!-- Loading -->
+    <div id="loadingIA" class="card d-none" style="min-height:400px;">
+      <div class="card-body d-flex flex-column align-items-center justify-content-center gap-3">
+        <div class="spinner-border text-primary" style="width:48px;height:48px;"></div>
+        <div class="text-center">
+          <h6 class="mb-1">Gerando seu email...</h6>
+          <small class="text-muted" id="msgGerandoTexto">Claude está criando o email personalizado</small>
+        </div>
+      </div>
+    </div>
+
+    <!-- Resultado -->
+    <div id="resultadoIA" class="d-none">
+      <div class="card mb-3">
+        <div class="card-body p-0">
+          <div class="d-flex align-items-center justify-content-between p-3 border-bottom">
+            <div class="d-flex gap-2">
+              <button class="btn btn-sm btn-outline-secondary active" id="btnTabPreview" onclick="switchResultTab('preview')">
+                <i class="bi bi-eye me-1"></i>Preview
+              </button>
+              <button class="btn btn-sm btn-outline-secondary" id="btnTabHtml" onclick="switchResultTab('html')">
+                <i class="bi bi-code-slash me-1"></i>HTML
+              </button>
+            </div>
+            <div class="d-flex gap-2">
+              <button class="btn btn-sm btn-outline-secondary" onclick="regenerarEmail()" title="Gerar nova versão">
+                <i class="bi bi-arrow-clockwise me-1"></i>Regerar
+              </button>
+              <button class="btn btn-sm btn-outline-secondary" onclick="copiarHtml()" title="Copiar HTML">
+                <i class="bi bi-clipboard me-1"></i>Copiar
+              </button>
+            </div>
+          </div>
+          <div id="tabPreview" style="padding:0">
+            <iframe id="previewFrame" style="width:100%;min-height:500px;border:none;display:block;" frameborder="0"></iframe>
+          </div>
+          <div id="tabHtml" class="d-none p-3">
+            <textarea id="htmlOutput" class="form-control font-monospace" rows="20" style="font-size:12px;"></textarea>
+          </div>
+        </div>
+      </div>
+      <!-- Ações -->
+      <div class="card">
+        <div class="card-body p-3">
+          <h6 class="fw-semibold mb-3">Usar este email em:</h6>
+          <div class="d-flex gap-2 flex-wrap">
+            <button class="btn btn-primary" onclick="usarNaCampanha()">
+              <i class="bi bi-send me-1"></i> Nova Campanha
+            </button>
+            <button class="btn btn-outline-primary" onclick="usarNaCadencia()">
+              <i class="bi bi-arrow-repeat me-1"></i> Nova Cadência
+            </button>
+            <button class="btn btn-outline-success" onclick="salvarComoTemplate()">
+              <i class="bi bi-bookmark me-1"></i> Salvar como Template
+            </button>
+          </div>
+          <div id="feedbackAcoes" class="mt-2 small text-muted"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  let _step = 1;
+  const _totalSteps = 6;
+  let _htmlGerado = '';
+
+  const _stepLabels = [
+    '', 'Passo 1 de 6 — Sobre o público',
+    'Passo 2 de 6 — Objetivo do email',
+    'Passo 3 de 6 — Tema e contexto',
+    'Passo 4 de 6 — Formato do email',
+    'Passo 5 de 6 — Kit de Marca',
+    'Passo 6 de 6 — Imagem',
+  ];
+
+  function mudarStep(dir) {
+    const proximo = _step + dir;
+    if (proximo < 1 || proximo > _totalSteps) return;
+    document.getElementById('step' + _step).classList.add('d-none');
+    _step = proximo;
+    document.getElementById('step' + _step).classList.remove('d-none');
+    document.getElementById('stepLabel').textContent = _stepLabels[_step];
+    // Atualiza barra de progresso
+    for (let i = 1; i <= _totalSteps; i++) {
+      document.getElementById('dot' + i).style.background = i <= _step ? '#4361ee' : '#e0e0e0';
+    }
+    document.getElementById('btnAnterior').style.display = _step > 1 ? '' : 'none';
+    const isLast = _step === _totalSteps;
+    document.getElementById('btnProximo').classList.toggle('d-none', isLast);
+    document.getElementById('btnGerar').classList.toggle('d-none', !isLast);
+  }
+
+  function selectRadio(name, value, el) {
+    document.querySelectorAll(`input[name="${name}"]`).forEach(r => {
+      r.checked = r.value === value;
+      r.closest('[onclick]').style.background = r.value === value ? '#f0f4ff' : '';
+      r.closest('[onclick]').style.borderColor = r.value === value ? '#4361ee' : '';
+    });
+  }
+
+  function toggleObjetivo(value, el) {
+    const chk = el.querySelector('input');
+    chk.checked = !chk.checked;
+    el.style.background = chk.checked ? '#f0f4ff' : '';
+    el.style.borderColor = chk.checked ? '#4361ee' : '';
+  }
+
+  function toggleImagemSection() {
+    const show = document.getElementById('toggleImagem').checked;
+    document.getElementById('imagemSection').classList.toggle('d-none', !show);
+  }
+
+  function switchImgTab(tab, btn) {
+    document.getElementById('tabUpload').classList.toggle('d-none', tab !== 'upload');
+    document.getElementById('tabUnsplash').classList.toggle('d-none', tab !== 'unsplash');
+    document.querySelectorAll('#imgTabs .nav-link').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+  }
+
+  async function uploadImagem(input) {
+    const file = input.files[0];
+    if (!file) return;
+    const fd = new FormData();
+    fd.append('imagem', file);
+    const res = await fetch('/upload/imagem', { method: 'POST', body: fd });
+    const data = await res.json();
+    if (data.url) {
+      document.getElementById('imagem_url').value = data.url;
+      document.getElementById('uploadPreview').innerHTML =
+        `<img src="${data.url}" style="max-height:120px;border-radius:8px;margin-top:8px;border:1px solid #ddd;">
+         <div class="small text-success mt-1"><i class="bi bi-check-circle me-1"></i>Imagem pronta para usar</div>`;
+    } else {
+      alert('Erro no upload: ' + (data.erro || 'desconhecido'));
+    }
+  }
+
+  async function buscarUnsplash() {
+    const q = document.getElementById('unsplashQuery').value.trim();
+    if (!q) return;
+    const div = document.getElementById('unsplashResults');
+    div.innerHTML = '<div class="col-12 text-center py-2"><span class="spinner-border spinner-border-sm"></span></div>';
+    const res = await fetch('/ia/buscar-imagem', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ query: q })
+    });
+    const data = await res.json();
+    if (data.erro) {
+      div.innerHTML = `<div class="col-12 text-danger small">${data.erro}</div>`;
+      return;
+    }
+    div.innerHTML = (data.imagens || []).map(img => `
+      <div class="col-4">
+        <img src="${img.thumb}" alt="${img.desc}" title="${img.desc} — ${img.autor}"
+             style="width:100%;height:70px;object-fit:cover;border-radius:6px;cursor:pointer;border:2px solid transparent;"
+             onclick="selecionarUnsplash('${img.full}',this)">
+      </div>
+    `).join('');
+  }
+
+  function selecionarUnsplash(url, imgEl) {
+    document.querySelectorAll('#unsplashResults img').forEach(i => i.style.borderColor = 'transparent');
+    imgEl.style.borderColor = '#4361ee';
+    document.getElementById('imagem_url').value = url;
+  }
+
+  function coletarDados() {
+    const objetivoChks = [...document.querySelectorAll('.obj-chk:checked')].map(c => c.value);
+    const customObj = document.getElementById('objetivo_custom').value.trim();
+    if (customObj) objetivoChks.push(customObj);
+    const nivelEl = document.querySelector('input[name="nivel"]:checked');
+    const formatoEl = document.querySelector('input[name="formato"]:checked');
+    return {
+      publico: document.getElementById('publico').value.trim(),
+      faixa_etaria: document.getElementById('faixa_etaria').value,
+      nivel: nivelEl ? nivelEl.value : 'Intermediário',
+      objetivo: objetivoChks.join(', '),
+      tema: document.getElementById('tema').value.trim(),
+      contexto: document.getElementById('contexto').value.trim(),
+      resultado: document.getElementById('resultado').value.trim(),
+      formato: formatoEl ? formatoEl.value : 'Texto corrido',
+      kit_id: document.getElementById('kit_id').value || null,
+      imagem_url: document.getElementById('imagem_url').value.trim(),
+    };
+  }
+
+  async function gerarEmail() {
+    const dados = coletarDados();
+    if (!dados.publico) { alert('Descreva o público-alvo no Passo 1.'); return; }
+    if (!dados.tema) { alert('Informe o tema do email no Passo 3.'); return; }
+
+    document.getElementById('placeholderIA').classList.add('d-none');
+    document.getElementById('resultadoIA').classList.add('d-none');
+    document.getElementById('loadingIA').classList.remove('d-none');
+
+    const msgs = [
+      'Analisando o público-alvo...',
+      'Definindo estrutura do email...',
+      'Escrevendo o conteúdo...',
+      'Aplicando formatação HTML...',
+    ];
+    let mi = 0;
+    const timer = setInterval(() => {
+      document.getElementById('msgGerandoTexto').textContent = msgs[mi % msgs.length];
+      mi++;
+    }, 1800);
+
+    try {
+      const res = await fetch('/ia/gerar-email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(dados)
+      });
+      const data = await res.json();
+      clearInterval(timer);
+      document.getElementById('loadingIA').classList.add('d-none');
+      if (data.erro) {
+        document.getElementById('placeholderIA').classList.remove('d-none');
+        alert('Erro ao gerar email: ' + data.erro);
+        return;
+      }
+      _htmlGerado = data.html;
+      document.getElementById('htmlOutput').value = _htmlGerado;
+      const iframe = document.getElementById('previewFrame');
+      iframe.contentDocument.open();
+      iframe.contentDocument.write(_htmlGerado);
+      iframe.contentDocument.close();
+      setTimeout(() => {
+        try {
+          const h = iframe.contentDocument.body?.scrollHeight || 0;
+          if (h > 0) iframe.style.height = (h + 24) + 'px';
+        } catch(e) {}
+      }, 300);
+      document.getElementById('resultadoIA').classList.remove('d-none');
+      document.getElementById('resultadoIA').scrollIntoView({ behavior: 'smooth' });
+    } catch(e) {
+      clearInterval(timer);
+      document.getElementById('loadingIA').classList.add('d-none');
+      document.getElementById('placeholderIA').classList.remove('d-none');
+      alert('Erro de conexão: ' + e);
+    }
+  }
+
+  function regenerarEmail() { gerarEmail(); }
+
+  function switchResultTab(tab) {
+    const isPreview = tab === 'preview';
+    document.getElementById('tabPreview').classList.toggle('d-none', !isPreview);
+    document.getElementById('tabHtml').classList.toggle('d-none', isPreview);
+    document.getElementById('btnTabPreview').classList.toggle('active', isPreview);
+    document.getElementById('btnTabHtml').classList.toggle('active', !isPreview);
+    // Sincroniza HTML editado de volta
+    if (isPreview) {
+      const editado = document.getElementById('htmlOutput').value;
+      if (editado !== _htmlGerado) {
+        _htmlGerado = editado;
+        const iframe = document.getElementById('previewFrame');
+        iframe.contentDocument.open();
+        iframe.contentDocument.write(_htmlGerado);
+        iframe.contentDocument.close();
+      }
+    }
+  }
+
+  function copiarHtml() {
+    const html = document.getElementById('htmlOutput').value || _htmlGerado;
+    navigator.clipboard.writeText(html).then(() => {
+      document.getElementById('feedbackAcoes').innerHTML =
+        '<i class="bi bi-check-circle-fill text-success me-1"></i>HTML copiado para a área de transferência!';
+      setTimeout(() => document.getElementById('feedbackAcoes').innerHTML = '', 3000);
+    });
+  }
+
+  function usarNaCampanha() {
+    if (!_htmlGerado) return;
+    sessionStorage.setItem('ia_html', _htmlGerado);
+    sessionStorage.setItem('ia_subject', document.getElementById('tema').value.trim());
+    window.location.href = '/nova-campanha';
+  }
+
+  function usarNaCadencia() {
+    if (!_htmlGerado) return;
+    sessionStorage.setItem('ia_html', _htmlGerado);
+    sessionStorage.setItem('ia_subject', document.getElementById('tema').value.trim());
+    window.location.href = '/nova-cadencia';
+  }
+
+  async function salvarComoTemplate() {
+    if (!_htmlGerado) return;
+    const nome = prompt('Nome do template:');
+    if (!nome) return;
+    const tema = document.getElementById('tema').value.trim();
+    const res = await fetch('/api/templates', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: nome, subject: tema, body_html: _htmlGerado, category: 'IA' })
+    });
+    if (res.ok) {
+      document.getElementById('feedbackAcoes').innerHTML =
+        '<i class="bi bi-check-circle-fill text-success me-1"></i>Salvo na biblioteca de templates!';
+      setTimeout(() => document.getElementById('feedbackAcoes').innerHTML = '', 3000);
+    } else {
+      alert('Erro ao salvar template.');
+    }
+  }
+</script>
+{% endblock %}

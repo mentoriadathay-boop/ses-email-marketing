@@ -379,13 +379,23 @@ document.getElementById('campaign-form').addEventListener('submit', function(e) 
   btn.disabled = true;
 });
 
-// Inicializa editor Quill
+// Inicializa editor Quill (com suporte a conteúdo pré-gerado por IA)
 document.addEventListener('DOMContentLoaded', function() {
+  const iaHtml = sessionStorage.getItem('ia_html');
+  const iaSubject = sessionStorage.getItem('ia_subject');
+  if (iaHtml) {
+    document.getElementById('textarea-main').value = iaHtml;
+    sessionStorage.removeItem('ia_html');
+  }
+  if (iaSubject) {
+    document.getElementById('subject').value = iaSubject;
+    sessionStorage.removeItem('ia_subject');
+  }
   initEditor({
     containerId: 'quill-main',
     textareaId: 'textarea-main',
     subjectId: 'subject',
-    autoSignature: true
+    autoSignature: !iaHtml
   });
 });
 </script>
