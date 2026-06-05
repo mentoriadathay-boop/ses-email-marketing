@@ -225,6 +225,7 @@ def init_db():
         "ALTER TABLE campaigns ADD COLUMN csv_filename TEXT",
         "ALTER TABLE sequences ADD COLUMN start_date DATE",
         "ALTER TABLE sequences ADD COLUMN preferred_hour INTEGER",
+        "ALTER TABLE signature ADD COLUMN sender_name TEXT DEFAULT 'TFA Email Marketing'",
     ]:
         try:
             conn.execute(f"DO $$ BEGIN {col_sql}; EXCEPTION WHEN duplicate_column THEN NULL; END $$")
@@ -429,6 +430,15 @@ def score_label(score):
 
 app.jinja_env.globals['score_label'] = score_label
 
+def get_sender_name():
+    try:
+        conn = get_db()
+        row = conn.execute('SELECT sender_name FROM signature ORDER BY id DESC LIMIT 1').fetchone()
+        conn.close()
+        return (row['sender_name'] or 'TFA Email Marketing') if row else 'TFA Email Marketing'
+    except Exception:
+        return 'TFA Email Marketing'
+
 def send_email_brevo(sender, recipient_email, recipient_name, subject, body_html):
     personalized_subject = subject.replace('{nome}', recipient_name or 'Cliente')
     personalized_body = body_html.replace('{nome}', recipient_name or 'Cliente')
@@ -437,7 +447,7 @@ def send_email_brevo(sender, recipient_email, recipient_name, subject, body_html
     api_instance = sib_api_v3_sdk.TransactionalEmailsApi(sib_api_v3_sdk.ApiClient(configuration))
     email_obj = sib_api_v3_sdk.SendSmtpEmail(
         to=[{'email': recipient_email, 'name': recipient_name or ''}],
-        sender={'email': sender, 'name': 'TFA Email Marketing'},
+        sender={'email': sender, 'name': get_sender_name()},
         subject=personalized_subject,
         html_content=personalized_body
     )
@@ -1028,17 +1038,18 @@ def configuracoes():
 def salvar_assinatura():
     body_html = request.form.get('sig_body', '').strip()
     name = request.form.get('sig_name', '').strip()
+    sender_name = request.form.get('sender_name', '').strip() or 'TFA Email Marketing'
     conn = get_db()
     existing = conn.execute('SELECT id FROM signature LIMIT 1').fetchone()
     if existing:
         conn.execute(
-            "UPDATE signature SET name=%s,body_html=%s,updated_at=NOW() WHERE id=%s",
-            (name, body_html, existing['id']))
+            "UPDATE signature SET name=%s,body_html=%s,sender_name=%s,updated_at=NOW() WHERE id=%s",
+            (name, body_html, sender_name, existing['id']))
     else:
-        conn.execute('INSERT INTO signature (name,body_html) VALUES (%s,%s)', (name, body_html))
+        conn.execute('INSERT INTO signature (name,body_html,sender_name) VALUES (%s,%s,%s)', (name, body_html, sender_name))
     conn.commit()
     conn.close()
-    flash('Assinatura salva com sucesso!', 'success')
+    flash('Configuracoes salvas com sucesso!', 'success')
     return redirect(url_for('configuracoes'))
 
 @app.route('/api/assinatura')
@@ -1065,7 +1076,7 @@ def upload_imagem():
     ext = file.filename.rsplit('.', 1)[1].lower()
     filename = f"{uuid.uuid4().hex}.{ext}"
     file.save(os.path.join(IMAGES_FOLDER, filename))
-    return jsonify({'url': f'/uploads/imagens/{filename}'})
+    return jsonify({'url': f'{APP_URL}/uploads/imagens/{filename}'})
 
 @app.route('/uploads/imagens/<path:filename>')
 def serve_imagem(filename):
@@ -1634,6 +1645,37 @@ def retomar_cadencia(seq_id):
     conn.execute("UPDATE sequences SET status='active' WHERE id=%s", (seq_id,))
     conn.commit(); conn.close()
     flash('Cadência retomada.', 'success')
+    return redirect(url_for('cadencia_detalhe', seq_id=seq_id))
+
+@app.route('/cadencias/<int:seq_id>/reiniciar', methods=['POST'])
+def reiniciar_cadencia(seq_id):
+    conn = get_db()
+    seq = conn.execute('SELECT * FROM sequences WHERE id=%s', (seq_id,)).fetchone()
+    if not seq:
+        conn.close()
+        flash('Cadência não encontrada.', 'danger')
+        return redirect(url_for('cadencias'))
+    first_step = conn.execute(
+        'SELECT * FROM sequence_steps WHERE sequence_id=%s ORDER BY step_number ASC LIMIT 1',
+        (seq_id,)).fetchone()
+    if not first_step:
+        conn.close()
+        flash('Cadência não tem passos configurados.', 'danger')
+        return redirect(url_for('cadencia_detalhe', seq_id=seq_id))
+    now = datetime.now()
+    next_dt = now + timedelta(days=first_step['day_offset'])
+    ph = seq.get('preferred_hour') if hasattr(seq, 'get') else seq['preferred_hour'] if 'preferred_hour' in seq.keys() else None
+    if ph is not None:
+        next_dt = next_dt.replace(hour=int(ph), minute=0, second=0, microsecond=0)
+    next_send = next_dt.strftime('%Y-%m-%d %H:%M:%S')
+    conn.execute('DELETE FROM sequence_logs WHERE sequence_id=%s', (seq_id,))
+    conn.execute('DELETE FROM email_opens WHERE sequence_id=%s', (seq_id,))
+    conn.execute(
+        "UPDATE sequence_contacts SET current_step=%s, status='active', started_at=NOW(), next_send_at=%s, finished_at=NULL WHERE sequence_id=%s",
+        (first_step['step_number'], next_send, seq_id))
+    conn.execute("UPDATE sequences SET status='active' WHERE id=%s", (seq_id,))
+    conn.commit(); conn.close()
+    flash('Cadência reiniciada do zero. Todos os contatos voltaram ao passo 1 e o histórico de envios foi limpo.', 'success')
     return redirect(url_for('cadencia_detalhe', seq_id=seq_id))
 
 @app.route('/cadencias/<int:seq_id>/contato/<path:email>/parar', methods=['POST'])

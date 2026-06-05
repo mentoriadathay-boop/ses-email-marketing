@@ -87,6 +87,11 @@ function _uploadImage(quill) {
   };
 }
 
+function uploadImageToEditor(containerId) {
+  const quill = _quillMap.get(containerId);
+  if (quill) _uploadImage(quill);
+}
+
 // ─────────────────────────────────────────────
 // Inserir {nome} no cursor
 // ─────────────────────────────────────────────
@@ -286,6 +291,7 @@ function initStepEditor(stepDiv) {
 
   // Botões extras do passo
   stepDiv.querySelector('.btn-insert-nome')?.setAttribute('onclick', `insertNome('${containerId}')`);
+  stepDiv.querySelector('.btn-upload-imagem')?.setAttribute('onclick', `uploadImageToEditor('${containerId}')`);
   stepDiv.querySelector('.btn-tab-visual')?.setAttribute('id', `tab-btn-visual-${containerId}`);
   stepDiv.querySelector('.btn-tab-visual')?.setAttribute('onclick', `editorTab('visual','${containerId}','${textareaId}')`);
   stepDiv.querySelector('.btn-tab-html')?.setAttribute('id', `tab-btn-html-${containerId}`);

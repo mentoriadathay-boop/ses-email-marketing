@@ -18,6 +18,10 @@
       <button class="btn btn-sm btn-success"><i class="bi bi-play-fill me-1"></i> Retomar</button>
     </form>
     {% endif %}
+    <form method="POST" action="{{ url_for('reiniciar_cadencia', seq_id=seq.id) }}" class="d-inline"
+          onsubmit="return confirm('Reiniciar do zero?\n\nIsso vai resetar TODOS os contatos para o passo 1 e apagar o histórico de envios e aberturas.\n\nEsta ação não pode ser desfeita.')">
+      <button class="btn btn-sm btn-outline-danger"><i class="bi bi-arrow-counterclockwise me-1"></i> Reiniciar</button>
+    </form>
     <a href="{{ url_for('editar_cadencia', seq_id=seq.id) }}" class="btn btn-sm btn-outline-secondary">
       <i class="bi bi-pencil me-1"></i> Editar
     </a>

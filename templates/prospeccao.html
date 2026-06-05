@@ -98,7 +98,7 @@
     <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
       <h6 class="fw-semibold mb-0">
         <i class="bi bi-table me-2 text-primary"></i>
-        Leads encontrados
+        Leads acumulados
         <span id="badgeTotal" class="badge rounded-pill ms-1" style="background:#4361ee;">0</span>
       </h6>
       <div class="d-flex gap-2 flex-wrap align-items-center">
@@ -109,6 +109,10 @@
         </button>
         <button class="btn btn-sm btn-outline-secondary" onclick="selecionarTodos(false)">
           <i class="bi bi-square me-1"></i>Nenhum
+        </button>
+        <button class="btn btn-sm btn-outline-danger" onclick="limparLista()"
+                title="Apaga a lista acumulada para começar do zero">
+          <i class="bi bi-trash me-1"></i>Limpar lista
         </button>
       </div>
     </div>
@@ -165,7 +169,7 @@
 <script>
   let _jobId = null;
   let _polling = null;
-  let _leadsGlobal = [];
+  let _leadsGlobal = [];   // acumula leads de múltiplas extrações
 
   // Checkbox "todas as páginas" leva o slider para 50
   document.getElementById('checkTodasPaginas').addEventListener('change', function () {
@@ -255,19 +259,36 @@
       .catch(() => {});
   }
 
-  function renderLeads(leads) {
-    _leadsGlobal = leads;
+  function renderLeads(novosLeads) {
+    // Acumula sem duplicar (deduplicação por email)
+    const emailsExistentes = new Set(_leadsGlobal.map(l => (l.email || '').toLowerCase()));
+    let adicionados = 0;
+    novosLeads.forEach(l => {
+      const em = (l.email || '').toLowerCase();
+      if (em && !emailsExistentes.has(em)) {
+        _leadsGlobal.push(l);
+        emailsExistentes.add(em);
+        adicionados++;
+      }
+    });
+    renderTabela();
+    if (adicionados < novosLeads.length) {
+      alertaSimples(`${adicionados} lead(s) adicionado(s). ${novosLeads.length - adicionados} duplicado(s) ignorado(s).`, 'info');
+    }
+  }
+
+  function renderTabela() {
     const tbody = document.getElementById('corpoTabela');
     tbody.innerHTML = '';
-    document.getElementById('badgeTotal').textContent = leads.length;
+    document.getElementById('badgeTotal').textContent = _leadsGlobal.length;
 
-    if (!leads.length) {
+    if (!_leadsGlobal.length) {
       tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted py-4"><i class="bi bi-inbox fs-4 d-block mb-2"></i>Nenhum lead encontrado nesta página.</td></tr>';
       document.getElementById('blocoResultados').classList.remove('d-none');
       return;
     }
 
-    leads.forEach((ld, i) => {
+    _leadsGlobal.forEach((ld, i) => {
       const tr = document.createElement('tr');
       tr.dataset.idx = i;
       tr.dataset.texto = [ld.nome, ld.email, ld.telefone, ld.empresa, ld.cargo].join(' ').toLowerCase();
@@ -283,6 +304,16 @@
 
     document.getElementById('blocoResultados').classList.remove('d-none');
     atualizarContador();
+  }
+
+  function limparLista() {
+    if (_leadsGlobal.length && !confirm('Apagar todos os ' + _leadsGlobal.length + ' leads acumulados?')) return;
+    _leadsGlobal = [];
+    document.getElementById('corpoTabela').innerHTML = '';
+    document.getElementById('badgeTotal').textContent = '0';
+    document.getElementById('blocoResultados').classList.add('d-none');
+    document.getElementById('nomeMailing').value = '';
+    document.getElementById('feedbackMailing').innerHTML = '';
   }
 
   function filtrarLeads(q) {
@@ -330,9 +361,12 @@
       btn.disabled = false;
       btn.innerHTML = '<i class="bi bi-database-add me-1"></i> Criar Mailing <span id="badgeSelecionados" class="badge bg-white text-success ms-1">' + selecionados.length + '</span>';
       if (data.ok) {
+        const totalSalvos = selecionados.length;
+        limparLista();
+        document.getElementById('blocoResultados').classList.remove('d-none');
         document.getElementById('feedbackMailing').innerHTML =
           `<i class="bi bi-check-circle-fill text-success me-1"></i>
-           Mailing criado! ${data.novos_crm} novo(s) no CRM.
+           Mailing criado com ${totalSalvos} lead(s)! ${data.novos_crm} novo(s) no CRM.
            <a href="${data.redirect}" class="ms-2 btn btn-sm btn-outline-success">Ver Mailings</a>`;
       } else {
         document.getElementById('feedbackMailing').innerHTML =
@@ -347,16 +381,11 @@
   }
 
   function resetarUI() {
+    // Reseta só o progresso e erros — NÃO limpa a lista de leads acumulados
     _jobId = null;
-    _leadsGlobal = [];
     document.getElementById('alertaRobots').classList.add('d-none');
     document.getElementById('alertaErro').classList.add('d-none');
-    document.getElementById('blocoResultados').classList.add('d-none');
     document.getElementById('blocoProgresso').classList.add('d-none');
-    document.getElementById('corpoTabela').innerHTML = '';
-    document.getElementById('badgeTotal').textContent = '0';
-    document.getElementById('feedbackMailing').innerHTML = '';
-    document.getElementById('nomeMailing').value = '';
     document.getElementById('barraProgresso').style.width = '0%';
     document.getElementById('textoProgresso').textContent = 'Página 0 de 0';
     document.getElementById('statusBadge').className = 'badge rounded-pill fs-6 d-none';
