@@ -62,28 +62,28 @@ PIXEL_GIF = (
 _DEFAULT_TEMPLATES = [
     ('Boas-vindas caloroso', 'Relacionamento',
      'Bem-vindo, {nome}! Estamos felizes em te ter aqui',
-     '<p>Olá, <strong>{nome}</strong>!</p><p>É um prazer tê-lo(a) conosco. Estou animado(a) para começar essa jornada juntos!</p><p>Nos próximos dias vou compartilhar conteúdos e oportunidades que podem agregar muito ao seu negócio.</p><p>Qualquer dúvida, basta responder este email.</p><p>Um abraço,<br><strong>Equipe TFA</strong></p>'),
+     '<p>Olá, <strong>{nome}</strong>!</p><p>É um prazer tê-lo(a) conosco. Estou animado(a) para começar essa jornada juntos!</p><p>Nos próximos dias vou compartilhar conteúdos e oportunidades que podem agregar muito ao seu negócio.</p><p>Qualquer dúvida, basta responder este email.</p><p>Um abraço,<br><strong>Equipe ConvertMail</strong></p>'),
     ('Follow-up após 3 dias', 'Follow-up',
      '{nome}, ainda pensando na nossa conversa?',
-     '<p>Olá, <strong>{nome}</strong>,</p><p>Passaram alguns dias desde meu último contato e queria saber se você teve a chance de refletir sobre o que conversamos.</p><p>Fico à disposição para responder qualquer dúvida ou marcar uma conversa rápida de 15 minutos.</p><p>Me avise como posso ajudar!</p><p>Atenciosamente,<br><strong>Equipe TFA</strong></p>'),
+     '<p>Olá, <strong>{nome}</strong>,</p><p>Passaram alguns dias desde meu último contato e queria saber se você teve a chance de refletir sobre o que conversamos.</p><p>Fico à disposição para responder qualquer dúvida ou marcar uma conversa rápida de 15 minutos.</p><p>Me avise como posso ajudar!</p><p>Atenciosamente,<br><strong>Equipe ConvertMail</strong></p>'),
     ('Apresentação de produto/serviço', 'Vendas',
      '{nome}, conheça nossa solução para o seu negócio',
-     '<p>Olá, <strong>{nome}</strong>!</p><p>Quero aproveitar para apresentar nossa solução que tem ajudado empresas como a sua a <strong>aumentar resultados</strong>.</p><ul><li>Atendimento personalizado</li><li>Resultados comprovados</li><li>Suporte dedicado</li></ul><p>Posso preparar uma apresentação personalizada para você?</p><p>Atenciosamente,<br><strong>Equipe TFA</strong></p>'),
+     '<p>Olá, <strong>{nome}</strong>!</p><p>Quero aproveitar para apresentar nossa solução que tem ajudado empresas como a sua a <strong>aumentar resultados</strong>.</p><ul><li>Atendimento personalizado</li><li>Resultados comprovados</li><li>Suporte dedicado</li></ul><p>Posso preparar uma apresentação personalizada para você?</p><p>Atenciosamente,<br><strong>Equipe ConvertMail</strong></p>'),
     ('Convite para reunião', 'Relacionamento',
      '{nome}, podemos conversar 15 minutos?',
-     '<p>Olá, <strong>{nome}</strong>!</p><p>Gostaria de agendar uma conversa rápida de 15 minutos para entender melhor os desafios do seu negócio e mostrar como podemos ajudar.</p><p>Qual horário funciona melhor para você?</p><p>Aguardo seu retorno!</p><p>Atenciosamente,<br><strong>Equipe TFA</strong></p>'),
+     '<p>Olá, <strong>{nome}</strong>!</p><p>Gostaria de agendar uma conversa rápida de 15 minutos para entender melhor os desafios do seu negócio e mostrar como podemos ajudar.</p><p>Qual horário funciona melhor para você?</p><p>Aguardo seu retorno!</p><p>Atenciosamente,<br><strong>Equipe ConvertMail</strong></p>'),
     ('Proposta comercial', 'Vendas',
      '{nome}, preparei uma proposta especial para você',
-     '<p>Olá, <strong>{nome}</strong>!</p><p>Conforme conversamos, preparei uma proposta personalizada pensando nas necessidades específicas do seu negócio.</p><ul><li>Solução sob medida para o seu segmento</li><li>Condições especiais de investimento</li><li>Implementação rápida e suporte completo</li></ul><p>Podemos agendar uma chamada para detalhar tudo?</p><p>Atenciosamente,<br><strong>Equipe TFA</strong></p>'),
+     '<p>Olá, <strong>{nome}</strong>!</p><p>Conforme conversamos, preparei uma proposta personalizada pensando nas necessidades específicas do seu negócio.</p><ul><li>Solução sob medida para o seu segmento</li><li>Condições especiais de investimento</li><li>Implementação rápida e suporte completo</li></ul><p>Podemos agendar uma chamada para detalhar tudo?</p><p>Atenciosamente,<br><strong>Equipe ConvertMail</strong></p>'),
     ('Reengajamento de lead frio', 'Reengajamento',
      '{nome}, faz tempo que não nos falamos...',
-     '<p>Olá, <strong>{nome}</strong>!</p><p>Já faz algum tempo desde nosso último contato e queria saber como você está e como vai o seu negócio.</p><p>Temos novidades que podem ser relevantes para você agora.</p><p>Posso te enviar algumas informações?</p><p>Atenciosamente,<br><strong>Equipe TFA</strong></p>'),
+     '<p>Olá, <strong>{nome}</strong>!</p><p>Já faz algum tempo desde nosso último contato e queria saber como você está e como vai o seu negócio.</p><p>Temos novidades que podem ser relevantes para você agora.</p><p>Posso te enviar algumas informações?</p><p>Atenciosamente,<br><strong>Equipe ConvertMail</strong></p>'),
     ('Agradecimento pós-reunião', 'Relacionamento',
      '{nome}, obrigado pelo seu tempo hoje!',
-     '<p>Olá, <strong>{nome}</strong>!</p><p>Quero agradecer pela conversa de hoje. Foi muito produtivo conhecer melhor o seu negócio e os desafios que você enfrenta.</p><p>Como combinado, vou preparar os próximos passos e enviar para você em breve.</p><p>Um abraço,<br><strong>Equipe TFA</strong></p>'),
+     '<p>Olá, <strong>{nome}</strong>!</p><p>Quero agradecer pela conversa de hoje. Foi muito produtivo conhecer melhor o seu negócio e os desafios que você enfrenta.</p><p>Como combinado, vou preparar os próximos passos e enviar para você em breve.</p><p>Um abraço,<br><strong>Equipe ConvertMail</strong></p>'),
     ('Última tentativa de contato', 'Follow-up',
      '{nome}, última mensagem minha sobre isso',
-     '<p>Olá, <strong>{nome}</strong>,</p><p>Tentei entrar em contato algumas vezes e entendo que você deve estar ocupado(a).</p><p>Esta será minha última mensagem sobre este assunto.</p><p>Se em algum momento fizer sentido conversar, estarei aqui. Basta responder este email.</p><p>Sucesso no seu negócio!</p><p>Atenciosamente,<br><strong>Equipe TFA</strong></p>'),
+     '<p>Olá, <strong>{nome}</strong>,</p><p>Tentei entrar em contato algumas vezes e entendo que você deve estar ocupado(a).</p><p>Esta será minha última mensagem sobre este assunto.</p><p>Se em algum momento fizer sentido conversar, estarei aqui. Basta responder este email.</p><p>Sucesso no seu negócio!</p><p>Atenciosamente,<br><strong>Equipe ConvertMail</strong></p>'),
 ]
 
 # ── Banco de dados (PostgreSQL) ─────────────────────────────────────────────
@@ -244,7 +244,7 @@ def init_db():
         "ALTER TABLE campaigns ADD COLUMN csv_filename TEXT",
         "ALTER TABLE sequences ADD COLUMN start_date DATE",
         "ALTER TABLE sequences ADD COLUMN preferred_hour INTEGER",
-        "ALTER TABLE signature ADD COLUMN sender_name TEXT DEFAULT 'TFA Email Marketing'",
+        "ALTER TABLE signature ADD COLUMN sender_name TEXT DEFAULT 'ConvertMail'",
     ]:
         try:
             conn.execute(f"DO $$ BEGIN {col_sql}; EXCEPTION WHEN duplicate_column THEN NULL; END $$")
@@ -454,9 +454,9 @@ def get_sender_name():
         conn = get_db()
         row = conn.execute('SELECT sender_name FROM signature ORDER BY id DESC LIMIT 1').fetchone()
         conn.close()
-        return (row['sender_name'] or 'TFA Email Marketing') if row else 'TFA Email Marketing'
+        return (row['sender_name'] or 'ConvertMail') if row else 'ConvertMail'
     except Exception:
-        return 'TFA Email Marketing'
+        return 'ConvertMail'
 
 def send_email_brevo(sender, recipient_email, recipient_name, subject, body_html):
     personalized_subject = subject.replace('{nome}', recipient_name or 'Cliente')
@@ -898,18 +898,30 @@ def nova_campanha():
         contacts = []
 
         if send_mode == 'individual':
-            ind_name = request.form.get('ind_name', '').strip()
-            ind_email = request.form.get('ind_email', '').strip()
-            if not ind_email:
-                flash('Informe o email do destinatário.', 'danger')
+            import json as _json
+            raw = request.form.get('ind_recipients', '').strip()
+            try:
+                recipients = _json.loads(raw) if raw else []
+            except Exception:
+                recipients = []
+            # fallback para campo legado de destinatário único
+            if not recipients:
+                ind_email = request.form.get('ind_email', '').strip()
+                ind_name = request.form.get('ind_name', '').strip()
+                if ind_email:
+                    recipients = [{'email': ind_email, 'name': ind_name}]
+            recipients = [r for r in recipients if r.get('email', '').strip()]
+            if not recipients:
+                flash('Adicione pelo menos um destinatário.', 'danger')
                 return redirect(url_for('nova_campanha'))
-            contacts = [{'name': ind_name, 'email': ind_email, 'tags': ''}]
+            contacts = [{'name': r.get('name', ''), 'email': r['email'], 'tags': ''} for r in recipients]
             temp_filename = f"campaign_{uuid.uuid4().hex}.csv"
             temp_filepath = os.path.join(app.config['UPLOAD_FOLDER'], temp_filename)
             with open(temp_filepath, 'w', newline='', encoding='utf-8') as f:
                 w = csv.writer(f)
                 w.writerow(['nome', 'email'])
-                w.writerow([ind_name, ind_email])
+                for r in recipients:
+                    w.writerow([r.get('name', ''), r['email']])
             csv_filename = temp_filename
         elif send_mode == 'mailing':
             if not mailing_id:
@@ -1057,7 +1069,7 @@ def configuracoes():
 def salvar_assinatura():
     body_html = request.form.get('sig_body', '').strip()
     name = request.form.get('sig_name', '').strip()
-    sender_name = request.form.get('sender_name', '').strip() or 'TFA Email Marketing'
+    sender_name = request.form.get('sender_name', '').strip() or 'ConvertMail'
     conn = get_db()
     existing = conn.execute('SELECT id FROM signature LIMIT 1').fetchone()
     if existing:
@@ -1070,6 +1082,18 @@ def salvar_assinatura():
     conn.close()
     flash('Configuracoes salvas com sucesso!', 'success')
     return redirect(url_for('configuracoes'))
+
+@app.route('/api/contatos/buscar')
+def api_contatos_buscar():
+    q = request.args.get('q', '').strip().lower()
+    if not q or len(q) < 2:
+        return jsonify([])
+    conn = get_db()
+    rows = conn.execute(
+        "SELECT email, name FROM contacts WHERE LOWER(email) LIKE %s OR LOWER(name) LIKE %s LIMIT 10",
+        (f'%{q}%', f'%{q}%')).fetchall()
+    conn.close()
+    return jsonify([{'email': r['email'], 'name': r['name'] or ''} for r in rows])
 
 @app.route('/api/assinatura')
 def api_assinatura():
@@ -1676,6 +1700,37 @@ def retomar_cadencia(seq_id):
     conn.execute("UPDATE sequences SET status='active' WHERE id=%s", (seq_id,))
     conn.commit(); conn.close()
     flash('Cadência retomada.', 'success')
+    return redirect(url_for('cadencia_detalhe', seq_id=seq_id))
+
+@app.route('/cadencias/<int:seq_id>/enviar-teste', methods=['POST'])
+def enviar_teste_cadencia(seq_id):
+    conn = get_db()
+    seq = conn.execute('SELECT * FROM sequences WHERE id=%s', (seq_id,)).fetchone()
+    if not seq:
+        conn.close()
+        flash('Cadência não encontrada.', 'danger')
+        return redirect(url_for('cadencias'))
+    step_number = int(request.form.get('step_number', 1))
+    step = conn.execute(
+        'SELECT * FROM sequence_steps WHERE sequence_id=%s AND step_number=%s',
+        (seq_id, step_number)).fetchone()
+    conn.close()
+    if not step:
+        flash('Passo não encontrado.', 'danger')
+        return redirect(url_for('cadencia_detalhe', seq_id=seq_id))
+    test_email = request.form.get('test_email', '').strip()
+    test_name = request.form.get('test_name', 'Teste').strip() or 'Teste'
+    if not test_email:
+        flash('Informe o email de destino do teste.', 'danger')
+        return redirect(url_for('cadencia_detalhe', seq_id=seq_id))
+    if not BREVO_API_KEY:
+        flash('BREVO_API_KEY não configurada.', 'danger')
+        return redirect(url_for('cadencia_detalhe', seq_id=seq_id))
+    try:
+        send_email_brevo(seq['sender_email'], test_email, test_name, step['subject'], step['body_html'])
+        flash(f'Teste enviado para {test_email} — Passo {step_number}: "{step["subject"]}"', 'success')
+    except Exception as e:
+        flash(f'Erro ao enviar teste: {e}', 'danger')
     return redirect(url_for('cadencia_detalhe', seq_id=seq_id))
 
 @app.route('/cadencias/<int:seq_id>/reiniciar', methods=['POST'])

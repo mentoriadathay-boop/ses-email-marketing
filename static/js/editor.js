@@ -1,4 +1,4 @@
-// editor.js — Editor visual Quill para ASA Marketing
+// editor.js — Editor visual Quill para ConvertMail
 
 const _quillMap = new Map();   // containerId -> quill instance
 let _tplTarget = null;         // { quill, subjectId } — editor alvo do modal de templates

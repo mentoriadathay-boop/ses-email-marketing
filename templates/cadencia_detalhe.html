@@ -22,6 +22,9 @@
           onsubmit="return confirm('Reiniciar do zero?\n\nIsso vai resetar TODOS os contatos para o passo 1 e apagar o histórico de envios e aberturas.\n\nEsta ação não pode ser desfeita.')">
       <button class="btn btn-sm btn-outline-danger"><i class="bi bi-arrow-counterclockwise me-1"></i> Reiniciar</button>
     </form>
+    <button class="btn btn-sm btn-outline-info" data-bs-toggle="modal" data-bs-target="#modalTeste">
+      <i class="bi bi-envelope-check me-1"></i> Enviar Teste
+    </button>
     <a href="{{ url_for('editar_cadencia', seq_id=seq.id) }}" class="btn btn-sm btn-outline-secondary">
       <i class="bi bi-pencil me-1"></i> Editar
     </a>
@@ -635,4 +638,45 @@ function abrirHistorico(email, label) {
     });
 }
 </script>
+
+<!-- Modal: Enviar Email de Teste -->
+<div class="modal fade" id="modalTeste" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <form method="POST" action="{{ url_for('enviar_teste_cadencia', seq_id=seq.id) }}">
+        <div class="modal-header">
+          <h5 class="modal-title"><i class="bi bi-envelope-check me-2 text-info"></i>Enviar Email de Teste</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <p class="text-muted small mb-3">O email será enviado com o conteúdo real do passo escolhido, com <code>{nome}</code> substituído pelo nome de teste.</p>
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Passo a testar</label>
+            <select name="step_number" class="form-select" required>
+              {% for st in steps %}
+              <option value="{{ st.step_number }}">
+                Passo {{ st.step_number }} — Dia {{ st.day_offset }} — {{ st.subject[:60] }}{% if st.subject|length > 60 %}…{% endif %}
+              </option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Enviar para (email) <span class="text-danger">*</span></label>
+            <input type="email" name="test_email" class="form-control" placeholder="seu@email.com" required>
+          </div>
+          <div class="mb-1">
+            <label class="form-label fw-semibold">Nome de teste <span class="text-muted small">(substitui {nome})</span></label>
+            <input type="text" name="test_name" class="form-control" placeholder="Ex: Maria" value="Teste">
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+          <button type="submit" class="btn btn-info text-white">
+            <i class="bi bi-send me-1"></i> Enviar Teste
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
 {% endblock %}

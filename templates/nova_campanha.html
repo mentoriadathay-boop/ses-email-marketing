@@ -194,22 +194,34 @@
         </div>
       </div>
 
-      <!-- Contato individual (modo individual) -->
+      <!-- Destinatários individuais (modo individual) -->
       <div id="individual-section" class="card mb-4 d-none">
         <div class="card-body">
-          <h6 class="fw-semibold mb-3">
-            <i class="bi bi-person me-2 text-primary"></i>Destinatário
-          </h6>
-          <div class="mb-3">
-            <label class="form-label fw-semibold">Nome</label>
-            <input type="text" name="ind_name" id="ind_name" class="form-control"
-                   placeholder="João Silva">
+          <div class="d-flex align-items-center justify-content-between mb-3">
+            <h6 class="fw-semibold mb-0"><i class="bi bi-people me-2 text-primary"></i>Destinatários
+              <span id="ind-count-badge" class="badge bg-primary ms-1">0</span>
+            </h6>
           </div>
-          <div class="mb-0">
-            <label class="form-label fw-semibold">E-mail *</label>
-            <input type="email" name="ind_email" id="ind_email" class="form-control"
-                   placeholder="joao@exemplo.com">
+
+          <!-- Linha de adição -->
+          <div class="input-group mb-2">
+            <input type="text" id="ind-add-name" class="form-control" placeholder="Nome (opcional)" style="max-width:200px">
+            <input type="email" id="ind-add-email" class="form-control" placeholder="email@exemplo.com"
+                   oninput="buscarCRM(this.value)">
+            <button type="button" class="btn btn-primary" onclick="adicionarDestinatario()">
+              <i class="bi bi-plus-lg"></i> Adicionar
+            </button>
           </div>
+
+          <!-- Autocomplete CRM -->
+          <div id="crm-suggestions" class="list-group mb-2" style="display:none;max-height:160px;overflow-y:auto;"></div>
+
+          <!-- Lista de destinatários adicionados -->
+          <div id="ind-list" class="mb-2"></div>
+
+          <!-- Campo oculto com JSON enviado ao servidor -->
+          <input type="hidden" name="ind_recipients" id="ind_recipients" value="[]">
+          <div class="text-muted small" id="ind-empty-msg">Nenhum destinatário adicionado ainda.</div>
         </div>
       </div>
 
@@ -377,6 +389,82 @@ document.getElementById('campaign-form').addEventListener('submit', function(e) 
   const isScheduled = document.getElementById('schedule_mode').value === 'scheduled';
   btn.innerHTML = `<span class="spinner-border spinner-border-sm me-2"></span> ${isScheduled ? 'Agendando...' : 'Enviando...'}`;
   btn.disabled = true;
+});
+
+// ── Destinatários individuais ─────────────────────────────────────
+let _destinatarios = [];
+let _crmTimer = null;
+
+function _syncDestinatarios() {
+  document.getElementById('ind_recipients').value = JSON.stringify(_destinatarios);
+  document.getElementById('ind-count-badge').textContent = _destinatarios.length;
+  document.getElementById('ind-empty-msg').style.display = _destinatarios.length ? 'none' : '';
+  const lista = document.getElementById('ind-list');
+  lista.innerHTML = _destinatarios.map((d, i) => `
+    <div class="d-flex align-items-center gap-2 py-1 border-bottom">
+      <i class="bi bi-person-circle text-muted"></i>
+      <div class="flex-fill">
+        <span class="fw-semibold small">${d.name || '<span class="text-muted">sem nome</span>'}</span>
+        <span class="text-muted small ms-2">${d.email}</span>
+      </div>
+      <button type="button" class="btn btn-sm btn-outline-danger py-0 px-1"
+              onclick="removerDestinatario(${i})"><i class="bi bi-x"></i></button>
+    </div>`).join('');
+}
+
+function adicionarDestinatario() {
+  const email = document.getElementById('ind-add-email').value.trim();
+  const name  = document.getElementById('ind-add-name').value.trim();
+  if (!email || !email.includes('@')) { alert('Informe um email válido.'); return; }
+  if (_destinatarios.some(d => d.email.toLowerCase() === email.toLowerCase())) {
+    alert('Este email já foi adicionado.'); return;
+  }
+  _destinatarios.push({ email, name });
+  _syncDestinatarios();
+  document.getElementById('ind-add-email').value = '';
+  document.getElementById('ind-add-name').value = '';
+  document.getElementById('crm-suggestions').style.display = 'none';
+  document.getElementById('ind-add-email').focus();
+}
+
+function removerDestinatario(idx) {
+  _destinatarios.splice(idx, 1);
+  _syncDestinatarios();
+}
+
+function buscarCRM(q) {
+  clearTimeout(_crmTimer);
+  const box = document.getElementById('crm-suggestions');
+  if (!q || q.length < 2) { box.style.display = 'none'; return; }
+  _crmTimer = setTimeout(async () => {
+    const res = await fetch('/api/contatos/buscar?q=' + encodeURIComponent(q));
+    const hits = await res.json();
+    if (!hits.length) { box.style.display = 'none'; return; }
+    box.innerHTML = hits.map(h =>
+      `<button type="button" class="list-group-item list-group-item-action py-1 small"
+               onclick="selecionarSugestao('${h.email}','${(h.name||'').replace(/'/g,"\\'")}')">
+         <i class="bi bi-person me-1"></i><strong>${h.name || ''}</strong>
+         <span class="text-muted ms-1">${h.email}</span>
+       </button>`).join('');
+    box.style.display = '';
+  }, 300);
+}
+
+function selecionarSugestao(email, name) {
+  document.getElementById('ind-add-email').value = email;
+  document.getElementById('ind-add-name').value = name;
+  document.getElementById('crm-suggestions').style.display = 'none';
+  adicionarDestinatario();
+}
+
+// Permite pressionar Enter no campo email para adicionar
+document.addEventListener('DOMContentLoaded', () => {
+  const emailInput = document.getElementById('ind-add-email');
+  if (emailInput) {
+    emailInput.addEventListener('keydown', e => {
+      if (e.key === 'Enter') { e.preventDefault(); adicionarDestinatario(); }
+    });
+  }
 });
 
 // Inicializa editor Quill (com suporte a conteúdo pré-gerado por IA)

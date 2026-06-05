@@ -20,8 +20,8 @@
       <div class="mb-3">
         <label class="form-label fw-semibold small">Nome do remetente <span class="text-danger">*</span></label>
         <input type="text" name="sender_name" class="form-control form-control-sm"
-               placeholder="Ex: ASA Marketing"
-               value="{{ signature.sender_name if signature and signature.sender_name else 'TFA Email Marketing' }}"
+               placeholder="Ex: ConvertMail"
+               value="{{ signature.sender_name if signature and signature.sender_name else 'ConvertMail' }}"
                required>
         <div class="form-text">Este nome aparece no campo "De:" para quem recebe os e-mails.</div>
       </div>
@@ -29,7 +29,7 @@
       <div class="mb-3">
         <label class="form-label fw-semibold small">Nome da assinatura (opcional)</label>
         <input type="text" name="sig_name" class="form-control form-control-sm"
-               placeholder="Ex: Joao Silva — ASA Marketing"
+               placeholder="Ex: Joao Silva — ConvertMail"
                value="{{ signature.name if signature else '' }}">
       </div>
 
@@ -157,7 +157,7 @@
           <li class="mb-1">Acesse o <strong>Console AWS</strong> → <strong>Amazon SES</strong></li>
           <li class="mb-1">Clique em <strong>"Request production access"</strong></li>
           <li class="mb-1">Preencha: tipo de uso = <em>Marketing</em></li>
-          <li class="mb-1">Descreva: envio de campanhas para clientes da ASA Marketing</li>
+          <li class="mb-1">Descreva: envio de campanhas de email marketing</li>
           <li class="mb-1">Website: asamarketingevendas.com.br</li>
           <li>Aguarde aprovacao (geralmente 24h)</li>
         </ol>
