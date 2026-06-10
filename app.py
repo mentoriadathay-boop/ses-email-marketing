@@ -52,6 +52,12 @@ app.config['MAX_CONTENT_LENGTH'] = 5 * 1024 * 1024
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 os.makedirs(IMAGES_FOLDER, exist_ok=True)
 
+@app.errorhandler(413)
+def _erro_payload_grande(e):
+    if request.path.startswith('/ia/'):
+        return jsonify({'erro': 'Conteúdo muito grande para a IA processar (limite de 5MB). Tente remover imagens grandes ou reduzir o texto.'}), 413
+    return e
+
 PIXEL_GIF = (
     b'\x47\x49\x46\x38\x39\x61\x01\x00\x01\x00\x80\x00\x00'
     b'\xff\xff\xff\x00\x00\x00\x21\xf9\x04\x01\x00\x00\x00'

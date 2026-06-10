@@ -446,14 +446,21 @@ async function _gtmAplicarTemplateAoConteudo(templateHtml, nome) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ conteudo_html: conteudoAtual, template_html: templateHtml })
     });
-    const data = await res.json();
-    if (data.erro) {
-      alert('Erro ao aplicar template com IA: ' + data.erro);
+    const texto = await res.text();
+    let data;
+    try { data = JSON.parse(texto); } catch (parseErr) {
+      console.error('Resposta não-JSON de /ia/aplicar-template:', res.status, texto);
+      alert('Erro ao aplicar template com IA (resposta inválida do servidor, status ' + res.status + '). Veja o console para detalhes.');
+      return;
+    }
+    if (!res.ok || data.erro) {
+      alert('Erro ao aplicar template com IA: ' + (data.erro || ('status ' + res.status)));
       return;
     }
     showHtmlInEditor(_aiTarget.containerId, _aiTarget.textareaId, data.html, _aiTarget.subjectId, nome);
     showToast('Template aplicado ao seu conteúdo!', 'success');
   } catch (e) {
-    alert('Erro ao aplicar template com IA.');
+    console.error('Erro de rede em /ia/aplicar-template:', e);
+    alert('Erro ao aplicar template com IA: ' + e.message);
   }
 }
