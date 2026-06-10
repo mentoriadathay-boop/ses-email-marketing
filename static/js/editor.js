@@ -230,6 +230,83 @@ function showHtmlInEditor(containerId, textareaId, html, subjectId, subjectValue
 }
 
 // ─────────────────────────────────────────────
+// Editar Textos de um HTML completo (template/IA)
+// ─────────────────────────────────────────────
+let _editTextsTarget = null;
+
+const _NAO_EDITAVEIS = ['SCRIPT', 'STYLE', 'BR', 'IMG', 'HR', 'INPUT', 'SELECT', 'OPTION', 'HEAD', 'TITLE', 'META', 'LINK'];
+
+function _getEditableTextEls(doc) {
+  return Array.from(doc.body.querySelectorAll('*')).filter(el => {
+    if (_NAO_EDITAVEIS.includes(el.tagName)) return false;
+    const hasElementChild = Array.from(el.childNodes).some(n => n.nodeType === 1);
+    if (hasElementChild) return false;
+    const text = (el.textContent || '').trim();
+    return text.length > 0;
+  });
+}
+
+function editTextsModal(containerId, textareaId) {
+  const textarea = document.getElementById(textareaId);
+  const html = (textarea && textarea.value) || '';
+  if (!html.trim()) { alert('Não há conteúdo no e-mail ainda.'); return; }
+
+  const doc = new DOMParser().parseFromString(html, 'text/html');
+  const els = _getEditableTextEls(doc);
+  if (!els.length) {
+    alert('Nenhum texto editável encontrado neste e-mail.');
+    return;
+  }
+
+  const list = document.getElementById('editTextsList');
+  list.innerHTML = els.map((el, i) => {
+    const tag = el.tagName.toLowerCase();
+    const text = el.textContent.trim();
+    const rows = text.length > 100 ? 4 : (text.length > 40 ? 2 : 1);
+    return `
+      <div class="mb-2">
+        <label class="form-label small text-muted mb-1">&lt;${tag}&gt;</label>
+        <textarea class="form-control form-control-sm edit-text-value" data-idx="${i}" rows="${rows}">${_escapeHtml(text)}</textarea>
+      </div>`;
+  }).join('');
+
+  _editTextsTarget = { containerId, textareaId };
+  new bootstrap.Modal(document.getElementById('modalEditTexts')).show();
+}
+
+function applyEditTexts() {
+  if (!_editTextsTarget) return;
+  const textarea = document.getElementById(_editTextsTarget.textareaId);
+  const html = (textarea && textarea.value) || '';
+  const doc = new DOMParser().parseFromString(html, 'text/html');
+  const els = _getEditableTextEls(doc);
+
+  document.querySelectorAll('#editTextsList .edit-text-value').forEach(ta => {
+    const idx = parseInt(ta.dataset.idx, 10);
+    if (els[idx]) els[idx].textContent = ta.value;
+  });
+
+  let newHtml;
+  if (/^<!DOCTYPE/i.test(html)) {
+    newHtml = '<!DOCTYPE html>\n' + doc.documentElement.outerHTML;
+  } else if (/^<html/i.test(html)) {
+    newHtml = doc.documentElement.outerHTML;
+  } else {
+    newHtml = doc.body.innerHTML;
+  }
+
+  textarea.value = newHtml;
+  _rawHtmlContainers.add(_editTextsTarget.containerId);
+
+  bootstrap.Modal.getInstance(document.getElementById('modalEditTexts')).hide();
+
+  const previewWrap = document.getElementById('preview-' + _editTextsTarget.containerId);
+  if (previewWrap && !previewWrap.classList.contains('d-none')) {
+    editorTab('preview', _editTextsTarget.containerId, _editTextsTarget.textareaId);
+  }
+}
+
+// ─────────────────────────────────────────────
 // Editar Links e Botões (CTAs) de um HTML completo (template/IA)
 // ─────────────────────────────────────────────
 let _editLinksTarget = null;
@@ -456,6 +533,9 @@ function initStepEditor(stepDiv) {
   );
   stepDiv.querySelector('.btn-edit-links')?.setAttribute(
     'onclick', `editLinksModal('${containerId}','${textareaId}')`
+  );
+  stepDiv.querySelector('.btn-edit-texts')?.setAttribute(
+    'onclick', `editTextsModal('${containerId}','${textareaId}')`
   );
 
   initEditor({ containerId, textareaId, subjectId, autoSignature: false });

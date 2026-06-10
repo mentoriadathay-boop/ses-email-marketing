@@ -125,6 +125,28 @@
   {% include '_modal_ia.html' %}
   {% include '_modal_templates_galeria.html' %}
 
+  <!-- Modal Editar Textos -->
+  <div class="modal fade" id="modalEditTexts" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title"><i class="bi bi-textarea-t me-2"></i>Editar Textos do E-mail</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <p class="text-muted small mb-3">
+            Edite os textos do e-mail (títulos, parágrafos, botões) sem mexer no código HTML. As cores, imagens e o layout são mantidos.
+          </p>
+          <div id="editTextsList" style="max-height:60vh;overflow-y:auto;"></div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+          <button type="button" class="btn btn-primary" onclick="applyEditTexts()">Aplicar</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- Modal Editar Links e Botões -->
   <div class="modal fade" id="modalEditLinks" tabindex="-1">
     <div class="modal-dialog">

@@ -2341,7 +2341,7 @@ Kit de Marca — {kit['name']}:
     if imagem_url:
         imagem_info = f'\nInserir esta imagem no corpo: <img src="{imagem_url}" alt="imagem" style="max-width:100%;border-radius:8px;margin:16px 0;">'
 
-    prompt = f"""Crie um email profissional de marketing em HTML com as seguintes características:
+    prompt = f"""Crie um email profissional de marketing em HTML, com conteúdo RICO, ESPECÍFICO e APROFUNDADO — nada de texto genérico ou raso.
 
 Público-alvo: {dados.get('publico', '')}
 Faixa etária: {dados.get('faixa_etaria', '')}
@@ -2353,22 +2353,32 @@ Resultado esperado: {dados.get('resultado', '')}
 Formato: {dados.get('formato', '')}
 {kit_info}{imagem_info}
 
+Estrutura de conteúdo obrigatória (adapte a redação ao tema e ao tom de voz, mas siga esta profundidade):
+1. Cabeçalho colorido com o nome da marca/tema do email
+2. Saudação personalizada com {{nome}} + abertura que conecte imediatamente com a dor, desejo ou contexto do público
+3. Parágrafo(s) de desenvolvimento (pelo menos 2) explicando o "porquê" e o "como" do tema, com exemplos concretos, dados ou cenários — não apenas afirmações genéricas
+4. Uma lista (<ul>/<ol>) com 3 a 5 itens (benefícios, passos, dicas ou erros comuns) relacionados ao tema, cada item com uma frase explicativa, não só um título
+5. Quando o objetivo permitir, inclua um bloco de prova social/autoridade (depoimento, dado numérico ou resultado) coerente com o tema
+6. Botão CTA em destaque, com texto persuasivo específico ao objetivo, href="#LINK_CTA"
+7. Pós-CTA: um parágrafo de reforço (P.S. ou observação extra) com senso de urgência, benefício extra ou convite à resposta
+8. Assinatura pessoal (nome + cargo) coerente com o kit de marca, se houver
+9. Rodapé com nome da empresa e redes sociais como emojis clicáveis
+
 Instruções obrigatórias:
 - Retorne APENAS o código HTML, sem explicações, sem markdown, sem blocos ```
 - Email responsivo, máximo 600px de largura, centralizado
 - Use SOMENTE inline CSS (style="...") — nenhuma tag <style> ou <link>
 - Cabeçalho colorido com a cor primária {primary_color}
-- Botão CTA claro com href="#LINK_CTA"
-- Rodapé com nome da empresa e redes sociais como emojis clicáveis
 - Use {{nome}} onde o destinatário deve ser personalizado
-- Estrutura: wrapper 600px → cabeçalho colorido → saudação com {{nome}} → corpo → CTA → assinatura → rodapé
+- O corpo do email deve ter o equivalente a 250-400 palavras de texto corrido, com profundidade real — evite frases genéricas como "Temos uma novidade incrível para você"
+- Varie a formatação visual (parágrafos, lista, bloco de destaque) para facilitar a leitura
 """
 
     try:
         client = _anthropic.Anthropic(api_key=api_key)
         resp = client.messages.create(
             model='claude-haiku-4-5-20251001',
-            max_tokens=4096,
+            max_tokens=8000,
             messages=[{'role': 'user', 'content': prompt}]
         )
         html = resp.content[0].text.strip()
