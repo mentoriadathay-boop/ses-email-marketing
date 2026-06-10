@@ -2450,8 +2450,9 @@ Template visual de referência (use o layout, cores, fontes, estrutura e seçõe
 {template}
 
 Instruções:
-- Gere um novo HTML de e-mail usando o layout/cores/estilo/estrutura do TEMPLATE acima.
-- Substitua os textos de exemplo do template pelo conteúdo real do usuário, adaptando a redação para caber na estrutura das seções do template (mas sem perder informação importante do conteúdo original).
+- Gere um novo HTML de e-mail usando o layout/cores/estilo/estrutura visual do TEMPLATE acima (cabeçalho, cores, tipografia, blocos, rodapé).
+- NÃO resuma, corte, reduza ou encurte o texto do usuário. TODO o conteúdo de texto do usuário deve aparecer no resultado final, na íntegra — palavra por palavra. É proibido remover frases ou parágrafos para "caber" no template.
+- Substitua os textos de EXEMPLO/placeholder do template (títulos genéricos, parágrafos de demonstração) pelo conteúdo real do usuário. Se o conteúdo do usuário for mais longo que o espaço do template, ADAPTE/EXPANDA a estrutura do template (adicione mais parágrafos, itens de lista ou seções repetindo o mesmo estilo visual) em vez de cortar texto.
 - Preserve TODAS as imagens (tags <img src="...">) e links (atributos href) que o usuário já tinha no conteúdo original, posicionando-os nos lugares apropriados do template.
 - Mantenha {{nome}} para personalização.
 - Retorne APENAS o HTML completo resultante, sem explicações, sem markdown, sem blocos ```.
