@@ -230,6 +230,79 @@ function showHtmlInEditor(containerId, textareaId, html, subjectId, subjectValue
 }
 
 // ─────────────────────────────────────────────
+// Editar Links e Botões (CTAs) de um HTML completo (template/IA)
+// ─────────────────────────────────────────────
+let _editLinksTarget = null;
+
+function _escapeHtml(str) {
+  const div = document.createElement('div');
+  div.textContent = str || '';
+  return div.innerHTML;
+}
+
+function editLinksModal(containerId, textareaId) {
+  const textarea = document.getElementById(textareaId);
+  const html = (textarea && textarea.value) || '';
+  if (!html.trim()) { alert('Não há conteúdo no e-mail ainda.'); return; }
+
+  const doc = new DOMParser().parseFromString(html, 'text/html');
+  const links = Array.from(doc.querySelectorAll('a[href]'));
+  if (!links.length) {
+    alert('Nenhum link/botão encontrado neste e-mail.');
+    return;
+  }
+
+  const list = document.getElementById('editLinksList');
+  list.innerHTML = links.map((a, i) => {
+    const label = (a.textContent || '').trim().replace(/\s+/g, ' ').slice(0, 60) || '(sem texto)';
+    const href = a.getAttribute('href') || '';
+    return `
+      <div class="mb-2 p-2 border rounded">
+        <label class="form-label small text-muted mb-1">Botão/link: <strong>${_escapeHtml(label)}</strong></label>
+        <input type="text" class="form-control form-control-sm edit-link-href" data-idx="${i}"
+               value="${_escapeHtml(href)}" placeholder="https://...">
+      </div>`;
+  }).join('');
+
+  _editLinksTarget = { containerId, textareaId };
+  new bootstrap.Modal(document.getElementById('modalEditLinks')).show();
+}
+
+function applyEditLinks() {
+  if (!_editLinksTarget) return;
+  const textarea = document.getElementById(_editLinksTarget.textareaId);
+  const html = (textarea && textarea.value) || '';
+  const doc = new DOMParser().parseFromString(html, 'text/html');
+  const links = Array.from(doc.querySelectorAll('a[href]'));
+
+  document.querySelectorAll('#editLinksList .edit-link-href').forEach(inp => {
+    const idx = parseInt(inp.dataset.idx, 10);
+    const val = inp.value.trim();
+    if (links[idx] && val) links[idx].setAttribute('href', val);
+  });
+
+  let newHtml;
+  if (/^<!DOCTYPE/i.test(html)) {
+    newHtml = '<!DOCTYPE html>\n' + doc.documentElement.outerHTML;
+  } else if (/^<html/i.test(html)) {
+    newHtml = doc.documentElement.outerHTML;
+  } else {
+    newHtml = doc.body.innerHTML;
+  }
+
+  textarea.value = newHtml;
+  _rawHtmlContainers.add(_editLinksTarget.containerId);
+
+  bootstrap.Modal.getInstance(document.getElementById('modalEditLinks')).hide();
+
+  // Atualiza a aba Preview se ela existir, sem trocar a aba atual à força
+  const previewWrap = document.getElementById('preview-' + _editLinksTarget.containerId);
+  if (previewWrap && !previewWrap.classList.contains('d-none')) {
+    editorTab('preview', _editLinksTarget.containerId, _editLinksTarget.textareaId);
+  }
+}
+
+// ─────────────────────────────────────────────
 // Assinatura
 // ─────────────────────────────────────────────
 async function _fetchSignature(quill) {
@@ -380,6 +453,9 @@ function initStepEditor(stepDiv) {
   );
   stepDiv.querySelector('.btn-templates-visuais')?.setAttribute(
     'onclick', `openTemplatesModal('${containerId}','${textareaId}','${subjectId}')`
+  );
+  stepDiv.querySelector('.btn-edit-links')?.setAttribute(
+    'onclick', `editLinksModal('${containerId}','${textareaId}')`
   );
 
   initEditor({ containerId, textareaId, subjectId, autoSignature: false });
