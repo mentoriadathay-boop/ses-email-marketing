@@ -464,8 +464,11 @@ def send_email_brevo(sender, recipient_email, recipient_name, subject, body_html
     configuration = sib_api_v3_sdk.Configuration()
     configuration.api_key['api-key'] = BREVO_API_KEY
     api_instance = sib_api_v3_sdk.TransactionalEmailsApi(sib_api_v3_sdk.ApiClient(configuration))
+    to_entry = {'email': recipient_email}
+    if recipient_name and recipient_name.strip():
+        to_entry['name'] = recipient_name.strip()
     email_obj = sib_api_v3_sdk.SendSmtpEmail(
-        to=[{'email': recipient_email, 'name': recipient_name or ''}],
+        to=[to_entry],
         sender={'email': sender, 'name': get_sender_name()},
         subject=personalized_subject,
         html_content=personalized_body
