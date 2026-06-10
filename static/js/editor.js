@@ -3,6 +3,7 @@
 const _quillMap = new Map();   // containerId -> quill instance
 let _tplTarget = null;         // { quill, subjectId } — editor alvo do modal de templates
 let _tplCache = null;          // cache dos templates da API
+const _rawHtmlContainers = new Set(); // containers cujo textarea contém um HTML completo (template/IA) — não sincronizar a partir do Quill
 
 // ─────────────────────────────────────────────
 // Inicializar editor (Visual + HTML em abas)
@@ -125,6 +126,14 @@ function editorTab(tab, containerId, textareaId) {
   // Captura qual aba estava ativa ANTES de ocultar tudo
   const fromVisual = visualWrap && !visualWrap.classList.contains('d-none');
 
+  // Indo para a aba "Texto" enquanto o conteúdo é um HTML completo (template/IA):
+  // editar visualmente no Quill iria mangling o HTML e perder layout/imagens. Avisa antes.
+  if (tab === 'visual' && _rawHtmlContainers.has(containerId)) {
+    const ok = confirm('Editar na aba "Texto" vai converter este e-mail para um formato simples e pode perder a formatação original (imagens, layout, cores). Deseja continuar?');
+    if (!ok) return;
+    _rawHtmlContainers.delete(containerId);
+  }
+
   [visualWrap, htmlWrap, previewWrap].forEach(el => el && el.classList.add('d-none'));
   [btnVisual, btnHtml, btnPreview].forEach(el => el && el.classList.remove('active'));
 
@@ -182,6 +191,7 @@ function showHtmlInEditor(containerId, textareaId, html, subjectId, subjectValue
   const textarea = document.getElementById(textareaId);
   if (!textarea) return;
   textarea.value = html;
+  _rawHtmlContainers.add(containerId);
 
   if (subjectId && subjectValue) {
     const subjectEl = document.getElementById(subjectId);
@@ -378,6 +388,7 @@ function initStepEditor(stepDiv) {
 // Sincroniza todos os editores antes do submit (garante textareas atualizados)
 function syncAllEditors() {
   _quillMap.forEach((quill, containerId) => {
+    if (_rawHtmlContainers.has(containerId)) return; // mantém HTML completo (template/IA) intacto
     const editorEl = document.getElementById(containerId);
     if (!editorEl) return;
     // O evento text-change já sincroniza continuamente, mas forçamos aqui
