@@ -1,0 +1,51 @@
+<!-- Modal: Galeria de Templates Visuais (12 modelos) -->
+<div class="modal fade" id="modalGaleriaTemplates" tabindex="-1">
+  <div class="modal-dialog modal-xl modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="bi bi-grid-1x2 me-2"></i>Galeria de Templates</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="d-flex gap-2 flex-wrap mb-3">
+          <button type="button" class="btn btn-sm btn-primary gtm-cat-btn" onclick="gtmFiltrarCat('todos',this)">Todos</button>
+          {% for cat in ['Texto Corrido','Vendas','Educacional','Eventos','Reengajamento'] %}
+          <button type="button" class="btn btn-sm btn-outline-secondary gtm-cat-btn" onclick="gtmFiltrarCat('{{ cat }}',this)">{{ cat }}</button>
+          {% endfor %}
+        </div>
+        <div class="row g-3" id="gtmGrade"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Prévia de um template da galeria -->
+<div class="modal fade" id="modalGtmPrevia" tabindex="-1">
+  <div class="modal-dialog modal-xl">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="gtmModalTitulo">Prévia do Template</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body p-0">
+        <iframe id="gtmPreviaFrame" style="width:100%;min-height:600px;border:none;" frameborder="0"></iframe>
+      </div>
+      <div class="modal-footer gap-2">
+        <div class="me-auto d-flex gap-2 align-items-center">
+          <label class="form-label mb-0 small fw-semibold">Kit de Marca:</label>
+          <select id="gtmKitAplicar" class="form-select form-select-sm" style="width:200px;">
+            <option value="">Sem kit</option>
+          </select>
+          <button type="button" class="btn btn-sm btn-outline-primary" onclick="gtmAplicarKit()">Aplicar Kit</button>
+        </div>
+        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Voltar</button>
+        <button type="button" class="btn btn-outline-primary" onclick="gtmPersonalizarComIA()">
+          <i class="bi bi-stars me-1"></i>Personalizar com IA
+        </button>
+        <button type="button" class="btn btn-primary" onclick="gtmUsarTemplate()">
+          <i class="bi bi-check-lg me-1"></i>Usar este Template
+        </button>
+      </div>
+    </div>
+  </div>
+</div>

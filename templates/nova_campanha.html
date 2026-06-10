@@ -72,9 +72,17 @@
               <i class="bi bi-pencil-square me-2 text-primary"></i>Corpo do E-mail
             </h6>
             <div class="d-flex gap-2">
+              <button type="button" class="btn btn-sm btn-outline-primary"
+                      onclick="openAIModal('quill-main','textarea-main','subject')">
+                <i class="bi bi-stars me-1"></i> Criar com IA
+              </button>
+              <button type="button" class="btn btn-sm btn-outline-primary"
+                      onclick="openTemplatesModal('quill-main','textarea-main','subject')">
+                <i class="bi bi-grid-1x2 me-1"></i> Usar Template
+              </button>
               <button type="button" class="btn btn-sm btn-outline-secondary"
                       onclick="openTemplateModal('quill-main','subject')">
-                <i class="bi bi-collection me-1"></i> Usar Template
+                <i class="bi bi-collection me-1"></i> Meus Templates
               </button>
               <button type="button" class="btn btn-sm btn-outline-secondary"
                       onclick="reinserirAssinatura('quill-main')">
@@ -467,7 +475,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 });
 
-// Inicializa editor Quill (com suporte a conteúdo pré-gerado por IA)
+// Inicializa editor Quill (com suporte a conteúdo pré-gerado por IA/template)
 document.addEventListener('DOMContentLoaded', function() {
   const iaHtml = sessionStorage.getItem('ia_html');
   const iaSubject = sessionStorage.getItem('ia_subject');
@@ -485,6 +493,14 @@ document.addEventListener('DOMContentLoaded', function() {
     subjectId: 'subject',
     autoSignature: !iaHtml
   });
+
+  // Vindo da galeria de templates ("Personalizar com IA") — abre o modal de IA
+  // já com o tema pré-preenchido no Passo 3.
+  const aiTema = sessionStorage.getItem('ia_open_ai_tema');
+  if (aiTema) {
+    sessionStorage.removeItem('ia_open_ai_tema');
+    openAIModalComTema('quill-main', 'textarea-main', 'subject', aiTema);
+  }
 });
 </script>
 {% endblock %}

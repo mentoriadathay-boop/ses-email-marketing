@@ -118,9 +118,17 @@
                   <div class="d-flex justify-content-between align-items-center mb-1">
                     <label class="form-label small fw-semibold mb-0">Corpo do E-mail *</label>
                     <div class="d-flex gap-1">
+                      <button type="button" class="btn btn-outline-primary btn-sm py-0 px-2 btn-ai-email"
+                              style="font-size:.7rem">
+                        <i class="bi bi-stars me-1"></i>Criar com IA
+                      </button>
+                      <button type="button" class="btn btn-outline-primary btn-sm py-0 px-2 btn-templates-visuais"
+                              style="font-size:.7rem">
+                        <i class="bi bi-grid-1x2 me-1"></i>Template Visual
+                      </button>
                       <button type="button" class="btn btn-outline-secondary btn-sm py-0 px-2 btn-template"
                               style="font-size:.7rem">
-                        <i class="bi bi-collection me-1"></i>Template
+                        <i class="bi bi-collection me-1"></i>Meus Templates
                       </button>
                       <button type="button" class="btn btn-outline-secondary btn-sm py-0 px-2 btn-assinatura"
                               style="font-size:.7rem">
@@ -244,9 +252,17 @@
       <div class="d-flex justify-content-between align-items-center mb-1">
         <label class="form-label small fw-semibold mb-0">Corpo do E-mail *</label>
         <div class="d-flex gap-1">
+          <button type="button" class="btn btn-outline-primary btn-sm py-0 px-2 btn-ai-email"
+                  style="font-size:.7rem">
+            <i class="bi bi-stars me-1"></i>Criar com IA
+          </button>
+          <button type="button" class="btn btn-outline-primary btn-sm py-0 px-2 btn-templates-visuais"
+                  style="font-size:.7rem">
+            <i class="bi bi-grid-1x2 me-1"></i>Template Visual
+          </button>
           <button type="button" class="btn btn-outline-secondary btn-sm py-0 px-2 btn-template"
                   style="font-size:.7rem">
-            <i class="bi bi-collection me-1"></i>Template
+            <i class="bi bi-collection me-1"></i>Meus Templates
           </button>
           <button type="button" class="btn btn-outline-secondary btn-sm py-0 px-2 btn-assinatura"
                   style="font-size:.7rem">
@@ -356,19 +372,19 @@ function removerPasso(btn) {
 document.addEventListener('DOMContentLoaded', function() {
   document.querySelectorAll('.passo-item').forEach(div => initStepEditor(div));
   atualizarNumeros();
-  // Pré-preenche o primeiro passo com conteúdo gerado pela IA, se disponível
+  // Pré-preenche o primeiro passo com conteúdo gerado pela IA/template, se disponível
   const iaHtml = sessionStorage.getItem('ia_html');
   const iaSubject = sessionStorage.getItem('ia_subject');
   if (iaHtml) {
     const primeiroStep = document.querySelector('.step-body-textarea');
-    if (primeiroStep) primeiroStep.value = iaHtml;
-    const quillId = primeiroStep && primeiroStep.id ? primeiroStep.id.replace('textarea-', 'quill-') : null;
-    if (quillId && _quillMap.has(quillId)) {
-      _quillMap.get(quillId).clipboard.dangerouslyPasteHTML(iaHtml);
+    const primeiroSubjectInput = document.querySelector('input[name="step_subject[]"]');
+    if (primeiroStep) {
+      const containerId = primeiroStep.id.replace('textarea-', 'quill-');
+      showHtmlInEditor(containerId, primeiroStep.id, iaHtml, primeiroSubjectInput?.id, iaSubject);
     }
     sessionStorage.removeItem('ia_html');
-  }
-  if (iaSubject) {
+    if (iaSubject) sessionStorage.removeItem('ia_subject');
+  } else if (iaSubject) {
     const primeiroSubject = document.querySelector('input[name="step_subject[]"]');
     if (primeiroSubject) primeiroSubject.value = iaSubject;
     sessionStorage.removeItem('ia_subject');

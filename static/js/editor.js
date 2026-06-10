@@ -39,7 +39,13 @@ function initEditor(cfg) {
 
   // Carrega conteúdo inicial
   const inicial = textarea.value.trim();
-  if (inicial) {
+  // Documentos HTML completos (gerados por IA ou templates) não devem ser
+  // colados no Quill — ele sanitiza/perde o layout. Mantemos o textarea
+  // intacto e mostramos via showHtmlInEditor (aba Preview/HTML).
+  const isFullHtmlDoc = /^<!DOCTYPE|^<html/i.test(inicial);
+  if (isFullHtmlDoc) {
+    showHtmlInEditor(cfg.containerId, cfg.textareaId, inicial);
+  } else if (inicial) {
     quill.clipboard.dangerouslyPasteHTML(inicial);
   } else if (cfg.autoSignature) {
     // carrega assinatura apenas se o campo está vazio
@@ -164,6 +170,52 @@ function editorTab(tab, containerId, textareaId) {
     if (quill) quill.clipboard.dangerouslyPasteHTML(textarea.value || '');
     visualWrap.classList.remove('d-none');
     btnVisual.classList.add('active');
+  }
+}
+
+// ─────────────────────────────────────────────
+// Insere HTML completo (gerado por IA ou template) direto no editor,
+// sem passar pelo Quill (que sanitiza/mangla documentos HTML completos),
+// e mostra a aba Preview já renderizada.
+// ─────────────────────────────────────────────
+function showHtmlInEditor(containerId, textareaId, html, subjectId, subjectValue) {
+  const textarea = document.getElementById(textareaId);
+  if (!textarea) return;
+  textarea.value = html;
+
+  if (subjectId && subjectValue) {
+    const subjectEl = document.getElementById(subjectId);
+    if (subjectEl && !subjectEl.value.trim()) subjectEl.value = subjectValue;
+  }
+
+  const visualWrap = document.getElementById('visual-' + containerId);
+  const htmlWrap = document.getElementById('html-' + containerId);
+  const previewWrap = document.getElementById('preview-' + containerId);
+  const btnVisual = document.getElementById('tab-btn-visual-' + containerId);
+  const btnHtml = document.getElementById('tab-btn-html-' + containerId);
+  const btnPreview = document.getElementById('tab-btn-preview-' + containerId);
+
+  [visualWrap, htmlWrap].forEach(el => el && el.classList.add('d-none'));
+  [btnVisual, btnHtml].forEach(el => el && el.classList.remove('active'));
+
+  if (previewWrap) {
+    previewWrap.classList.remove('d-none');
+    btnPreview && btnPreview.classList.add('active');
+    const iframe = previewWrap.querySelector('iframe');
+    if (iframe) {
+      const base = `<base href="${window.location.origin}/">`;
+      const out = html.includes('<base') ? html : base + html;
+      iframe.removeAttribute('srcdoc');
+      iframe.contentDocument.open();
+      iframe.contentDocument.write(out);
+      iframe.contentDocument.close();
+      setTimeout(() => {
+        try {
+          const h = iframe.contentDocument.body?.scrollHeight || 0;
+          if (h > 0) iframe.style.height = (h + 24) + 'px';
+        } catch (e) {}
+      }, 150);
+    }
   }
 }
 
@@ -312,6 +364,12 @@ function initStepEditor(stepDiv) {
   );
   stepDiv.querySelector('.btn-assinatura')?.setAttribute(
     'onclick', `reinserirAssinatura('${containerId}')`
+  );
+  stepDiv.querySelector('.btn-ai-email')?.setAttribute(
+    'onclick', `openAIModal('${containerId}','${textareaId}','${subjectId}')`
+  );
+  stepDiv.querySelector('.btn-templates-visuais')?.setAttribute(
+    'onclick', `openTemplatesModal('${containerId}','${textareaId}','${subjectId}')`
   );
 
   initEditor({ containerId, textareaId, subjectId, autoSignature: false });

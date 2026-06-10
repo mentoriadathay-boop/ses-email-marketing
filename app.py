@@ -1131,7 +1131,9 @@ def upload_imagem():
     ext = file.filename.rsplit('.', 1)[1].lower()
     filename = f"{uuid.uuid4().hex}.{ext}"
     file.save(os.path.join(IMAGES_FOLDER, filename))
-    return jsonify({'url': f'{APP_URL}/uploads/imagens/{filename}'})
+    # Usa APP_URL se configurada (Railway), senão deduz a partir da requisição atual
+    base_url = APP_URL if os.environ.get('APP_URL') else request.host_url.rstrip('/')
+    return jsonify({'url': f'{base_url}/uploads/imagens/{filename}'})
 
 @app.route('/uploads/imagens/<path:filename>')
 def serve_imagem(filename):
@@ -2295,13 +2297,6 @@ def api_brand_kits():
 
 # ── Email com IA ──────────────────────────────────────────────────────────────
 
-@app.route('/email-ia')
-def email_ia():
-    conn = get_db()
-    kits = conn.execute('SELECT id, name FROM brand_kits ORDER BY name').fetchall()
-    conn.close()
-    return render_template('email_ia.html', kits=kits)
-
 @app.route('/ia/gerar-email', methods=['POST'])
 def ia_gerar_email():
     if not ANTHROPIC_OK:
@@ -2456,6 +2451,9 @@ def health():
         'status': 'ok' if _db_ready else 'error',
         'db_url_set': bool(DATABASE_URL),
         'brevo_set': bool(BREVO_API_KEY),
+        'anthropic_set': bool(os.environ.get('ANTHROPIC_API_KEY', '')) and ANTHROPIC_OK,
+        'unsplash_set': bool(UNSPLASH_ACCESS_KEY),
+        'app_url': APP_URL,
         'db_error': _db_error if not _db_ready else None,
         'scheduler_running': scheduler_running,
     }), 200 if _db_ready else 503

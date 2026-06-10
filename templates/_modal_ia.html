@@ -1,0 +1,236 @@
+<!-- Modal: Assistente de Email com IA (wizard de 6 passos) -->
+<div class="modal fade" id="modalCriarIA" tabindex="-1" data-bs-backdrop="static">
+  <div class="modal-dialog modal-xl modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="bi bi-stars me-2"></i>Criar Email com IA</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="row g-4">
+          <!-- Coluna do formulário -->
+          <div class="col-lg-5">
+            <!-- Steps indicator -->
+            <div class="d-flex align-items-center mb-3 gap-1" id="iamStepsBar">
+              {% for i in range(1,7) %}
+              <div class="step-dot" id="iamDot{{ i }}"
+                   style="flex:1;height:4px;border-radius:2px;background:{% if i==1 %}#4361ee{% else %}#e0e0e0{% endif %};transition:background .3s;">
+              </div>
+              {% endfor %}
+            </div>
+            <div class="text-muted small mb-3" id="iamStepLabel">Passo 1 de 6 — Sobre o público</div>
+
+            <!-- PASSO 1: Público -->
+            <div id="iamStep1">
+              <h6 class="fw-bold mb-3">Quem vai receber este email?</h6>
+              <div class="mb-3">
+                <label class="form-label small fw-semibold">Descreva o público-alvo</label>
+                <input type="text" id="iamPublico" class="form-control" placeholder="Ex: donos de pequenas empresas do setor de moda">
+              </div>
+              <div class="mb-3">
+                <label class="form-label small fw-semibold">Faixa etária aproximada</label>
+                <select id="iamFaixaEtaria" class="form-select">
+                  <option value="Todas as idades">Todas as idades</option>
+                  <option value="18-25 anos">18-25 anos</option>
+                  <option value="26-35 anos">26-35 anos</option>
+                  <option value="36-45 anos">36-45 anos</option>
+                  <option value="46-60 anos">46-60 anos</option>
+                  <option value="60+ anos">60+ anos</option>
+                </select>
+              </div>
+              <div class="mb-3">
+                <label class="form-label small fw-semibold">Nível de conhecimento sobre o tema</label>
+                <div class="d-flex gap-2">
+                  {% for n in ['Iniciante','Intermediário','Avançado'] %}
+                  <div class="form-check flex-fill border rounded p-2 text-center" style="cursor:pointer"
+                       onclick="iamSelectRadio('iam_nivel','{{ n }}',this)">
+                    <input class="form-check-input" type="radio" name="iam_nivel" value="{{ n }}" id="iamNivel{{ loop.index }}" style="display:none">
+                    <label class="form-check-label small fw-semibold" for="iamNivel{{ loop.index }}" style="cursor:pointer">{{ n }}</label>
+                  </div>
+                  {% endfor %}
+                </div>
+              </div>
+            </div>
+
+            <!-- PASSO 2: Objetivo -->
+            <div id="iamStep2" class="d-none">
+              <h6 class="fw-bold mb-3">Qual é o objetivo deste email?</h6>
+              <div class="row g-2">
+                {% set objetivos = [('Educacional','📚'),('Inspiracional','💡'),('Conversão de vendas','🛒'),('Oferta especial','🎁'),('Lançamento','📣'),('Relacionamento','🤝'),('Convite','📅'),('Reengajamento','🔄')] %}
+                {% for obj, emoji in objetivos %}
+                <div class="col-6">
+                  <div class="form-check border rounded p-2" style="cursor:pointer" onclick="iamToggleObjetivo('{{ obj }}',this)">
+                    <input class="form-check-input iam-obj-chk" type="checkbox" value="{{ obj }}" style="display:none">
+                    <label class="form-check-label small" style="cursor:pointer">{{ emoji }} {{ obj }}</label>
+                  </div>
+                </div>
+                {% endfor %}
+                <div class="col-12">
+                  <input type="text" id="iamObjetivoCustom" class="form-control form-control-sm" placeholder="✏️ Outro objetivo...">
+                </div>
+              </div>
+            </div>
+
+            <!-- PASSO 3: Tema e contexto -->
+            <div id="iamStep3" class="d-none">
+              <h6 class="fw-bold mb-3">Sobre o que é este email?</h6>
+              <div class="mb-3">
+                <label class="form-label small fw-semibold">Tema principal</label>
+                <input type="text" id="iamTema" class="form-control" placeholder="Ex: como aumentar vendas com redes sociais">
+              </div>
+              <div class="mb-3">
+                <label class="form-label small fw-semibold">Contexto adicional</label>
+                <textarea id="iamContexto" class="form-control" rows="3"
+                          placeholder="Ex: estamos lançando um curso e quero preparar o público antes..."></textarea>
+              </div>
+              <div class="mb-3">
+                <label class="form-label small fw-semibold">O que você quer que o leitor faça após ler?</label>
+                <input type="text" id="iamResultado" class="form-control" placeholder="Ex: clicar no link e se inscrever na aula gratuita">
+              </div>
+            </div>
+
+            <!-- PASSO 4: Formato -->
+            <div id="iamStep4" class="d-none">
+              <h6 class="fw-bold mb-3">Como deve ser o formato do email?</h6>
+              <div class="row g-2">
+                {% set formatos = [('Texto corrido','📝'),('Com títulos e subtítulos','📋'),('Checklist','✅'),('Com cases reais','📖'),('Email de vendas','🎯'),('Newsletter','💌'),('Curto e direto','⚡'),('Personalizado','✏️')] %}
+                {% for fmt, emoji in formatos %}
+                <div class="col-6">
+                  <div class="form-check border rounded p-2" style="cursor:pointer"
+                       onclick="iamSelectRadio('iam_formato','{{ fmt }}',this)">
+                    <input class="form-check-input" type="radio" name="iam_formato" value="{{ fmt }}" style="display:none">
+                    <label class="form-check-label small" style="cursor:pointer">{{ emoji }} {{ fmt }}</label>
+                  </div>
+                </div>
+                {% endfor %}
+              </div>
+            </div>
+
+            <!-- PASSO 5: Kit de Marca -->
+            <div id="iamStep5" class="d-none">
+              <h6 class="fw-bold mb-3">Kit de Marca <span class="badge bg-secondary">Opcional</span></h6>
+              <p class="text-muted small">Selecione um kit para aplicar cores, fontes e tom de voz da sua marca automaticamente.</p>
+              <select id="iamKitId" class="form-select mb-3">
+                <option value="">Sem kit de marca (cores padrão)</option>
+              </select>
+              <div id="iamSemKits" class="alert alert-light border small d-none">
+                Nenhum kit criado. <a href="/kit-marca" target="_blank">Criar kit de marca</a>
+              </div>
+            </div>
+
+            <!-- PASSO 6: Imagem -->
+            <div id="iamStep6" class="d-none">
+              <h6 class="fw-bold mb-3">Imagem no email <span class="badge bg-secondary">Opcional</span></h6>
+              <div class="form-check form-switch mb-3">
+                <input class="form-check-input" type="checkbox" id="iamToggleImagem" onchange="iamToggleImagemSection()">
+                <label class="form-check-label" for="iamToggleImagem">Incluir imagem no email</label>
+              </div>
+              <div id="iamImagemSection" class="d-none">
+                <ul class="nav nav-tabs nav-sm mb-3" id="iamImgTabs">
+                  <li class="nav-item">
+                    <button type="button" class="nav-link active py-1 small" onclick="iamSwitchImgTab('upload',this)">Upload</button>
+                  </li>
+                  <li class="nav-item">
+                    <button type="button" class="nav-link py-1 small" onclick="iamSwitchImgTab('unsplash',this)">Buscar no Unsplash</button>
+                  </li>
+                </ul>
+                <!-- Upload -->
+                <div id="iamTabUpload">
+                  <div class="mb-2">
+                    <button type="button" class="btn btn-outline-secondary btn-sm" onclick="document.getElementById('iamImgUploadInput').click()">
+                      <i class="bi bi-upload me-1"></i>Escolher arquivo
+                    </button>
+                    <input type="file" id="iamImgUploadInput" class="d-none" accept="image/*" onchange="iamUploadImagem(this)">
+                  </div>
+                  <div id="iamUploadPreview"></div>
+                </div>
+                <!-- Unsplash -->
+                <div id="iamTabUnsplash" class="d-none">
+                  <div class="input-group mb-2">
+                    <input type="text" id="iamUnsplashQuery" class="form-control form-control-sm"
+                           placeholder="Descreva a imagem... ex: team meeting office">
+                    <button type="button" class="btn btn-primary btn-sm" onclick="iamBuscarUnsplash()">
+                      <i class="bi bi-search"></i>
+                    </button>
+                  </div>
+                  <div id="iamUnsplashResults" class="row g-1"></div>
+                </div>
+              </div>
+              <input type="hidden" id="iamImagemUrl" value="">
+            </div>
+
+            <!-- Botões de navegação -->
+            <div class="d-flex gap-2 mt-4">
+              <button type="button" class="btn btn-outline-secondary" id="iamBtnAnterior" onclick="iamMudarStep(-1)" style="display:none">
+                <i class="bi bi-chevron-left"></i> Anterior
+              </button>
+              <button type="button" class="btn btn-primary flex-fill" id="iamBtnProximo" onclick="iamMudarStep(1)">
+                Próximo <i class="bi bi-chevron-right"></i>
+              </button>
+              <button type="button" class="btn btn-success flex-fill d-none" id="iamBtnGerar" onclick="iamGerarEmail()">
+                <i class="bi bi-stars me-1"></i> Gerar Email com IA
+              </button>
+            </div>
+          </div>
+
+          <!-- Coluna do resultado -->
+          <div class="col-lg-7">
+            <!-- Placeholder inicial -->
+            <div id="iamPlaceholder" class="card h-100 d-flex align-items-center justify-content-center"
+                 style="min-height:400px;border:2px dashed #dee2e6;box-shadow:none;">
+              <div class="text-center text-muted p-4">
+                <i class="bi bi-stars display-4 mb-3 d-block" style="color:#c0c0c0"></i>
+                <h6>Seu email aparecerá aqui</h6>
+                <p class="small">Preencha o formulário e clique em <strong>Gerar Email com IA</strong></p>
+              </div>
+            </div>
+
+            <!-- Loading -->
+            <div id="iamLoading" class="card d-none" style="min-height:400px;box-shadow:none;border:1px solid #eee;">
+              <div class="card-body d-flex flex-column align-items-center justify-content-center gap-3">
+                <div class="spinner-border text-primary" style="width:48px;height:48px;"></div>
+                <div class="text-center">
+                  <h6 class="mb-1">Gerando seu email...</h6>
+                  <small class="text-muted" id="iamMsgGerando">Claude está criando o email personalizado</small>
+                </div>
+              </div>
+            </div>
+
+            <!-- Resultado -->
+            <div id="iamResultado" class="d-none">
+              <div class="card mb-3" style="box-shadow:none;border:1px solid #eee;">
+                <div class="card-body p-0">
+                  <div class="d-flex align-items-center justify-content-between p-3 border-bottom">
+                    <div class="d-flex gap-2">
+                      <button type="button" class="btn btn-sm btn-outline-secondary active" id="iamBtnTabPreview" onclick="iamSwitchResultTab('preview')">
+                        <i class="bi bi-eye me-1"></i>Preview
+                      </button>
+                      <button type="button" class="btn btn-sm btn-outline-secondary" id="iamBtnTabHtml" onclick="iamSwitchResultTab('html')">
+                        <i class="bi bi-code-slash me-1"></i>HTML
+                      </button>
+                    </div>
+                    <button type="button" class="btn btn-sm btn-outline-secondary" onclick="iamGerarEmail()" title="Gerar nova versão">
+                      <i class="bi bi-arrow-clockwise me-1"></i>Regerar
+                    </button>
+                  </div>
+                  <div id="iamTabPreview" style="padding:0">
+                    <iframe id="iamPreviewFrame" style="width:100%;min-height:420px;border:none;display:block;" frameborder="0"></iframe>
+                  </div>
+                  <div id="iamTabHtml" class="d-none p-3">
+                    <textarea id="iamHtmlOutput" class="form-control font-monospace" rows="16" style="font-size:12px;"></textarea>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Fechar</button>
+        <button type="button" class="btn btn-primary d-none" id="iamBtnInserir" onclick="iamInserirNoEditor()">
+          <i class="bi bi-check-lg me-1"></i> Inserir no Editor
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
