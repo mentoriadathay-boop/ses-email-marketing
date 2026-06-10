@@ -406,13 +406,54 @@ function gtmPersonalizarComIA() {
 
 function gtmUsarTemplate() {
   if (!_gtmTemplateAtivo || !_aiTarget) return;
-  showHtmlInEditor(_aiTarget.containerId, _aiTarget.textareaId, _gtmTemplateAtivo.html, _aiTarget.subjectId, _gtmTemplateAtivo.name);
+  _gtmAplicarTemplateAoConteudo(_gtmTemplateAtivo.html, _gtmTemplateAtivo.name);
   bootstrap.Modal.getInstance(document.getElementById('modalGtmPrevia'))?.hide();
 }
 
 function gtmUsarDireto(id) {
   const tpl = _TEMPLATES.find(t => t.id === id);
   if (!tpl || !_aiTarget) return;
-  showHtmlInEditor(_aiTarget.containerId, _aiTarget.textareaId, tpl.html, _aiTarget.subjectId, tpl.name);
+  _gtmAplicarTemplateAoConteudo(tpl.html, tpl.name);
   bootstrap.Modal.getInstance(document.getElementById('modalGaleriaTemplates'))?.hide();
+}
+
+// Se o editor de destino já tem conteúdo (texto/imagens/links do usuário),
+// pergunta se deve usar a IA para encaixar esse conteúdo no layout do
+// template escolhido. Caso contrário, apenas insere o template.
+async function _gtmAplicarTemplateAoConteudo(templateHtml, nome) {
+  const conteudoAtual = getEditorContent(_aiTarget.containerId, _aiTarget.textareaId);
+
+  if (!conteudoAtual.trim()) {
+    showHtmlInEditor(_aiTarget.containerId, _aiTarget.textareaId, templateHtml, _aiTarget.subjectId, nome);
+    return;
+  }
+
+  const usarIA = confirm(
+    'Você já tem conteúdo neste e-mail.\n\n' +
+    'OK = aplicar o layout "' + nome + '" usando IA para encaixar seu texto, imagens e links nesse novo visual\n' +
+    'Cancelar = substituir tudo pelo template (perde o conteúdo atual)'
+  );
+
+  if (!usarIA) {
+    showHtmlInEditor(_aiTarget.containerId, _aiTarget.textareaId, templateHtml, _aiTarget.subjectId, nome);
+    return;
+  }
+
+  showToast('Aplicando o template com IA, aguarde...', 'info');
+  try {
+    const res = await fetch('/ia/aplicar-template', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ conteudo_html: conteudoAtual, template_html: templateHtml })
+    });
+    const data = await res.json();
+    if (data.erro) {
+      alert('Erro ao aplicar template com IA: ' + data.erro);
+      return;
+    }
+    showHtmlInEditor(_aiTarget.containerId, _aiTarget.textareaId, data.html, _aiTarget.subjectId, nome);
+    showToast('Template aplicado ao seu conteúdo!', 'success');
+  } catch (e) {
+    alert('Erro ao aplicar template com IA.');
+  }
 }

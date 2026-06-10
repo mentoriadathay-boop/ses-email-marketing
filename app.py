@@ -2388,6 +2388,88 @@ Instruções obrigatórias:
     except Exception as e:
         return jsonify({'erro': str(e)}), 500
 
+@app.route('/ia/melhorar-texto', methods=['POST'])
+def ia_melhorar_texto():
+    if not ANTHROPIC_OK:
+        return jsonify({'erro': 'Anthropic SDK não instalado.'}), 500
+    api_key = os.environ.get('ANTHROPIC_API_KEY', '')
+    if not api_key:
+        return jsonify({'erro': 'ANTHROPIC_API_KEY não configurada no Railway.'}), 500
+
+    dados = request.get_json() or {}
+    html = dados.get('html', '').strip()
+    if not html:
+        return jsonify({'erro': 'Conteúdo vazio.'}), 400
+    instrucoes = dados.get('instrucoes', '').strip()
+
+    prompt = f"""Você vai melhorar o TEXTO de um e-mail de marketing escrito por um usuário, mantendo a estrutura HTML, imagens, links, botões e formatação existentes.
+
+HTML atual do e-mail:
+{html}
+
+Instruções:
+- Reescreva e aprimore os textos (parágrafos, títulos, botões) para ficarem mais claros, persuasivos, profissionais e com mais profundidade — adicione contexto, exemplos ou argumentos quando o texto original for muito raso{f'. Siga também esta orientação adicional do usuário: {instrucoes}' if instrucoes else ''}.
+- NÃO remova nem altere imagens (tags <img>), links (atributos href) ou a estrutura/tags HTML existentes — melhore apenas o conteúdo de texto.
+- Mantenha {{nome}} onde já estiver presente para personalização.
+- Retorne APENAS o HTML completo resultante, sem explicações, sem markdown, sem blocos ```.
+"""
+    try:
+        client = _anthropic.Anthropic(api_key=api_key)
+        resp = client.messages.create(
+            model='claude-haiku-4-5-20251001',
+            max_tokens=8000,
+            messages=[{'role': 'user', 'content': prompt}]
+        )
+        out = resp.content[0].text.strip()
+        out = re.sub(r'^```[a-z]*\n?', '', out)
+        out = re.sub(r'\n?```$', '', out).strip()
+        return jsonify({'html': out})
+    except Exception as e:
+        return jsonify({'erro': str(e)}), 500
+
+@app.route('/ia/aplicar-template', methods=['POST'])
+def ia_aplicar_template():
+    if not ANTHROPIC_OK:
+        return jsonify({'erro': 'Anthropic SDK não instalado.'}), 500
+    api_key = os.environ.get('ANTHROPIC_API_KEY', '')
+    if not api_key:
+        return jsonify({'erro': 'ANTHROPIC_API_KEY não configurada no Railway.'}), 500
+
+    dados = request.get_json() or {}
+    conteudo = dados.get('conteudo_html', '').strip()
+    template = dados.get('template_html', '').strip()
+    if not conteudo or not template:
+        return jsonify({'erro': 'Conteúdo e template são obrigatórios.'}), 400
+
+    prompt = f"""Você vai aplicar um TEMPLATE VISUAL a um conteúdo de e-mail já escrito por um usuário.
+
+Conteúdo do usuário (texto, imagens e links a preservar):
+{conteudo}
+
+Template visual de referência (use o layout, cores, fontes, estrutura e seções deste template):
+{template}
+
+Instruções:
+- Gere um novo HTML de e-mail usando o layout/cores/estilo/estrutura do TEMPLATE acima.
+- Substitua os textos de exemplo do template pelo conteúdo real do usuário, adaptando a redação para caber na estrutura das seções do template (mas sem perder informação importante do conteúdo original).
+- Preserve TODAS as imagens (tags <img src="...">) e links (atributos href) que o usuário já tinha no conteúdo original, posicionando-os nos lugares apropriados do template.
+- Mantenha {{nome}} para personalização.
+- Retorne APENAS o HTML completo resultante, sem explicações, sem markdown, sem blocos ```.
+"""
+    try:
+        client = _anthropic.Anthropic(api_key=api_key)
+        resp = client.messages.create(
+            model='claude-haiku-4-5-20251001',
+            max_tokens=8000,
+            messages=[{'role': 'user', 'content': prompt}]
+        )
+        out = resp.content[0].text.strip()
+        out = re.sub(r'^```[a-z]*\n?', '', out)
+        out = re.sub(r'\n?```$', '', out).strip()
+        return jsonify({'html': out})
+    except Exception as e:
+        return jsonify({'erro': str(e)}), 500
+
 @app.route('/ia/buscar-imagem', methods=['POST'])
 def ia_buscar_imagem():
     if not UNSPLASH_ACCESS_KEY:

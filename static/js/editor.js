@@ -230,6 +230,70 @@ function showHtmlInEditor(containerId, textareaId, html, subjectId, subjectValue
 }
 
 // ─────────────────────────────────────────────
+// Toast simples (usado em vários lugares)
+// ─────────────────────────────────────────────
+function showToast(msg, type) {
+  const container = document.getElementById('toastContainer');
+  if (!container) return;
+  const div = document.createElement('div');
+  div.className = `alert alert-${type || 'info'} alert-dismissible shadow`;
+  div.innerHTML = `${msg}<button type="button" class="btn-close" data-bs-dismiss="alert"></button>`;
+  container.appendChild(div);
+  setTimeout(() => div.remove(), 6000);
+}
+
+// ─────────────────────────────────────────────
+// Lê o conteúdo atual de um editor, seja ele um HTML completo
+// (raw mode) ou um conteúdo editado visualmente no Quill
+// ─────────────────────────────────────────────
+function getEditorContent(containerId, textareaId) {
+  const textarea = document.getElementById(textareaId);
+  if (_rawHtmlContainers.has(containerId)) {
+    return (textarea && textarea.value) || '';
+  }
+  const quill = _quillMap.get(containerId);
+  if (quill) {
+    const h = quill.root.innerHTML;
+    return h === '<p><br></p>' ? '' : h;
+  }
+  return (textarea && textarea.value) || '';
+}
+
+// ─────────────────────────────────────────────
+// Melhorar texto do e-mail com IA (sem abrir modal extra)
+// ─────────────────────────────────────────────
+async function melhorarTextoIA(containerId, textareaId, btnEl) {
+  const html = getEditorContent(containerId, textareaId);
+  if (!html.trim()) {
+    alert('Escreva (ou gere) o conteúdo do e-mail antes de melhorar com IA.');
+    return;
+  }
+  const original = btnEl ? btnEl.innerHTML : null;
+  if (btnEl) {
+    btnEl.disabled = true;
+    btnEl.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Melhorando...';
+  }
+  try {
+    const res = await fetch('/ia/melhorar-texto', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ html })
+    });
+    const data = await res.json();
+    if (data.erro) { alert('Erro ao melhorar texto: ' + data.erro); return; }
+    showHtmlInEditor(containerId, textareaId, data.html);
+    showToast('Texto melhorado com IA!', 'success');
+  } catch (e) {
+    alert('Erro ao melhorar texto com IA.');
+  } finally {
+    if (btnEl) {
+      btnEl.disabled = false;
+      btnEl.innerHTML = original;
+    }
+  }
+}
+
+// ─────────────────────────────────────────────
 // Editar Textos de um HTML completo (template/IA)
 // ─────────────────────────────────────────────
 let _editTextsTarget = null;
@@ -536,6 +600,9 @@ function initStepEditor(stepDiv) {
   );
   stepDiv.querySelector('.btn-edit-texts')?.setAttribute(
     'onclick', `editTextsModal('${containerId}','${textareaId}')`
+  );
+  stepDiv.querySelector('.btn-melhorar-ia')?.setAttribute(
+    'onclick', `melhorarTextoIA('${containerId}','${textareaId}', this)`
   );
 
   initEditor({ containerId, textareaId, subjectId, autoSignature: false });
