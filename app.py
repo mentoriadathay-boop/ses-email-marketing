@@ -2443,6 +2443,47 @@ Instruções:
     except Exception as e:
         return jsonify({'erro': str(e)}), 500
 
+@app.route('/ia/formatar-conteudo', methods=['POST'])
+def ia_formatar_conteudo():
+    if not ANTHROPIC_OK:
+        return jsonify({'erro': 'Anthropic SDK não instalado.'}), 500
+    api_key = os.environ.get('ANTHROPIC_API_KEY', '')
+    if not api_key:
+        return jsonify({'erro': 'ANTHROPIC_API_KEY não configurada no Railway.'}), 500
+
+    dados = request.get_json() or {}
+    conteudo = dados.get('conteudo', '').strip()
+    if not conteudo:
+        return jsonify({'erro': 'Conteúdo vazio.'}), 400
+
+    prompt = f"""Você vai transformar o conteúdo de um e-mail escrito por um usuário em um e-mail HTML visualmente bem formatado.
+
+Conteúdo original do usuário:
+{conteudo}
+
+Instruções obrigatórias:
+- MANTENHA TODO O CONTEÚDO ORIGINAL ÍNTEGRO. Não remova, resuma ou altere informações. Apenas formate visualmente adicionando títulos grandes, subtítulos, checklists onde apropriado, negritos em pontos importantes e espaçamento adequado.
+- Não invente informações novas, não acrescente parágrafos de conteúdo que o usuário não escreveu.
+- Organize o texto existente em uma estrutura HTML clara: títulos (<h1>/<h2>), subtítulos, parágrafos, listas (<ul>/<ol>) e <strong> em pontos importantes, conforme fizer sentido para o conteúdo.
+- Email responsivo, máximo 600px de largura, centralizado, com cabeçalho simples.
+- Use SOMENTE inline CSS (style="...") — nenhuma tag <style> ou <link>.
+- Mantenha {{nome}} onde já estiver presente no texto original para personalização.
+- Retorne APENAS o código HTML completo, sem explicações, sem markdown, sem blocos ```.
+"""
+    try:
+        client = _anthropic.Anthropic(api_key=api_key)
+        resp = client.messages.create(
+            model='claude-haiku-4-5-20251001',
+            max_tokens=8000,
+            messages=[{'role': 'user', 'content': prompt}]
+        )
+        html = resp.content[0].text.strip()
+        html = re.sub(r'^```[a-z]*\n?', '', html)
+        html = re.sub(r'\n?```$', '', html).strip()
+        return jsonify({'html': html})
+    except Exception as e:
+        return jsonify({'erro': str(e)}), 500
+
 @app.route('/ia/aplicar-template', methods=['POST'])
 def ia_aplicar_template():
     if not ANTHROPIC_OK:
@@ -2471,6 +2512,51 @@ Instruções:
 - Substitua os textos de EXEMPLO/placeholder do template (títulos genéricos, parágrafos de demonstração) pelo conteúdo real do usuário. Se o conteúdo do usuário for mais longo que o espaço do template, ADAPTE/EXPANDA a estrutura do template (adicione mais parágrafos, itens de lista ou seções repetindo o mesmo estilo visual) em vez de cortar texto.
 - Preserve TODAS as imagens (tags <img src="...">) e links (atributos href) que o usuário já tinha no conteúdo original, posicionando-os nos lugares apropriados do template.
 - Mantenha {{nome}} para personalização.
+- Retorne APENAS o HTML completo resultante, sem explicações, sem markdown, sem blocos ```.
+"""
+    try:
+        client = _anthropic.Anthropic(api_key=api_key)
+        resp = client.messages.create(
+            model='claude-haiku-4-5-20251001',
+            max_tokens=8000,
+            messages=[{'role': 'user', 'content': prompt}]
+        )
+        out = resp.content[0].text.strip()
+        out = re.sub(r'^```[a-z]*\n?', '', out)
+        out = re.sub(r'\n?```$', '', out).strip()
+        return jsonify({'html': out})
+    except Exception as e:
+        return jsonify({'erro': str(e)}), 500
+
+@app.route('/ia/ajustar-visual', methods=['POST'])
+def ia_ajustar_visual():
+    if not ANTHROPIC_OK:
+        return jsonify({'erro': 'Anthropic SDK não instalado.'}), 500
+    api_key = os.environ.get('ANTHROPIC_API_KEY', '')
+    if not api_key:
+        return jsonify({'erro': 'ANTHROPIC_API_KEY não configurada no Railway.'}), 500
+
+    dados = request.get_json() or {}
+    conteudo = dados.get('conteudo_html', '').strip()
+    template = dados.get('template_html', '').strip()
+    if not conteudo or not template:
+        return jsonify({'erro': 'Conteúdo e template são obrigatórios.'}), 400
+
+    prompt = f"""Você vai ajustar APENAS o visual de um e-mail, mantendo o conteúdo e a formatação de texto exatamente como estão.
+
+Conteúdo atual do usuário (preserve textos, parágrafos, listas, negritos, links e imagens EXATAMENTE como estão, na mesma ordem):
+{conteudo}
+
+Template de referência visual (use APENAS como referência de cores, fontes, cabeçalho, rodapé e largura/layout geral):
+{template}
+
+Instruções obrigatórias:
+- NÃO altere, resuma, corte ou reescreva nenhum texto do conteúdo do usuário. Mantenha cada palavra, frase, parágrafo, lista, link e imagem como estão.
+- NÃO mude a estrutura/ordem do conteúdo do usuário.
+- Aplique ao redor/sobre esse conteúdo apenas o estilo visual do template: cores (cabeçalho, fundos, botões, bordas), fontes, cabeçalho e rodapé do template.
+- Pode envolver o conteúdo existente no cabeçalho/rodapé do template e ajustar cores de elementos (botões, títulos, fundos) para combinar com a paleta do template, mas sem alterar o texto em si.
+- Use SOMENTE inline CSS (style="...") — nenhuma tag <style> ou <link>.
+- Mantenha {{nome}} onde já estiver presente.
 - Retorne APENAS o HTML completo resultante, sem explicações, sem markdown, sem blocos ```.
 """
     try:

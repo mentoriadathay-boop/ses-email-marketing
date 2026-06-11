@@ -11,6 +11,7 @@ let _aiTarget = null; // { containerId, textareaId, subjectId }
 let _iamStep = 1;
 const _iamTotalSteps = 6;
 let _iamHtmlGerado = '';
+let _iamModo = null; // 'novo' | 'melhorar'
 
 const _iamStepLabels = [
   '', 'Passo 1 de 6 — Sobre o público',
@@ -31,13 +32,94 @@ function openAIModal(containerId, textareaId, subjectId) {
 // Pré-preenche o tema (passo 3) e pula para ele — usado a partir da galeria
 function openAIModalComTema(containerId, textareaId, subjectId, tema) {
   openAIModal(containerId, textareaId, subjectId);
+  iamEscolherModo('novo');
   document.getElementById('iamTema').value = tema || '';
   while (_iamStep < 3) iamMudarStep(1);
 }
 
+// ─────────────────────────────────────────────
+// Passo 0 — escolha do modo (criar novo x melhorar conteúdo existente)
+// ─────────────────────────────────────────────
+function iamEscolherModo(modo) {
+  _iamModo = modo;
+  document.getElementById('iamStep0').classList.add('d-none');
+  document.getElementById('iamStepMelhorar').classList.toggle('d-none', modo !== 'melhorar');
+  document.getElementById('iamWizardCriar').classList.toggle('d-none', modo !== 'novo');
+}
+
+function iamVoltarStep0() {
+  _iamModo = null;
+  document.getElementById('iamStepMelhorar').classList.add('d-none');
+  document.getElementById('iamWizardCriar').classList.add('d-none');
+  document.getElementById('iamStep0').classList.remove('d-none');
+  document.getElementById('iamPlaceholder').classList.remove('d-none');
+  document.getElementById('iamResultado').classList.add('d-none');
+  document.getElementById('iamBtnInserir').classList.add('d-none');
+}
+
+// ─────────────────────────────────────────────
+// "Melhorar meu conteúdo" — mantém o conteúdo íntegro, só formata
+// ─────────────────────────────────────────────
+async function iamFormatarConteudo() {
+  const conteudo = document.getElementById('iamConteudoOriginal').value.trim();
+  if (!conteudo) { alert('Cole o conteúdo do seu email antes de continuar.'); return; }
+
+  document.getElementById('iamPlaceholder').classList.add('d-none');
+  document.getElementById('iamResultado').classList.add('d-none');
+  document.getElementById('iamBtnInserir').classList.add('d-none');
+  document.getElementById('iamLoading').classList.remove('d-none');
+
+  const msgs = [
+    'Lendo seu conteúdo...',
+    'Organizando títulos e seções...',
+    'Aplicando formatação visual...',
+    'Finalizando...',
+  ];
+  let mi = 0;
+  const timer = setInterval(() => {
+    document.getElementById('iamMsgGerando').textContent = msgs[mi % msgs.length];
+    mi++;
+  }, 1500);
+
+  try {
+    const res = await fetch('/ia/formatar-conteudo', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ conteudo })
+    });
+    const data = await res.json();
+    clearInterval(timer);
+    document.getElementById('iamLoading').classList.add('d-none');
+    if (data.erro) {
+      document.getElementById('iamPlaceholder').classList.remove('d-none');
+      alert('Erro ao formatar conteúdo: ' + data.erro);
+      return;
+    }
+    _iamHtmlGerado = data.html;
+    document.getElementById('iamHtmlOutput').value = _iamHtmlGerado;
+    const iframe = document.getElementById('iamPreviewFrame');
+    iframe.contentDocument.open();
+    iframe.contentDocument.write(_iamHtmlGerado);
+    iframe.contentDocument.close();
+    document.getElementById('iamResultado').classList.remove('d-none');
+    document.getElementById('iamBtnInserir').classList.remove('d-none');
+    iamSwitchResultTab('preview');
+  } catch (e) {
+    clearInterval(timer);
+    document.getElementById('iamLoading').classList.add('d-none');
+    document.getElementById('iamPlaceholder').classList.remove('d-none');
+    alert('Erro de conexão: ' + e);
+  }
+}
+
 function iamReset() {
   _iamStep = 1;
+  _iamModo = null;
   _iamHtmlGerado = '';
+  document.getElementById('iamStep0').classList.remove('d-none');
+  document.getElementById('iamStepMelhorar').classList.add('d-none');
+  document.getElementById('iamWizardCriar').classList.add('d-none');
+  document.getElementById('iamConteudoOriginal').value = '';
   document.getElementById('iamPublico').value = '';
   document.getElementById('iamFaixaEtaria').value = 'Todas as idades';
   document.querySelectorAll('input[name="iam_nivel"]').forEach(r => {
@@ -418,8 +500,10 @@ function gtmUsarDireto(id) {
 }
 
 // Se o editor de destino já tem conteúdo (texto/imagens/links do usuário),
-// pergunta se deve usar a IA para encaixar esse conteúdo no layout do
-// template escolhido. Caso contrário, apenas insere o template.
+// pergunta o que fazer com esse conteúdo em relação ao template escolhido.
+// Caso contrário, apenas insere o template.
+let _gtmPendingTemplate = null; // { html, nome }
+
 async function _gtmAplicarTemplateAoConteudo(templateHtml, nome) {
   const conteudoAtual = getEditorContent(_aiTarget.containerId, _aiTarget.textareaId);
 
@@ -428,20 +512,27 @@ async function _gtmAplicarTemplateAoConteudo(templateHtml, nome) {
     return;
   }
 
-  const usarIA = confirm(
-    'Você já tem conteúdo neste e-mail.\n\n' +
-    'OK = aplicar o layout "' + nome + '" usando IA para encaixar seu texto, imagens e links nesse novo visual\n' +
-    'Cancelar = substituir tudo pelo template (perde o conteúdo atual)'
-  );
+  _gtmPendingTemplate = { html: templateHtml, nome };
+  new bootstrap.Modal(document.getElementById('modalEscolhaTemplate')).show();
+}
 
-  if (!usarIA) {
+async function gtmEscolherOpcao(opcao) {
+  bootstrap.Modal.getInstance(document.getElementById('modalEscolhaTemplate'))?.hide();
+  if (!_gtmPendingTemplate) return;
+  const { html: templateHtml, nome } = _gtmPendingTemplate;
+  _gtmPendingTemplate = null;
+
+  if (opcao === 'substituir') {
     showHtmlInEditor(_aiTarget.containerId, _aiTarget.textareaId, templateHtml, _aiTarget.subjectId, nome);
     return;
   }
 
-  showToast('Aplicando o template com IA, aguarde...', 'info');
+  const conteudoAtual = getEditorContent(_aiTarget.containerId, _aiTarget.textareaId);
+  const endpoint = opcao === 'visual' ? '/ia/ajustar-visual' : '/ia/aplicar-template';
+
+  showToast('Aplicando com IA, aguarde...', 'info');
   try {
-    const res = await fetch('/ia/aplicar-template', {
+    const res = await fetch(endpoint, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ conteudo_html: conteudoAtual, template_html: templateHtml })
@@ -449,7 +540,7 @@ async function _gtmAplicarTemplateAoConteudo(templateHtml, nome) {
     const texto = await res.text();
     let data;
     try { data = JSON.parse(texto); } catch (parseErr) {
-      console.error('Resposta não-JSON de /ia/aplicar-template:', res.status, texto);
+      console.error('Resposta não-JSON de ' + endpoint + ':', res.status, texto);
       alert('Erro ao aplicar template com IA (resposta inválida do servidor, status ' + res.status + '). Veja o console para detalhes.');
       return;
     }
@@ -460,7 +551,7 @@ async function _gtmAplicarTemplateAoConteudo(templateHtml, nome) {
     showHtmlInEditor(_aiTarget.containerId, _aiTarget.textareaId, data.html, _aiTarget.subjectId, nome);
     showToast('Template aplicado ao seu conteúdo!', 'success');
   } catch (e) {
-    console.error('Erro de rede em /ia/aplicar-template:', e);
+    console.error('Erro de rede em ' + endpoint + ':', e);
     alert('Erro ao aplicar template com IA: ' + e.message);
   }
 }

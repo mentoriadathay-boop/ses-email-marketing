@@ -8,6 +8,7 @@
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
   <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
   <link href="https://cdn.quilljs.com/1.3.6/quill.snow.css" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;700&family=Open+Sans:wght@400;700&family=Montserrat:wght@400;700&display=swap" rel="stylesheet">
   <style>
     body { background: #f0f2f5; font-family: 'Segoe UI', sans-serif; }
     .sidebar { width: 240px; min-height: 100vh; background: #1a1a2e; position: fixed; left: 0; top: 0; z-index: 100; }
@@ -29,9 +30,12 @@
     .progress-bar { transition: width 0.4s ease; }
     #toastContainer { position: fixed; top: 20px; right: 20px; z-index: 9999; }
     /* Quill customizations */
-    .ql-container { font-family: Arial, sans-serif; font-size: 14px; }
+    .ql-container { font-family: Arial, sans-serif; font-size: 16px; }
     .ql-toolbar { border-radius: 8px 8px 0 0; background: #f8f9fa; }
     .ql-container { border-radius: 0 0 8px 8px; background: #fff; min-height: 180px; }
+    .ql-editor { line-height: 1.6; color: #333; }
+    .ql-editor p, .ql-editor ul, .ql-editor ol, .ql-editor blockquote { margin: 0 0 1em 0; padding: 0; }
+    .ql-editor li { margin-bottom: .25em; }
     .editor-extra-btns { display: flex; gap: 6px; flex-wrap: wrap; padding: 6px 0 2px; }
     .editor-extra-btns .btn { font-size: .75rem; padding: 2px 8px; }
   </style>
@@ -147,6 +151,87 @@
     </div>
   </div>
 
+  <!-- Modal: Escolher Imagem (usado para trocar/adicionar imagens nos templates) -->
+  <div class="modal fade" id="modalEscolherImagem" tabindex="-1" data-bs-backdrop="static">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title"><i class="bi bi-image me-2"></i>Escolher Imagem</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <ul class="nav nav-tabs nav-sm mb-3" id="imgPickTabs">
+            <li class="nav-item">
+              <button type="button" class="nav-link active py-1 small" onclick="imgPickSwitchTab('upload',this)">
+                <i class="bi bi-upload me-1"></i>Upload
+              </button>
+            </li>
+            <li class="nav-item">
+              <button type="button" class="nav-link py-1 small" onclick="imgPickSwitchTab('unsplash',this)">
+                <i class="bi bi-search me-1"></i>Buscar no Unsplash
+              </button>
+            </li>
+          </ul>
+          <div id="imgPickTabUpload">
+            <button type="button" class="btn btn-outline-secondary btn-sm" onclick="document.getElementById('imgPickUploadInput').click()">
+              <i class="bi bi-upload me-1"></i>Escolher arquivo do computador
+            </button>
+            <input type="file" id="imgPickUploadInput" class="d-none" accept="image/jpeg,image/png,image/gif,image/webp" onchange="imgPickUpload(this)">
+            <div id="imgPickUploadPreview" class="mt-2"></div>
+          </div>
+          <div id="imgPickTabUnsplash" class="d-none">
+            <div class="input-group mb-2">
+              <input type="text" id="imgPickUnsplashQuery" class="form-control form-control-sm"
+                     placeholder="Descreva a imagem... ex: equipe trabalhando">
+              <button type="button" class="btn btn-primary btn-sm" onclick="imgPickBuscarUnsplash()">
+                <i class="bi bi-search"></i>
+              </button>
+            </div>
+            <div id="imgPickUnsplashResults" class="row g-1"></div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+          <button type="button" class="btn btn-primary" id="imgPickBtnConfirmar" onclick="imgPickConfirmar()" disabled>
+            <i class="bi bi-check-lg me-1"></i>Usar Imagem
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: Escolha de como aplicar o template ao conteúdo existente -->
+  <div class="modal fade" id="modalEscolhaTemplate" tabindex="-1" data-bs-backdrop="static">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title"><i class="bi bi-stars me-2"></i>Personalizar com IA</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <p class="text-muted small mb-3">Você já tem conteúdo neste e-mail. O que a IA deve fazer com o template escolhido?</p>
+          <div class="d-grid gap-2">
+            <button type="button" class="btn btn-outline-danger text-start p-3" onclick="gtmEscolherOpcao('substituir')">
+              <strong>🔄 Substituir tudo</strong>
+              <div class="small text-muted">A IA gera um novo conteúdo do zero, no layout do template (perde o conteúdo atual).</div>
+            </button>
+            <button type="button" class="btn btn-outline-primary text-start p-3" onclick="gtmEscolherOpcao('melhorar')">
+              <strong>✏️ Melhorar conteúdo atual</strong>
+              <div class="small text-muted">Mantém todo o seu conteúdo na íntegra e só melhora a formatação, encaixando no layout do template.</div>
+            </button>
+            <button type="button" class="btn btn-outline-secondary text-start p-3" onclick="gtmEscolherOpcao('visual')">
+              <strong>🎨 Só ajustar visual</strong>
+              <div class="small text-muted">Mantém conteúdo e formatação como estão, só ajusta cores e layout pelo template.</div>
+            </button>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- Modal Editar Links e Botões -->
   <div class="modal fade" id="modalEditLinks" tabindex="-1">
     <div class="modal-dialog">
@@ -173,6 +258,7 @@
   <script src="https://cdn.quilljs.com/1.3.6/quill.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
   <script src="{{ url_for('static', filename='js/editor.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/image_editor.js') }}"></script>
   <script src="{{ url_for('static', filename='js/email_templates_data.js') }}"></script>
   <script src="{{ url_for('static', filename='js/ia_modal.js') }}"></script>
   {% block scripts %}{% endblock %}

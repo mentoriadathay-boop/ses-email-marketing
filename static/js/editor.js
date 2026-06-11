@@ -6,6 +6,79 @@ let _tplCache = null;          // cache dos templates da API
 const _rawHtmlContainers = new Set(); // containers cujo textarea contém um HTML completo (template/IA) — não sincronizar a partir do Quill
 
 // ─────────────────────────────────────────────
+// Registro de formatos extras do Quill (fonte, tamanho, espaçamento entre linhas, undo/redo)
+// ─────────────────────────────────────────────
+const _FONT_WHITELIST = ['arial', 'georgia', 'verdana', 'trebuchet', 'times-new-roman', 'courier', 'roboto', 'open-sans', 'montserrat'];
+const _FONT_LABELS = {
+  arial: 'Arial', georgia: 'Georgia', verdana: 'Verdana', trebuchet: 'Trebuchet MS',
+  'times-new-roman': 'Times New Roman', courier: 'Courier New',
+  roboto: 'Roboto', 'open-sans': 'Open Sans', montserrat: 'Montserrat'
+};
+const _FONT_FAMILIES = {
+  arial: 'Arial, sans-serif', georgia: 'Georgia, serif', verdana: 'Verdana, sans-serif',
+  trebuchet: "'Trebuchet MS', sans-serif", 'times-new-roman': "'Times New Roman', serif",
+  courier: "'Courier New', monospace", roboto: "'Roboto', sans-serif",
+  'open-sans': "'Open Sans', sans-serif", montserrat: "'Montserrat', sans-serif"
+};
+const _SIZE_WHITELIST = ['8px', '10px', '12px', '14px', '16px', '18px', '20px', '24px', '28px', '32px', '36px', '40px', '48px', '56px', '64px', '72px'];
+const _LINEHEIGHT_WHITELIST = ['1', '1.5', '2'];
+
+// CSS injetado no preview de conteúdo "fragmento" (não é um documento HTML completo)
+// para que ele renderize com a mesma fonte, tamanho e espaçamento do editor Quill.
+const _PREVIEW_FRAGMENT_CSS = `<style>
+  body { font-family: Arial, Helvetica, sans-serif; font-size: 16px; line-height: 1.6; color: #333; margin: 0; padding: 16px; }
+  p, ul, ol, blockquote { margin: 0 0 1em 0; padding: 0; }
+  li { margin-bottom: .25em; }
+  img { max-width: 100%; }
+</style>`;
+
+(function _registerQuillFormats() {
+  if (typeof Quill === 'undefined' || window._quillFormatsRegistered) return;
+  window._quillFormatsRegistered = true;
+
+  const FontClass = Quill.import('formats/font');
+  FontClass.whitelist = _FONT_WHITELIST;
+  Quill.register(FontClass, true);
+
+  const SizeStyle = Quill.import('attributors/style/size');
+  SizeStyle.whitelist = _SIZE_WHITELIST;
+  Quill.register(SizeStyle, true);
+
+  const Parchment = Quill.import('parchment');
+  const LineHeightStyle = new Parchment.Attributor.Style('lineheight', 'line-height', {
+    scope: Parchment.Scope.BLOCK,
+    whitelist: _LINEHEIGHT_WHITELIST
+  });
+  Quill.register(LineHeightStyle, true);
+
+  const icons = Quill.import('ui/icons');
+  icons['undo'] = '<i class="bi bi-arrow-counterclockwise"></i>';
+  icons['redo'] = '<i class="bi bi-arrow-clockwise"></i>';
+
+  // CSS dos pickers de fonte/tamanho/espaçamento
+  let css = `
+.ql-snow .ql-picker.ql-size .ql-picker-item[data-value]::before,
+.ql-snow .ql-picker.ql-size .ql-picker-label[data-value]::before { content: attr(data-value); }
+.ql-snow .ql-picker.ql-lineheight .ql-picker-item::before,
+.ql-snow .ql-picker.ql-lineheight .ql-picker-label::before { content: 'Espaçamento'; }
+.ql-snow .ql-picker.ql-lineheight .ql-picker-item[data-value]::before,
+.ql-snow .ql-picker.ql-lineheight .ql-picker-label[data-value]::before { content: attr(data-value); }
+.ql-snow .ql-picker.ql-lineheight { width: 90px; }
+.ql-snow .ql-picker.ql-font { width: 150px; }
+.ql-snow .ql-picker.ql-size { width: 70px; }
+`;
+  _FONT_WHITELIST.forEach(f => {
+    css += `.ql-font-${f} { font-family: ${_FONT_FAMILIES[f]}; }
+.ql-snow .ql-picker.ql-font .ql-picker-item[data-value="${f}"]::before,
+.ql-snow .ql-picker.ql-font .ql-picker-label[data-value="${f}"]::before { content: '${_FONT_LABELS[f]}'; font-family: ${_FONT_FAMILIES[f]}; }
+`;
+  });
+  const style = document.createElement('style');
+  style.textContent = css;
+  document.head.appendChild(style);
+})();
+
+// ─────────────────────────────────────────────
 // Inicializar editor (Visual + HTML em abas)
 // ─────────────────────────────────────────────
 function initEditor(cfg) {
@@ -14,12 +87,15 @@ function initEditor(cfg) {
   const visualDiv = document.getElementById(cfg.containerId);
 
   const toolbarCfg = [
+    [{ font: _FONT_WHITELIST }, { size: _SIZE_WHITELIST }],
     ['bold', 'italic', 'underline', 'strike'],
     [{ color: [] }, { background: [] }],
-    [{ size: ['small', false, 'large', 'huge'] }],
     [{ align: [] }],
     [{ list: 'ordered' }, { list: 'bullet' }],
+    [{ indent: '-1' }, { indent: '+1' }],
+    [{ lineheight: _LINEHEIGHT_WHITELIST }],
     ['link', 'image'],
+    ['undo', 'redo'],
     ['clean']
   ];
 
@@ -32,9 +108,12 @@ function initEditor(cfg) {
       toolbar: {
         container: toolbarCfg,
         handlers: {
-          image: function () { _uploadImage(quill); }
+          image: function () { _uploadImage(quill); },
+          undo: function () { quill.history.undo(); },
+          redo: function () { quill.history.redo(); }
         }
-      }
+      },
+      history: { delay: 1000, maxStack: 100, userOnly: true }
     }
   });
 
@@ -158,9 +237,15 @@ function editorTab(tab, containerId, textareaId) {
         const vazio = '<p style="color:#999;font-style:italic;padding:16px">Nenhum conteúdo para visualizar.</p>';
         // Injeta <base> para resolver URLs relativas (imagens, CSS local)
         const base = `<base href="${window.location.origin}/">`;
-        const html = conteudo
-          ? (conteudo.includes('<base') ? conteudo : base + conteudo)
-          : vazio;
+        const isFullDoc = /^\s*(<!DOCTYPE|<html)/i.test(conteudo);
+        let html;
+        if (!conteudo) {
+          html = base + _PREVIEW_FRAGMENT_CSS + vazio;
+        } else if (isFullDoc || conteudo.includes('<base')) {
+          html = isFullDoc && !conteudo.includes('<base') ? base + conteudo : conteudo;
+        } else {
+          html = base + _PREVIEW_FRAGMENT_CSS + conteudo;
+        }
         iframe.removeAttribute('srcdoc');
         iframe.contentDocument.open();
         iframe.contentDocument.write(html);
@@ -170,6 +255,9 @@ function editorTab(tab, containerId, textareaId) {
             const h = iframe.contentDocument.body?.scrollHeight || 0;
             if (h > 0) iframe.style.height = (h + 24) + 'px';
           } catch (e) {}
+          if (_rawHtmlContainers.has(containerId) && typeof setupImageEditingOverlay === 'function') {
+            setupImageEditingOverlay(containerId, textareaId);
+          }
         }, 150);
       }
     }
@@ -224,6 +312,9 @@ function showHtmlInEditor(containerId, textareaId, html, subjectId, subjectValue
           const h = iframe.contentDocument.body?.scrollHeight || 0;
           if (h > 0) iframe.style.height = (h + 24) + 'px';
         } catch (e) {}
+        if (typeof setupImageEditingOverlay === 'function') {
+          setupImageEditingOverlay(containerId, textareaId);
+        }
       }, 150);
     }
   }

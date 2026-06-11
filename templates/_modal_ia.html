@@ -10,6 +10,48 @@
         <div class="row g-4">
           <!-- Coluna do formulário -->
           <div class="col-lg-5">
+
+            <!-- PASSO 0: Escolha do modo -->
+            <div id="iamStep0">
+              <h6 class="fw-bold mb-3">O que você quer fazer?</h6>
+              <div class="d-grid gap-3">
+                <div class="card card-body p-3" style="cursor:pointer;border:2px solid #e0e0e0;"
+                     onmouseover="this.style.borderColor='#4361ee'" onmouseout="this.style.borderColor='#e0e0e0'"
+                     onclick="iamEscolherModo('novo')">
+                  <h6 class="fw-bold mb-1"><i class="bi bi-stars me-2 text-primary"></i>✨ Criar novo email</h6>
+                  <p class="text-muted small mb-0">A IA escreve o email do zero a partir de um briefing rápido (público, objetivo, tema...).</p>
+                </div>
+                <div class="card card-body p-3" style="cursor:pointer;border:2px solid #e0e0e0;"
+                     onmouseover="this.style.borderColor='#4361ee'" onmouseout="this.style.borderColor='#e0e0e0'"
+                     onclick="iamEscolherModo('melhorar')">
+                  <h6 class="fw-bold mb-1"><i class="bi bi-magic me-2 text-success"></i>📝 Melhorar meu conteúdo</h6>
+                  <p class="text-muted small mb-0">Cole o texto que você já escreveu e a IA mantém TODO o conteúdo, apenas formatando com títulos, negritos, checklists e espaçamento.</p>
+                </div>
+              </div>
+            </div>
+
+            <!-- PASSO "Melhorar meu conteúdo": cola o texto original -->
+            <div id="iamStepMelhorar" class="d-none">
+              <button type="button" class="btn btn-sm btn-link text-muted px-0 mb-2" onclick="iamVoltarStep0()">
+                <i class="bi bi-chevron-left"></i> Voltar
+              </button>
+              <h6 class="fw-bold mb-3">📝 Melhorar meu conteúdo</h6>
+              <p class="text-muted small">Cole abaixo o conteúdo original do seu email. A IA vai manter <strong>tudo</strong> que você escreveu — sem cortar, resumir ou alterar informações — apenas formatando visualmente (títulos, subtítulos, negritos, checklists e espaçamento).</p>
+              <div class="mb-3">
+                <label class="form-label small fw-semibold">Conteúdo original</label>
+                <textarea id="iamConteudoOriginal" class="form-control" rows="12"
+                          placeholder="Cole aqui o texto do seu email..."></textarea>
+              </div>
+              <button type="button" class="btn btn-success w-100" id="iamBtnFormatar" onclick="iamFormatarConteudo()">
+                <i class="bi bi-magic me-1"></i> Formatar com IA
+              </button>
+            </div>
+
+            <!-- Wizard "Criar novo email" -->
+            <div id="iamWizardCriar" class="d-none">
+            <button type="button" class="btn btn-sm btn-link text-muted px-0 mb-2" onclick="iamVoltarStep0()">
+              <i class="bi bi-chevron-left"></i> Voltar
+            </button>
             <!-- Steps indicator -->
             <div class="d-flex align-items-center mb-3 gap-1" id="iamStepsBar">
               {% for i in range(1,7) %}
@@ -170,6 +212,7 @@
               <button type="button" class="btn btn-success flex-fill d-none" id="iamBtnGerar" onclick="iamGerarEmail()">
                 <i class="bi bi-stars me-1"></i> Gerar Email com IA
               </button>
+            </div>
             </div>
           </div>
 
