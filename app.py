@@ -2249,6 +2249,14 @@ def prospeccao_status(job_id):
         return jsonify({'error': 'não encontrado'}), 404
     return jsonify(job)
 
+@app.route('/prospeccao/info', methods=['GET'])
+def prospeccao_info():
+    return jsonify({
+        'firecrawl_enabled': FIRECRAWL_OK and bool(FIRECRAWL_API_KEY),
+        'firecrawl_ok': FIRECRAWL_OK,
+        'anthropic_ok': ANTHROPIC_OK,
+    })
+
 @app.route('/prospeccao/criar-mailing', methods=['POST'])
 def prospeccao_criar_mailing():
     data = request.get_json() or {}
