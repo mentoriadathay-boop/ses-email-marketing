@@ -29,6 +29,12 @@ try:
 except ImportError:
     ANTHROPIC_OK = False
 
+try:
+    from firecrawl import FirecrawlApp
+    FIRECRAWL_OK = True
+except ImportError:
+    FIRECRAWL_OK = False
+
 EMAIL_RE = re.compile(r'\b[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}\b')
 
 app = Flask(__name__)
@@ -41,6 +47,7 @@ ALLOWED_IMAGE_EXT = {'jpg', 'jpeg', 'png', 'gif', 'webp'}
 APP_URL = os.environ.get('APP_URL', 'http://127.0.0.1:5000').rstrip('/')
 UNSPLASH_ACCESS_KEY = os.environ.get('UNSPLASH_ACCESS_KEY', '')
 BREVO_API_KEY = os.environ.get('BREVO_API_KEY', '')
+FIRECRAWL_API_KEY = os.environ.get('FIRECRAWL_API_KEY', '')
 DATABASE_URL = os.environ.get('DATABASE_URL', '')
 # psycopg2 exige postgresql:// mas Railway/Heroku fornecem postgres://
 if DATABASE_URL.startswith('postgres://'):
@@ -543,7 +550,23 @@ def _enriquecer_claude(texto, url):
         pass
     return []
 
+def _extrair_com_firecrawl(url):
+    if not FIRECRAWL_OK or not FIRECRAWL_API_KEY:
+        return None
+    try:
+        app = FirecrawlApp(api_key=FIRECRAWL_API_KEY)
+        resultado = app.scrape_url(url, params={'formats': ['html', 'markdown']})
+        if resultado and 'html' in resultado:
+            return resultado['html']
+    except Exception:
+        pass
+    return None
+
 def _extrair_pagina_html(url):
+    html = _extrair_com_firecrawl(url)
+    if html:
+        return html
+
     headers = {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
         'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
