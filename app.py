@@ -550,20 +550,30 @@ def _enriquecer_claude(texto, url):
         pass
     return []
 
-def _extrair_com_firecrawl(url):
+def _extrair_com_firecrawl(url, modo='html'):
     if not FIRECRAWL_OK or not FIRECRAWL_API_KEY:
         return None
     try:
         app = FirecrawlApp(api_key=FIRECRAWL_API_KEY)
-        resultado = app.scrape_url(url, params={'formats': ['html', 'markdown']})
-        if resultado and 'html' in resultado:
-            return resultado['html']
+        params = {
+            'formats': ['html'] if modo == 'html' else ['markdown'],
+            'onlyMainContent': True,
+            'includeTags': ['a', 'button', 'input'],
+        }
+        resultado = app.scrape_url(url, params=params)
+        if resultado:
+            if modo == 'html' and 'html' in resultado:
+                return resultado['html']
+            elif modo == 'markdown' and 'markdown' in resultado:
+                return resultado['markdown']
+            elif 'content' in resultado:
+                return resultado['content']
     except Exception:
         pass
     return None
 
 def _extrair_pagina_html(url):
-    html = _extrair_com_firecrawl(url)
+    html = _extrair_com_firecrawl(url, modo='html')
     if html:
         return html
 
@@ -575,6 +585,22 @@ def _extrair_pagina_html(url):
     r = http_requests.get(url, headers=headers, timeout=15, allow_redirects=True)
     r.raise_for_status()
     return r.text
+
+def _extrair_contatos_firecrawl_direto(url):
+    if not FIRECRAWL_OK or not FIRECRAWL_API_KEY:
+        return []
+    try:
+        app = FirecrawlApp(api_key=FIRECRAWL_API_KEY)
+        resultado = app.scrape_url(url, params={
+            'formats': ['markdown'],
+            'onlyMainContent': True,
+        })
+        if resultado and 'markdown' in resultado:
+            texto = resultado['markdown'][:10000]
+            return _enriquecer_claude(texto, url)
+    except Exception:
+        pass
+    return []
 
 def _leads_da_pagina(html, url):
     """Extrai emails com regex + contexto. Retorna (lista_leads, soup_ou_None)."""
