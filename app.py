@@ -1108,7 +1108,39 @@ def campanha_reutilizar(campaign_id):
 
 @app.route('/api/nichos')
 def api_nichos():
+    mailing_ids = request.args.get('mailing_ids', '').strip()
     conn = get_db()
+
+    if mailing_ids:
+        id_list = [m.strip() for m in mailing_ids.split(',') if m.strip()]
+        if not id_list:
+            conn.close()
+            return jsonify([])
+        placeholders = ','.join(['%s'] * len(id_list))
+        rows = conn.execute(f"""
+            SELECT nicho, COUNT(DISTINCT email) as qtd FROM (
+                SELECT mc.email,
+                       COALESCE(NULLIF(c.nicho,''), NULLIF(mc.nicho,'')) as nicho
+                FROM mailing_contacts mc
+                LEFT JOIN contacts c ON LOWER(c.email) = LOWER(mc.email)
+                WHERE mc.mailing_id IN ({placeholders})
+            ) sub
+            WHERE nicho IS NOT NULL AND nicho != ''
+            GROUP BY nicho ORDER BY qtd DESC
+        """, id_list).fetchall()
+        total_sem_nicho = conn.execute(f"""
+            SELECT COUNT(DISTINCT mc.email) as qtd
+            FROM mailing_contacts mc
+            LEFT JOIN contacts c ON LOWER(c.email) = LOWER(mc.email)
+            WHERE mc.mailing_id IN ({placeholders})
+              AND (COALESCE(NULLIF(c.nicho,''), NULLIF(mc.nicho,'')) IS NULL
+                   OR COALESCE(NULLIF(c.nicho,''), NULLIF(mc.nicho,'')) = '')
+        """, id_list).fetchone()
+        conn.close()
+        result = [{'nicho': r['nicho'], 'qtd': r['qtd']} for r in rows]
+        sem_nicho = total_sem_nicho['qtd'] if total_sem_nicho else 0
+        return jsonify({'nichos': result, 'sem_nicho': sem_nicho})
+
     rows = conn.execute(
         "SELECT nicho, COUNT(*) as qtd FROM contacts WHERE nicho IS NOT NULL AND nicho != '' "
         "GROUP BY nicho ORDER BY qtd DESC"
@@ -1146,15 +1178,19 @@ def campanha_segmentada():
         emails_vistos = set()
 
         if mailing_id_list:
-            for mid in mailing_id_list:
-                rows = conn.execute(
-                    "SELECT email, name, tags, nicho FROM mailing_contacts WHERE mailing_id=%s AND LOWER(nicho)=LOWER(%s)",
-                    (mid, nicho)).fetchall()
-                for r in rows:
-                    em = r['email'].strip().lower()
-                    if em and em not in emails_vistos:
-                        emails_vistos.add(em)
-                        contacts.append({'email': r['email'], 'name': r['name'] or '', 'tags': r['tags'] or ''})
+            placeholders = ','.join(['%s'] * len(mailing_id_list))
+            rows = conn.execute(f"""
+                SELECT mc.email, mc.name, mc.tags
+                FROM mailing_contacts mc
+                LEFT JOIN contacts c ON LOWER(c.email) = LOWER(mc.email)
+                WHERE mc.mailing_id IN ({placeholders})
+                  AND LOWER(COALESCE(NULLIF(c.nicho,''), NULLIF(mc.nicho,''))) = LOWER(%s)
+            """, mailing_id_list + [nicho]).fetchall()
+            for r in rows:
+                em = r['email'].strip().lower()
+                if em and em not in emails_vistos:
+                    emails_vistos.add(em)
+                    contacts.append({'email': r['email'], 'name': r['name'] or '', 'tags': r['tags'] or ''})
 
         crm_rows = conn.execute(
             "SELECT email, name, tags FROM contacts WHERE LOWER(nicho)=LOWER(%s)", (nicho,)
