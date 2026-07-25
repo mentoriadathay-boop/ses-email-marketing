@@ -74,6 +74,9 @@
       <a href="{{ url_for('lista_mailings') }}" class="nav-link {% if 'mailing' in request.endpoint %}active{% endif %}">
         <i class="bi bi-database"></i> Mailings
       </a>
+      <a href="{{ url_for('pagina_nichos') }}" class="nav-link {% if request.endpoint == 'pagina_nichos' %}active{% endif %}">
+        <i class="bi bi-diagram-3"></i> Nichos
+      </a>
       <a href="{{ url_for('lista_blacklist') }}" class="nav-link {% if request.endpoint in ('lista_blacklist','remover_blacklist','adicionar_blacklist_manual') %}active{% endif %}">
         <i class="bi bi-slash-circle"></i> Blacklist
       </a>
