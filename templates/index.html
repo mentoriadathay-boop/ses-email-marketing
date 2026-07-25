@@ -150,9 +150,14 @@
             </td>
             <td class="text-muted small">{{ c.created_at }}</td>
             <td>
-              <a href="{{ url_for('campanha_detalhe', campaign_id=c.id) }}" class="btn btn-sm btn-outline-primary">
-                <i class="bi bi-eye"></i>
-              </a>
+              <div class="d-flex gap-1">
+                <a href="{{ url_for('campanha_detalhe', campaign_id=c.id) }}" class="btn btn-sm btn-outline-primary" title="Ver detalhes">
+                  <i class="bi bi-eye"></i>
+                </a>
+                <a href="{{ url_for('campanha_reutilizar', campaign_id=c.id) }}" class="btn btn-sm btn-outline-secondary" title="Reutilizar campanha">
+                  <i class="bi bi-arrow-repeat"></i>
+                </a>
+              </div>
             </td>
           </tr>
           {% endfor %}

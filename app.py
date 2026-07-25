@@ -29,6 +29,12 @@ try:
 except ImportError:
     ANTHROPIC_OK = False
 
+try:
+    from firecrawl import FirecrawlApp
+    FIRECRAWL_OK = True
+except ImportError:
+    FIRECRAWL_OK = False
+
 EMAIL_RE = re.compile(r'\b[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}\b')
 
 app = Flask(__name__)
@@ -41,6 +47,7 @@ ALLOWED_IMAGE_EXT = {'jpg', 'jpeg', 'png', 'gif', 'webp'}
 APP_URL = os.environ.get('APP_URL', 'http://127.0.0.1:5000').rstrip('/')
 UNSPLASH_ACCESS_KEY = os.environ.get('UNSPLASH_ACCESS_KEY', '')
 BREVO_API_KEY = os.environ.get('BREVO_API_KEY', '')
+FIRECRAWL_API_KEY = os.environ.get('FIRECRAWL_API_KEY', '')
 DATABASE_URL = os.environ.get('DATABASE_URL', '')
 # psycopg2 exige postgresql:// mas Railway/Heroku fornecem postgres://
 if DATABASE_URL.startswith('postgres://'):
@@ -261,6 +268,8 @@ def init_db():
         "ALTER TABLE sequences ADD COLUMN start_date DATE",
         "ALTER TABLE sequences ADD COLUMN preferred_hour INTEGER",
         "ALTER TABLE signature ADD COLUMN sender_name TEXT DEFAULT 'ConvertMail'",
+        "ALTER TABLE contacts ADD COLUMN nicho TEXT",
+        "ALTER TABLE mailing_contacts ADD COLUMN nicho TEXT DEFAULT ''",
     ]:
         try:
             conn.execute(f"DO $$ BEGIN {col_sql}; EXCEPTION WHEN duplicate_column THEN NULL; END $$")
@@ -316,6 +325,7 @@ def parse_csv(filepath):
                         'product_interest': _col(row, 'produto', 'Produto', 'product_interest'),
                         'source':           _col(row, 'fonte', 'Fonte', 'source', 'Source'),
                         'status':           _col(row, 'status', 'Status') or 'lead',
+                        'nicho':            _col(row, 'nicho', 'Nicho', 'NICHO', 'niche', 'Niche', 'segmento', 'Segmento', 'categoria', 'Categoria'),
                     })
             return contacts
         except UnicodeDecodeError:
@@ -332,7 +342,7 @@ def get_mailing_contacts_db(mailing_id, conn):
 
 def upsert_contact(email, name='', tags='', conn=None, **extra):
     """Insere ou atualiza contato no CRM.
-    extra: phone, company, position, notes, product_interest, source, status
+    extra: phone, company, position, notes, product_interest, source, status, nicho
     Regra: só preenche campos que estão vazios/NULL no registro existente.
     Tags são sempre mescladas (nunca sobrescritas).
     """
@@ -344,7 +354,7 @@ def upsert_contact(email, name='', tags='', conn=None, **extra):
         (email, name, tags, extra.get('status') or 'lead'))
 
     # Atualiza cada campo simples apenas se o existente estiver vazio
-    for field in ('name', 'phone', 'company', 'position', 'notes', 'product_interest', 'source'):
+    for field in ('name', 'phone', 'company', 'position', 'notes', 'product_interest', 'source', 'nicho'):
         value = name if field == 'name' else extra.get(field, '')
         if value:
             conn.execute(
@@ -543,7 +553,33 @@ def _enriquecer_claude(texto, url):
         pass
     return []
 
+def _extrair_com_firecrawl(url, modo='html'):
+    if not FIRECRAWL_OK or not FIRECRAWL_API_KEY:
+        return None
+    try:
+        app = FirecrawlApp(api_key=FIRECRAWL_API_KEY)
+        params = {
+            'formats': ['html'] if modo == 'html' else ['markdown'],
+            'onlyMainContent': True,
+            'includeTags': ['a', 'button', 'input'],
+        }
+        resultado = app.scrape_url(url, params=params)
+        if resultado:
+            if modo == 'html' and 'html' in resultado:
+                return resultado['html']
+            elif modo == 'markdown' and 'markdown' in resultado:
+                return resultado['markdown']
+            elif 'content' in resultado:
+                return resultado['content']
+    except Exception:
+        pass
+    return None
+
 def _extrair_pagina_html(url):
+    html = _extrair_com_firecrawl(url, modo='html')
+    if html:
+        return html
+
     headers = {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
         'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
@@ -552,6 +588,22 @@ def _extrair_pagina_html(url):
     r = http_requests.get(url, headers=headers, timeout=15, allow_redirects=True)
     r.raise_for_status()
     return r.text
+
+def _extrair_contatos_firecrawl_direto(url):
+    if not FIRECRAWL_OK or not FIRECRAWL_API_KEY:
+        return []
+    try:
+        app = FirecrawlApp(api_key=FIRECRAWL_API_KEY)
+        resultado = app.scrape_url(url, params={
+            'formats': ['markdown'],
+            'onlyMainContent': True,
+        })
+        if resultado and 'markdown' in resultado:
+            texto = resultado['markdown'][:10000]
+            return _enriquecer_claude(texto, url)
+    except Exception:
+        pass
+    return []
 
 def _leads_da_pagina(html, url):
     """Extrai emails com regex + contexto. Retorna (lista_leads, soup_ou_None)."""
@@ -904,7 +956,8 @@ def nova_campanha():
         subject = request.form.get('subject', '').strip()
         body_html = request.form.get('body_html', '').strip()
         send_mode = request.form.get('send_mode', 'csv')
-        mailing_id = request.form.get('mailing_id', '').strip() or None
+        mailing_ids_raw = request.form.get('mailing_ids', '').strip()
+        mailing_id = mailing_ids_raw.split(',')[0] if mailing_ids_raw else None
         sequence_id = request.form.get('sequence_id', '').strip() or None
         schedule_mode = request.form.get('schedule_mode', 'now')
         scheduled_at_raw = request.form.get('scheduled_at', '').strip()
@@ -943,24 +996,33 @@ def nova_campanha():
                     w.writerow([r.get('name', ''), r['email']])
             csv_filename = temp_filename
         elif send_mode == 'mailing':
-            if not mailing_id:
-                flash('Selecione um mailing.', 'danger')
+            if not mailing_ids_raw:
+                flash('Selecione pelo menos um mailing.', 'danger')
                 return redirect(url_for('nova_campanha'))
-            conn_m = get_db()
-            ml = conn_m.execute('SELECT * FROM mailings WHERE id=%s', (mailing_id,)).fetchone()
-            conn_m.close()
-            if not ml:
-                flash('Mailing não encontrado.', 'danger')
+            mailing_id_list = [mid.strip() for mid in mailing_ids_raw.split(',') if mid.strip()]
+            if not mailing_id_list:
+                flash('Selecione pelo menos um mailing.', 'danger')
                 return redirect(url_for('nova_campanha'))
-            conn_c = get_db()
-            contacts = get_mailing_contacts_db(int(mailing_id), conn_c)
-            conn_c.close()
+            emails_vistos = set()
+            for mid in mailing_id_list:
+                conn_m = get_db()
+                ml = conn_m.execute('SELECT * FROM mailings WHERE id=%s', (mid,)).fetchone()
+                if not ml:
+                    conn_m.close()
+                    continue
+                ml_contacts = get_mailing_contacts_db(int(mid), conn_m)
+                conn_m.close()
+                if not ml_contacts:
+                    filepath = os.path.join(app.config['UPLOAD_FOLDER'], ml['filename'])
+                    if os.path.exists(filepath):
+                        ml_contacts = parse_csv(filepath)
+                for c in ml_contacts:
+                    em = c.get('email', '').strip().lower()
+                    if em and em not in emails_vistos:
+                        emails_vistos.add(em)
+                        contacts.append(c)
             if not contacts:
-                filepath = os.path.join(app.config['UPLOAD_FOLDER'], ml['filename'])
-                if os.path.exists(filepath):
-                    contacts = parse_csv(filepath)
-            if not contacts:
-                flash(f'Mailing "{ml["name"]}" não tem contatos. Faça o re-upload em Mailings.', 'danger')
+                flash('Nenhum contato encontrado nos mailings selecionados.', 'danger')
                 return redirect(url_for('nova_campanha'))
         else:
             if 'csv_file' not in request.files or request.files['csv_file'].filename == '':
@@ -1013,7 +1075,7 @@ def nova_campanha():
     mailings = conn.execute('SELECT * FROM mailings ORDER BY created_at DESC').fetchall()
     sequences = conn.execute("SELECT id, name FROM sequences WHERE status='active' ORDER BY name").fetchall()
     conn.close()
-    return render_template('nova_campanha.html', mailings=mailings, sequences=sequences)
+    return render_template('nova_campanha.html', mailings=mailings, sequences=sequences, reutilizar=None)
 
 @app.route('/campanha/<int:campaign_id>')
 def campanha_detalhe(campaign_id):
@@ -1030,6 +1092,167 @@ def campanha_detalhe(campaign_id):
         flash('Campanha não encontrada.', 'danger')
         return redirect(url_for('index'))
     return render_template('campanha_detalhe.html', campaign=campaign, logs=logs)
+
+@app.route('/campanha/<int:campaign_id>/reutilizar')
+def campanha_reutilizar(campaign_id):
+    conn = get_db()
+    campaign = conn.execute('SELECT * FROM campaigns WHERE id=%s', (campaign_id,)).fetchone()
+    if not campaign:
+        conn.close()
+        flash('Campanha não encontrada.', 'danger')
+        return redirect(url_for('index'))
+    mailings = conn.execute('SELECT * FROM mailings ORDER BY created_at DESC').fetchall()
+    sequences = conn.execute("SELECT id, name FROM sequences WHERE status='active' ORDER BY name").fetchall()
+    conn.close()
+    return render_template('nova_campanha.html', mailings=mailings, sequences=sequences, reutilizar=campaign)
+
+@app.route('/api/nichos')
+def api_nichos():
+    conn = get_db()
+    rows = conn.execute(
+        "SELECT nicho, COUNT(*) as qtd FROM contacts WHERE nicho IS NOT NULL AND nicho != '' "
+        "GROUP BY nicho ORDER BY qtd DESC"
+    ).fetchall()
+    conn.close()
+    return jsonify([{'nicho': r['nicho'], 'qtd': r['qtd']} for r in rows])
+
+@app.route('/campanha/segmentada', methods=['POST'])
+def campanha_segmentada():
+    data = request.get_json() or {}
+    nome_base = data.get('campaign_name', '').strip()
+    sender = data.get('sender_email', '').strip()
+    subject_template = data.get('subject', '').strip()
+    nichos = data.get('nichos', [])
+    mailing_ids_raw = data.get('mailing_ids', '')
+    sequence_id = data.get('sequence_id') or None
+    ia_config = data.get('ia_config', {})
+
+    if not all([nome_base, sender, subject_template]):
+        return jsonify({'error': 'Preencha nome, remetente e assunto.'}), 400
+    if not nichos:
+        return jsonify({'error': 'Selecione pelo menos um nicho.'}), 400
+
+    api_key = os.environ.get('ANTHROPIC_API_KEY', '')
+    if not api_key or not ANTHROPIC_OK:
+        return jsonify({'error': 'ANTHROPIC_API_KEY não configurada.'}), 500
+
+    conn = get_db()
+
+    mailing_id_list = [m.strip() for m in mailing_ids_raw.split(',') if m.strip()] if mailing_ids_raw else []
+
+    resultados = []
+    for nicho in nichos:
+        contacts = []
+        emails_vistos = set()
+
+        if mailing_id_list:
+            for mid in mailing_id_list:
+                rows = conn.execute(
+                    "SELECT email, name, tags, nicho FROM mailing_contacts WHERE mailing_id=%s AND LOWER(nicho)=LOWER(%s)",
+                    (mid, nicho)).fetchall()
+                for r in rows:
+                    em = r['email'].strip().lower()
+                    if em and em not in emails_vistos:
+                        emails_vistos.add(em)
+                        contacts.append({'email': r['email'], 'name': r['name'] or '', 'tags': r['tags'] or ''})
+
+        crm_rows = conn.execute(
+            "SELECT email, name, tags FROM contacts WHERE LOWER(nicho)=LOWER(%s)", (nicho,)
+        ).fetchall()
+        for r in crm_rows:
+            em = r['email'].strip().lower()
+            if em and em not in emails_vistos:
+                emails_vistos.add(em)
+                contacts.append({'email': r['email'], 'name': r['name'] or '', 'tags': r['tags'] or ''})
+
+        if not contacts:
+            resultados.append({'nicho': nicho, 'status': 'sem_contatos', 'count': 0})
+            continue
+
+        subject = subject_template.replace('{nicho}', nicho)
+        body_html = _gerar_email_por_nicho(api_key, nicho, ia_config, sender)
+
+        campaign_name = f"{nome_base} — {nicho}"
+        cur = conn.execute(
+            "INSERT INTO campaigns (name,subject,body,sender_email,total_contacts,status,sequence_id) "
+            "VALUES (%s,%s,%s,%s,%s,%s,%s) RETURNING id",
+            (campaign_name, subject, body_html, sender, len(contacts), 'pending', sequence_id))
+        campaign_id = cur.fetchone()['id']
+        conn.commit()
+
+        t = threading.Thread(
+            target=run_campaign,
+            args=(campaign_id, contacts, sender, subject, body_html, sequence_id),
+            daemon=True)
+        t.start()
+
+        resultados.append({
+            'nicho': nicho, 'status': 'iniciada',
+            'count': len(contacts), 'campaign_id': campaign_id,
+            'url': url_for('campanha_detalhe', campaign_id=campaign_id),
+        })
+
+    conn.close()
+    return jsonify({'ok': True, 'campanhas': resultados})
+
+
+def _gerar_email_por_nicho(api_key, nicho, ia_config, sender):
+    conn_kit = get_db()
+    kit_info = ''
+    primary_color = '#1a3a6b'
+    kit_id = ia_config.get('kit_id')
+    if kit_id:
+        kit = conn_kit.execute('SELECT * FROM brand_kits WHERE id=%s', (kit_id,)).fetchone()
+        if kit:
+            primary_color = kit['primary_color'] or '#1a3a6b'
+            kit_info = f"\nKit de Marca — {kit['name']}: Tom de voz: {kit['tone_of_voice'] or 'Profissional'}, Cores: {kit['primary_color']}, {kit['secondary_color']}"
+    conn_kit.close()
+
+    publico = ia_config.get('publico', '')
+    objetivo = ia_config.get('objetivo', '')
+    tema = ia_config.get('tema', '')
+    contexto = ia_config.get('contexto', '')
+
+    prompt = f"""Crie um email profissional de marketing em HTML, personalizado para o nicho "{nicho}".
+
+Público-alvo: {publico} — especificamente do nicho {nicho}
+Objetivo: {objetivo}
+Tema: {tema}
+Contexto: {contexto}
+{kit_info}
+
+IMPORTANTE: O conteúdo deve ser 100% relevante e específico para profissionais/empresas do nicho "{nicho}".
+- Use exemplos, dores e linguagem própria deste nicho
+- Adapte os benefícios para a realidade do nicho
+- Use terminologia que profissionais deste nicho reconheçam
+
+Estrutura obrigatória:
+1. Cabeçalho colorido ({primary_color}) com o tema
+2. Saudação com {{{{nome}}}}
+3. 2+ parágrafos com conteúdo específico do nicho "{nicho}"
+4. Lista com 3-5 benefícios/dicas adaptados ao nicho
+5. Botão CTA com href="#LINK_CTA"
+6. Assinatura
+
+Instruções:
+- Retorne APENAS HTML, sem markdown, sem ```
+- Email responsivo, máx 600px, inline CSS
+- Use {{{{nome}}}} para personalização
+- 250-400 palavras de conteúdo específico para o nicho
+"""
+    try:
+        client = _anthropic.Anthropic(api_key=api_key)
+        resp = client.messages.create(
+            model='claude-haiku-4-5-20251001',
+            max_tokens=8000,
+            messages=[{'role': 'user', 'content': prompt}]
+        )
+        html = resp.content[0].text.strip()
+        html = re.sub(r'^```[a-z]*\n?', '', html)
+        html = re.sub(r'\n?```$', '', html).strip()
+        return html
+    except Exception:
+        return f'<p>Olá {{nome}},</p><p>Conteúdo para o nicho {nicho}.</p>'
 
 @app.route('/campanha/log/<int:log_id>/deletar', methods=['POST'])
 def deletar_log_campanha(log_id):
@@ -1820,6 +2043,7 @@ def adicionar_contato_manual():
     tags = request.form.get('tags', '').strip()
     product_interest = request.form.get('product_interest', '').strip()
     source = request.form.get('source', '').strip()
+    nicho = request.form.get('nicho', '').strip()
     if not email:
         flash('Email é obrigatório.', 'danger')
         return redirect(url_for('lista_contatos'))
@@ -1830,8 +2054,8 @@ def adicionar_contato_manual():
         conn.close()
         return redirect(url_for('contato_perfil', email=email))
     conn.execute(
-        'INSERT INTO contacts (email,name,phone,company,status,tags,product_interest,source) VALUES (%s,%s,%s,%s,%s,%s,%s,%s)',
-        (email, name, phone, company, status or 'lead', tags, product_interest or None, source or None))
+        'INSERT INTO contacts (email,name,phone,company,status,tags,product_interest,source,nicho) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)',
+        (email, name, phone, company, status or 'lead', tags, product_interest or None, source or None, nicho or None))
     conn.commit()
     conn.close()
     flash(f'Contato {email} adicionado!', 'success')
@@ -1876,10 +2100,10 @@ def contato_perfil(email):
         flash('Contato não encontrado.', 'danger'); conn.close(); return redirect(url_for('lista_contatos'))
 
     if request.method == 'POST':
-        fields = ['name', 'phone', 'company', 'position', 'status', 'tags', 'notes', 'product_interest', 'source']
+        fields = ['name', 'phone', 'company', 'position', 'status', 'tags', 'notes', 'product_interest', 'source', 'nicho']
         updates = {f: request.form.get(f, '').strip() for f in fields}
         conn.execute(
-            "UPDATE contacts SET name=%s,phone=%s,company=%s,position=%s,status=%s,tags=%s,notes=%s,product_interest=%s,source=%s,updated_at=NOW() WHERE email=%s",
+            "UPDATE contacts SET name=%s,phone=%s,company=%s,position=%s,status=%s,tags=%s,notes=%s,product_interest=%s,source=%s,nicho=%s,updated_at=NOW() WHERE email=%s",
             (*updates.values(), email))
         # Salva produtos adquiridos
         conn.execute('DELETE FROM contact_purchases WHERE contact_email=%s', (email,))
@@ -1997,14 +2221,15 @@ def upload_mailing():
     novos_no_crm = 0
     for c in contacts:
         conn.execute(
-            'INSERT INTO mailing_contacts (mailing_id,email,name,tags) VALUES (%s,%s,%s,%s) ON CONFLICT (mailing_id,email) DO NOTHING',
-            (mailing_id, c['email'], c['name'], c['tags']))
+            'INSERT INTO mailing_contacts (mailing_id,email,name,tags,nicho) VALUES (%s,%s,%s,%s,%s) ON CONFLICT (mailing_id,email) DO NOTHING',
+            (mailing_id, c['email'], c['name'], c['tags'], c.get('nicho', '')))
         existia = conn.execute('SELECT id FROM contacts WHERE email=%s', (c['email'],)).fetchone()
         upsert_contact(c['email'], c['name'], c['tags'], conn,
                        phone=c.get('phone'), company=c.get('company'),
                        position=c.get('position'), notes=c.get('notes'),
                        product_interest=c.get('product_interest'),
-                       source=c.get('source'), status=c.get('status'))
+                       source=c.get('source'), status=c.get('status'),
+                       nicho=c.get('nicho', ''))
         if not existia:
             novos_no_crm += 1
     conn.commit()
@@ -2199,6 +2424,14 @@ def prospeccao_status(job_id):
     if not job:
         return jsonify({'error': 'não encontrado'}), 404
     return jsonify(job)
+
+@app.route('/prospeccao/info', methods=['GET'])
+def prospeccao_info():
+    return jsonify({
+        'firecrawl_enabled': FIRECRAWL_OK and bool(FIRECRAWL_API_KEY),
+        'firecrawl_ok': FIRECRAWL_OK,
+        'anthropic_ok': ANTHROPIC_OK,
+    })
 
 @app.route('/prospeccao/criar-mailing', methods=['POST'])
 def prospeccao_criar_mailing():

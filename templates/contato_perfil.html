@@ -91,6 +91,16 @@
               {% endfor %}
             </select>
           </div>
+          <div class="mb-2">
+            <label class="form-label small fw-semibold">Nicho / Segmento</label>
+            <select name="nicho" class="form-select form-select-sm">
+              <option value="">— Nenhum —</option>
+              {% set nichos = ['Empreendedorismo e Negócios','Saúde e Bem-Estar','Desenvolvimento Pessoal e Espiritualidade','Mulheres','Liderança e Gestão','Educação e Ensino','Marketing Digital e Vendas','Relacionamentos e Família','Beleza e Estética','Carreira e Recursos Humanos','Finanças e Investimentos','Tecnologia e Inovação','Direito e Advocacia','Coaching','Alimentação e Nutrição','Psicologia e Terapia','Fitness e Esportes','Arte e Cultura'] %}
+              {% for n in nichos %}
+              <option value="{{ n }}" {% if contact.nicho == n %}selected{% endif %}>{{ n }}</option>
+              {% endfor %}
+            </select>
+          </div>
           <div class="mb-3">
             <label class="form-label small fw-semibold">Observacoes</label>
             <textarea name="notes" class="form-control form-control-sm" rows="3"
