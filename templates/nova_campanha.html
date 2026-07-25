@@ -287,14 +287,16 @@
             <h6 class="fw-semibold mb-0">
               <i class="bi bi-diagram-3 me-2 text-primary"></i>Campanha Segmentada por Nicho
             </h6>
-            <button type="button" class="btn btn-sm btn-outline-primary" onclick="carregarNichos()">
-              <i class="bi bi-arrow-clockwise me-1"></i>Atualizar
-            </button>
+            <span class="badge bg-primary" id="nicho-count-badge-top">0 nichos</span>
           </div>
           <p class="text-muted small mb-3">
-            A IA vai gerar um email <strong>personalizado para cada nicho</strong> selecionado.
-            Cada nicho vira uma campanha separada com conteúdo específico.
+            Selecione os mailings acima, depois clique <strong>"Buscar Nichos nos Mailings"</strong>.
+            O sistema identifica os nichos dos contatos e a IA gera um email personalizado por nicho.
           </p>
+          <button type="button" class="btn btn-outline-success btn-sm mb-3 w-100" onclick="carregarNichosDosMailing()">
+            <i class="bi bi-search me-1"></i>Buscar Nichos nos Mailings Selecionados
+          </button>
+          <div id="nicho-sem-nicho-alert" class="d-none alert alert-info small mb-3"></div>
 
           <div id="nichos-loading" class="text-center py-3 d-none">
             <div class="spinner-border spinner-border-sm text-primary me-2"></div>
@@ -464,7 +466,6 @@ function setSendMode(mode) {
   } else if (mode === 'nicho') {
     document.getElementById('nicho-section').classList.remove('d-none');
     mailingSection.classList.remove('d-none');
-    carregarNichos();
     carregarKitsNicho();
   } else {
     csvSection.classList.remove('d-none');
@@ -687,24 +688,48 @@ document.addEventListener('DOMContentLoaded', function() {
 let _nichosData = [];
 
 async function carregarNichos() {
+  await carregarNichosDosMailing();
+}
+
+async function carregarNichosDosMailing() {
+  atualizarMailingsSelecionados();
+  const mailingIds = document.getElementById('mailing_ids') ? document.getElementById('mailing_ids').value : '';
+
   const lista = document.getElementById('nichos-lista');
   const loading = document.getElementById('nichos-loading');
   const vazio = document.getElementById('nichos-vazio');
+  const alertSemNicho = document.getElementById('nicho-sem-nicho-alert');
   loading.classList.remove('d-none');
   lista.innerHTML = '';
   vazio.classList.add('d-none');
+  alertSemNicho.classList.add('d-none');
+
+  if (!mailingIds) {
+    loading.classList.add('d-none');
+    lista.innerHTML = '<div class="text-warning small"><i class="bi bi-exclamation-triangle me-1"></i>Selecione pelo menos um mailing acima primeiro.</div>';
+    return;
+  }
 
   try {
-    const res = await fetch('/api/nichos');
-    _nichosData = await res.json();
+    const res = await fetch(`/api/nichos?mailing_ids=${encodeURIComponent(mailingIds)}`);
+    const data = await res.json();
     loading.classList.add('d-none');
 
-    if (!_nichosData.length) {
+    const nichosList = data.nichos || [];
+    const semNicho = data.sem_nicho || 0;
+
+    if (!nichosList.length) {
       vazio.classList.remove('d-none');
+      vazio.innerHTML = `Nenhum contato com nicho nos mailings selecionados.<br>
+        <small>Defina o nicho dos contatos no CRM ou inclua a coluna <code>nicho</code> no CSV do mailing.</small>`;
+      if (semNicho > 0) {
+        alertSemNicho.classList.remove('d-none');
+        alertSemNicho.innerHTML = `<i class="bi bi-info-circle me-1"></i><strong>${semNicho}</strong> contato(s) nos mailings <strong>sem nicho definido</strong>.`;
+      }
       return;
     }
 
-    lista.innerHTML = _nichosData.map((n, i) => `
+    lista.innerHTML = nichosList.map((n, i) => `
       <div class="form-check py-2 border-bottom d-flex align-items-center">
         <input class="form-check-input chk-nicho" type="checkbox" value="${n.nicho}" id="nicho-${i}"
                onchange="atualizarNichosSelecionados()">
@@ -714,6 +739,11 @@ async function carregarNichos() {
         </label>
       </div>
     `).join('');
+
+    if (semNicho > 0) {
+      alertSemNicho.classList.remove('d-none');
+      alertSemNicho.innerHTML = `<i class="bi bi-info-circle me-1"></i><strong>${semNicho}</strong> contato(s) nos mailings <strong>sem nicho definido</strong> (não serão incluídos na segmentação).`;
+    }
   } catch (e) {
     loading.classList.add('d-none');
     lista.innerHTML = '<div class="text-danger small">Erro ao carregar nichos.</div>';
@@ -722,8 +752,11 @@ async function carregarNichos() {
 
 function atualizarNichosSelecionados() {
   const checks = document.querySelectorAll('.chk-nicho:checked');
+  const label = checks.length + ' nicho' + (checks.length !== 1 ? 's' : '');
   const badge = document.getElementById('nicho-count-badge');
-  badge.textContent = checks.length + ' nicho' + (checks.length !== 1 ? 's' : '');
+  const badgeTop = document.getElementById('nicho-count-badge-top');
+  if (badge) badge.textContent = label;
+  if (badgeTop) badgeTop.textContent = label;
 }
 
 function toggleAllNichos(marcar) {
