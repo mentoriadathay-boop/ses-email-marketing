@@ -19,6 +19,7 @@
           <tr>
             <th class="ps-4">Nome</th>
             <th>Contatos</th>
+            <th>Nicho</th>
             <th>Criado em</th>
             <th></th>
           </tr>
@@ -32,11 +33,25 @@
                 <i class="bi bi-people me-1"></i>{{ m.contact_count }}
               </span>
             </td>
+            <td>
+              {% if m.nichos_resumo %}
+                {% for n in m.nichos_resumo.split('|') %}
+                  <span class="badge me-1" style="background:#e0e7ff;color:#3730a3;font-size:.7rem">{{ n }}</span>
+                {% endfor %}
+              {% else %}
+                <span class="text-muted small">—</span>
+              {% endif %}
+            </td>
             <td class="small text-muted">{{ m.created_at }}</td>
             <td class="text-end pe-3">
+              <button type="button" class="btn btn-sm btn-outline-success me-1"
+                      data-bs-toggle="modal" data-bs-target="#modalNichoMassa"
+                      onclick="document.getElementById('nicho_massa_mailing_id').value={{ m.id }};document.getElementById('nicho_massa_mailing_name').textContent='{{ m.name }}'">
+                <i class="bi bi-diagram-3 me-1"></i>Nicho
+              </button>
               <a href="{{ url_for('nova_campanha') }}?mailing_id={{ m.id }}"
                  class="btn btn-sm btn-outline-primary me-1">
-                <i class="bi bi-send me-1"></i>Usar em Campanha
+                <i class="bi bi-send me-1"></i>Campanha
               </a>
               <form method="POST" action="{{ url_for('deletar_mailing', mailing_id=m.id) }}"
                     class="d-inline"
@@ -78,13 +93,94 @@
           <div class="mb-3">
             <label class="form-label fw-semibold">Arquivo CSV *</label>
             <input type="file" name="csv_file" class="form-control" accept=".csv" required>
-            <div class="form-text">Colunas: <code>nome</code> e <code>email</code></div>
+            <div class="form-text">Colunas: <code>nome</code> e <code>email</code> (opcional: <code>nicho</code>)</div>
+          </div>
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Nicho / Segmento padrão</label>
+            <select name="nicho_padrao" class="form-select form-select-sm">
+              <option value="">— Nenhum (usar coluna nicho do CSV) —</option>
+              <option value="Empreendedorismo e Negócios">Empreendedorismo e Negócios</option>
+              <option value="Saúde e Bem-Estar">Saúde e Bem-Estar</option>
+              <option value="Desenvolvimento Pessoal e Espiritualidade">Desenvolvimento Pessoal e Espiritualidade</option>
+              <option value="Mulheres">Mulheres</option>
+              <option value="Liderança e Gestão">Liderança e Gestão</option>
+              <option value="Educação e Ensino">Educação e Ensino</option>
+              <option value="Marketing Digital e Vendas">Marketing Digital e Vendas</option>
+              <option value="Relacionamentos e Família">Relacionamentos e Família</option>
+              <option value="Beleza e Estética">Beleza e Estética</option>
+              <option value="Carreira e Recursos Humanos">Carreira e Recursos Humanos</option>
+              <option value="Finanças e Investimentos">Finanças e Investimentos</option>
+              <option value="Tecnologia e Inovação">Tecnologia e Inovação</option>
+              <option value="Direito e Advocacia">Direito e Advocacia</option>
+              <option value="Coaching">Coaching</option>
+              <option value="Alimentação e Nutrição">Alimentação e Nutrição</option>
+              <option value="Psicologia e Terapia">Psicologia e Terapia</option>
+              <option value="Fitness e Esportes">Fitness e Esportes</option>
+              <option value="Arte e Cultura">Arte e Cultura</option>
+            </select>
+            <div class="form-text">Aplica este nicho a todos os contatos do CSV que não tiverem nicho definido</div>
           </div>
         </div>
         <div class="modal-footer">
           <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
           <button type="submit" class="btn btn-primary">
             <i class="bi bi-upload me-1"></i> Salvar Mailing
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+<!-- Modal atribuir nicho em massa -->
+<div class="modal fade" id="modalNichoMassa" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="bi bi-diagram-3 me-2"></i>Atribuir Nicho em Massa</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <form method="POST" action="{{ url_for('atribuir_nicho_mailing') }}">
+        <div class="modal-body">
+          <input type="hidden" name="mailing_id" id="nicho_massa_mailing_id">
+          <p class="small text-muted">
+            Atribuir nicho a <strong>todos os contatos</strong> do mailing
+            <strong id="nicho_massa_mailing_name"></strong> que ainda não têm nicho definido.
+          </p>
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Nicho / Segmento</label>
+            <select name="nicho" class="form-select" required>
+              <option value="">— Selecione —</option>
+              <option value="Empreendedorismo e Negócios">Empreendedorismo e Negócios</option>
+              <option value="Saúde e Bem-Estar">Saúde e Bem-Estar</option>
+              <option value="Desenvolvimento Pessoal e Espiritualidade">Desenvolvimento Pessoal e Espiritualidade</option>
+              <option value="Mulheres">Mulheres</option>
+              <option value="Liderança e Gestão">Liderança e Gestão</option>
+              <option value="Educação e Ensino">Educação e Ensino</option>
+              <option value="Marketing Digital e Vendas">Marketing Digital e Vendas</option>
+              <option value="Relacionamentos e Família">Relacionamentos e Família</option>
+              <option value="Beleza e Estética">Beleza e Estética</option>
+              <option value="Carreira e Recursos Humanos">Carreira e Recursos Humanos</option>
+              <option value="Finanças e Investimentos">Finanças e Investimentos</option>
+              <option value="Tecnologia e Inovação">Tecnologia e Inovação</option>
+              <option value="Direito e Advocacia">Direito e Advocacia</option>
+              <option value="Coaching">Coaching</option>
+              <option value="Alimentação e Nutrição">Alimentação e Nutrição</option>
+              <option value="Psicologia e Terapia">Psicologia e Terapia</option>
+              <option value="Fitness e Esportes">Fitness e Esportes</option>
+              <option value="Arte e Cultura">Arte e Cultura</option>
+            </select>
+          </div>
+          <div class="form-check mb-3">
+            <input class="form-check-input" type="checkbox" name="sobrescrever" id="chkSobrescrever">
+            <label class="form-check-label small" for="chkSobrescrever">
+              Sobrescrever nicho de contatos que já têm nicho definido
+            </label>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+          <button type="submit" class="btn btn-success">
+            <i class="bi bi-check-lg me-1"></i> Atribuir Nicho
           </button>
         </div>
       </form>
