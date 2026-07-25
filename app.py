@@ -1062,7 +1062,7 @@ def nova_campanha():
     mailings = conn.execute('SELECT * FROM mailings ORDER BY created_at DESC').fetchall()
     sequences = conn.execute("SELECT id, name FROM sequences WHERE status='active' ORDER BY name").fetchall()
     conn.close()
-    return render_template('nova_campanha.html', mailings=mailings, sequences=sequences)
+    return render_template('nova_campanha.html', mailings=mailings, sequences=sequences, reutilizar=None)
 
 @app.route('/campanha/<int:campaign_id>')
 def campanha_detalhe(campaign_id):
@@ -1079,6 +1079,19 @@ def campanha_detalhe(campaign_id):
         flash('Campanha não encontrada.', 'danger')
         return redirect(url_for('index'))
     return render_template('campanha_detalhe.html', campaign=campaign, logs=logs)
+
+@app.route('/campanha/<int:campaign_id>/reutilizar')
+def campanha_reutilizar(campaign_id):
+    conn = get_db()
+    campaign = conn.execute('SELECT * FROM campaigns WHERE id=%s', (campaign_id,)).fetchone()
+    if not campaign:
+        conn.close()
+        flash('Campanha não encontrada.', 'danger')
+        return redirect(url_for('index'))
+    mailings = conn.execute('SELECT * FROM mailings ORDER BY created_at DESC').fetchall()
+    sequences = conn.execute("SELECT id, name FROM sequences WHERE status='active' ORDER BY name").fetchall()
+    conn.close()
+    return render_template('nova_campanha.html', mailings=mailings, sequences=sequences, reutilizar=campaign)
 
 @app.route('/campanha/log/<int:log_id>/deletar', methods=['POST'])
 def deletar_log_campanha(log_id):

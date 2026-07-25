@@ -1,13 +1,19 @@
 {% extends "base.html" %}
 {% block content %}
-<div class="d-flex align-items-center mb-4">
-  <a href="{{ url_for('index') }}" class="btn btn-sm btn-outline-secondary me-3">
-    <i class="bi bi-arrow-left"></i>
-  </a>
-  <div>
-    <h4 class="fw-bold mb-0">{{ campaign.name }}</h4>
-    <small class="text-muted">{{ campaign.sender_email }} &bull; {{ campaign.created_at }}</small>
+<div class="d-flex align-items-center justify-content-between mb-4">
+  <div class="d-flex align-items-center">
+    <a href="{{ url_for('index') }}" class="btn btn-sm btn-outline-secondary me-3">
+      <i class="bi bi-arrow-left"></i>
+    </a>
+    <div>
+      <h4 class="fw-bold mb-0">{{ campaign.name }}</h4>
+      <small class="text-muted">{{ campaign.sender_email }} &bull; {{ campaign.created_at }}</small>
+    </div>
   </div>
+  <a href="{{ url_for('campanha_reutilizar', campaign_id=campaign.id) }}"
+     class="btn btn-outline-primary">
+    <i class="bi bi-arrow-repeat me-1"></i> Reutilizar Campanha
+  </a>
 </div>
 
 {% if campaign.status == 'scheduled' and campaign.scheduled_at %}
