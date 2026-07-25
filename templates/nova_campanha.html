@@ -178,16 +178,38 @@
       <!-- Mailing salvo -->
       <div id="mailing-section" class="card mb-4 d-none">
         <div class="card-body">
-          <h6 class="fw-semibold mb-3">
-            <i class="bi bi-database me-2 text-primary"></i>Selecionar Mailing
-          </h6>
+          <div class="d-flex justify-content-between align-items-center mb-3">
+            <h6 class="fw-semibold mb-0">
+              <i class="bi bi-database me-2 text-primary"></i>Selecionar Mailings
+            </h6>
+            <span class="badge bg-primary" id="mailing-count-badge">0 selecionados</span>
+          </div>
           {% if mailings %}
-          <select name="mailing_id" id="mailing_id" class="form-select mb-3">
-            <option value="">— Escolha um mailing —</option>
+          <input type="hidden" name="mailing_ids" id="mailing_ids" value="">
+          <div class="form-text mb-2">Selecione um ou mais mailings. Os contatos serão combinados sem duplicatas.</div>
+          <div style="max-height:250px;overflow-y:auto;" class="border rounded p-2 mb-2">
             {% for m in mailings %}
-            <option value="{{ m.id }}">{{ m.name }} ({{ m.contact_count }} contatos)</option>
+            <div class="form-check py-1 border-bottom">
+              <input class="form-check-input chk-mailing" type="checkbox"
+                     value="{{ m.id }}" id="mailing-{{ m.id }}"
+                     data-count="{{ m.contact_count }}"
+                     onchange="atualizarMailingsSelecionados()">
+              <label class="form-check-label d-flex justify-content-between w-100" for="mailing-{{ m.id }}">
+                <span>{{ m.name }}</span>
+                <span class="badge bg-light text-dark">{{ m.contact_count }} contatos</span>
+              </label>
+            </div>
             {% endfor %}
-          </select>
+          </div>
+          <div class="d-flex gap-2">
+            <button type="button" class="btn btn-sm btn-outline-secondary" onclick="toggleAllMailings(true)">
+              <i class="bi bi-check-all me-1"></i>Todos
+            </button>
+            <button type="button" class="btn btn-sm btn-outline-secondary" onclick="toggleAllMailings(false)">
+              <i class="bi bi-square me-1"></i>Nenhum
+            </button>
+          </div>
+          <div id="mailing-total-contacts" class="small text-muted mt-2"></div>
           {% else %}
           <div class="alert alert-warning small mb-0">
             Nenhum mailing cadastrado ainda.
@@ -414,11 +436,36 @@ function setScheduleMode(mode) {
 }
 
 document.getElementById('campaign-form').addEventListener('submit', function(e) {
+  atualizarMailingsSelecionados();
   const btn = document.getElementById('btn-disparar');
   const isScheduled = document.getElementById('schedule_mode').value === 'scheduled';
   btn.innerHTML = `<span class="spinner-border spinner-border-sm me-2"></span> ${isScheduled ? 'Agendando...' : 'Enviando...'}`;
   btn.disabled = true;
 });
+
+// ── Mailings múltiplos ───────────────────────────────────────────
+function atualizarMailingsSelecionados() {
+  const checks = document.querySelectorAll('.chk-mailing:checked');
+  const ids = Array.from(checks).map(c => c.value);
+  const totalContatos = Array.from(checks).reduce((s, c) => s + parseInt(c.dataset.count || 0), 0);
+  const hiddenField = document.getElementById('mailing_ids');
+  if (hiddenField) hiddenField.value = ids.join(',');
+  const badge = document.getElementById('mailing-count-badge');
+  if (badge) badge.textContent = ids.length + ' selecionado' + (ids.length !== 1 ? 's' : '');
+  const info = document.getElementById('mailing-total-contacts');
+  if (info) {
+    if (ids.length > 0) {
+      info.textContent = '~' + totalContatos + ' contatos no total (duplicatas serão removidas)';
+    } else {
+      info.textContent = '';
+    }
+  }
+}
+
+function toggleAllMailings(marcar) {
+  document.querySelectorAll('.chk-mailing').forEach(c => c.checked = marcar);
+  atualizarMailingsSelecionados();
+}
 
 // ── Destinatários individuais ─────────────────────────────────────
 let _destinatarios = [];
@@ -518,9 +565,10 @@ document.addEventListener('DOMContentLoaded', function() {
 
   // Pré-selecionar mailing se reutilizando campanha com mailing
   {% if reutilizar and reutilizar.mailing_id %}
-  const mailingSelect = document.getElementById('mailing_id');
-  if (mailingSelect) {
-    mailingSelect.value = '{{ reutilizar.mailing_id }}';
+  const chkMailing = document.getElementById('mailing-{{ reutilizar.mailing_id }}');
+  if (chkMailing) {
+    chkMailing.checked = true;
+    atualizarMailingsSelecionados();
     setSendMode('mailing');
   }
   {% endif %}

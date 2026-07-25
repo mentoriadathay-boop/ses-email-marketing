@@ -953,7 +953,8 @@ def nova_campanha():
         subject = request.form.get('subject', '').strip()
         body_html = request.form.get('body_html', '').strip()
         send_mode = request.form.get('send_mode', 'csv')
-        mailing_id = request.form.get('mailing_id', '').strip() or None
+        mailing_ids_raw = request.form.get('mailing_ids', '').strip()
+        mailing_id = mailing_ids_raw.split(',')[0] if mailing_ids_raw else None
         sequence_id = request.form.get('sequence_id', '').strip() or None
         schedule_mode = request.form.get('schedule_mode', 'now')
         scheduled_at_raw = request.form.get('scheduled_at', '').strip()
@@ -992,24 +993,33 @@ def nova_campanha():
                     w.writerow([r.get('name', ''), r['email']])
             csv_filename = temp_filename
         elif send_mode == 'mailing':
-            if not mailing_id:
-                flash('Selecione um mailing.', 'danger')
+            if not mailing_ids_raw:
+                flash('Selecione pelo menos um mailing.', 'danger')
                 return redirect(url_for('nova_campanha'))
-            conn_m = get_db()
-            ml = conn_m.execute('SELECT * FROM mailings WHERE id=%s', (mailing_id,)).fetchone()
-            conn_m.close()
-            if not ml:
-                flash('Mailing não encontrado.', 'danger')
+            mailing_id_list = [mid.strip() for mid in mailing_ids_raw.split(',') if mid.strip()]
+            if not mailing_id_list:
+                flash('Selecione pelo menos um mailing.', 'danger')
                 return redirect(url_for('nova_campanha'))
-            conn_c = get_db()
-            contacts = get_mailing_contacts_db(int(mailing_id), conn_c)
-            conn_c.close()
+            emails_vistos = set()
+            for mid in mailing_id_list:
+                conn_m = get_db()
+                ml = conn_m.execute('SELECT * FROM mailings WHERE id=%s', (mid,)).fetchone()
+                if not ml:
+                    conn_m.close()
+                    continue
+                ml_contacts = get_mailing_contacts_db(int(mid), conn_m)
+                conn_m.close()
+                if not ml_contacts:
+                    filepath = os.path.join(app.config['UPLOAD_FOLDER'], ml['filename'])
+                    if os.path.exists(filepath):
+                        ml_contacts = parse_csv(filepath)
+                for c in ml_contacts:
+                    em = c.get('email', '').strip().lower()
+                    if em and em not in emails_vistos:
+                        emails_vistos.add(em)
+                        contacts.append(c)
             if not contacts:
-                filepath = os.path.join(app.config['UPLOAD_FOLDER'], ml['filename'])
-                if os.path.exists(filepath):
-                    contacts = parse_csv(filepath)
-            if not contacts:
-                flash(f'Mailing "{ml["name"]}" não tem contatos. Faça o re-upload em Mailings.', 'danger')
+                flash('Nenhum contato encontrado nos mailings selecionados.', 'danger')
                 return redirect(url_for('nova_campanha'))
         else:
             if 'csv_file' not in request.files or request.files['csv_file'].filename == '':
