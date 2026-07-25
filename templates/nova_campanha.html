@@ -43,7 +43,7 @@
   </div>
 </div>
 
-<form method="POST" enctype="multipart/form-data" id="campaign-form" onsubmit="return syncAllEditors()">
+<form method="POST" action="{{ url_for('nova_campanha') }}" enctype="multipart/form-data" id="campaign-form" onsubmit="return syncAllEditors()">
   <input type="hidden" name="send_mode" id="send_mode" value="csv">
 
   <div class="row g-4">
