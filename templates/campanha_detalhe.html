@@ -69,6 +69,7 @@
         {% if campaign.status == 'running' %}Enviando...
         {% elif campaign.status == 'done' %}Concluída
         {% elif campaign.status == 'scheduled' %}Agendada
+        {% elif campaign.status == 'draft' %}Rascunho
         {% elif campaign.status == 'error' %}Erro
         {% else %}{{ campaign.status }}{% endif %}
       </div>
