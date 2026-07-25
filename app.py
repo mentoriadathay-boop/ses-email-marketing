@@ -2228,7 +2228,21 @@ def adicionar_blacklist_manual():
 @app.route('/mailings')
 def lista_mailings():
     conn = get_db()
-    mailings = conn.execute('SELECT * FROM mailings ORDER BY created_at DESC').fetchall()
+    mailings_raw = conn.execute('SELECT * FROM mailings ORDER BY created_at DESC').fetchall()
+    mailings = []
+    for m in mailings_raw:
+        nichos_rows = conn.execute("""
+            SELECT DISTINCT COALESCE(NULLIF(c.nicho,''), NULLIF(mc.nicho,'')) as nicho
+            FROM mailing_contacts mc
+            LEFT JOIN contacts c ON LOWER(c.email) = LOWER(mc.email)
+            WHERE mc.mailing_id=%s
+              AND COALESCE(NULLIF(c.nicho,''), NULLIF(mc.nicho,'')) IS NOT NULL
+              AND COALESCE(NULLIF(c.nicho,''), NULLIF(mc.nicho,'')) != ''
+        """, (m['id'],)).fetchall()
+        nichos_resumo = '|'.join(r['nicho'] for r in nichos_rows) if nichos_rows else ''
+        row = dict(m)
+        row['nichos_resumo'] = nichos_resumo
+        mailings.append(row)
     conn.close()
     return render_template('mailings.html', mailings=mailings)
 
@@ -2248,6 +2262,7 @@ def upload_mailing():
     filename = f"mailing_{uuid.uuid4().hex}.csv"
     filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
     file.save(filepath)
+    nicho_padrao = request.form.get('nicho_padrao', '').strip()
     contacts = parse_csv(filepath)
     conn = get_db()
     cur = conn.execute(
@@ -2256,22 +2271,50 @@ def upload_mailing():
     mailing_id = cur.fetchone()['id']
     novos_no_crm = 0
     for c in contacts:
+        nicho_contato = c.get('nicho', '').strip() or nicho_padrao
         conn.execute(
             'INSERT INTO mailing_contacts (mailing_id,email,name,tags,nicho) VALUES (%s,%s,%s,%s,%s) ON CONFLICT (mailing_id,email) DO NOTHING',
-            (mailing_id, c['email'], c['name'], c['tags'], c.get('nicho', '')))
+            (mailing_id, c['email'], c['name'], c['tags'], nicho_contato))
         existia = conn.execute('SELECT id FROM contacts WHERE email=%s', (c['email'],)).fetchone()
         upsert_contact(c['email'], c['name'], c['tags'], conn,
                        phone=c.get('phone'), company=c.get('company'),
                        position=c.get('position'), notes=c.get('notes'),
                        product_interest=c.get('product_interest'),
                        source=c.get('source'), status=c.get('status'),
-                       nicho=c.get('nicho', ''))
+                       nicho=nicho_contato)
         if not existia:
             novos_no_crm += 1
     conn.commit()
     conn.close()
     crm_msg = f' ({novos_no_crm} novo(s) adicionado(s) ao CRM)' if novos_no_crm else ' (todos já estavam no CRM)'
     flash(f'Mailing "{name}" salvo com {len(contacts)} contatos!{crm_msg}', 'success')
+    return redirect(url_for('lista_mailings'))
+
+@app.route('/mailings/atribuir-nicho', methods=['POST'])
+def atribuir_nicho_mailing():
+    mailing_id = request.form.get('mailing_id')
+    nicho = request.form.get('nicho', '').strip()
+    sobrescrever = request.form.get('sobrescrever') == 'on'
+    if not mailing_id or not nicho:
+        flash('Selecione um mailing e um nicho.', 'danger')
+        return redirect(url_for('lista_mailings'))
+    conn = get_db()
+    if sobrescrever:
+        updated_mc = conn.execute(
+            "UPDATE mailing_contacts SET nicho=%s WHERE mailing_id=%s RETURNING email",
+            (nicho, mailing_id)).fetchall()
+    else:
+        updated_mc = conn.execute(
+            "UPDATE mailing_contacts SET nicho=%s WHERE mailing_id=%s AND (nicho IS NULL OR nicho='') RETURNING email",
+            (nicho, mailing_id)).fetchall()
+    for row in updated_mc:
+        if sobrescrever:
+            conn.execute("UPDATE contacts SET nicho=%s WHERE email=%s", (nicho, row['email']))
+        else:
+            conn.execute("UPDATE contacts SET nicho=%s WHERE email=%s AND (nicho IS NULL OR nicho='')", (nicho, row['email']))
+    conn.commit()
+    conn.close()
+    flash(f'Nicho "{nicho}" atribuído a {len(updated_mc)} contato(s).', 'success')
     return redirect(url_for('lista_mailings'))
 
 @app.route('/mailings/<int:mailing_id>/deletar', methods=['POST'])
