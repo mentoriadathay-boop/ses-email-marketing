@@ -1106,6 +1106,41 @@ def campanha_reutilizar(campaign_id):
     conn.close()
     return render_template('nova_campanha.html', mailings=mailings, sequences=sequences, reutilizar=campaign)
 
+@app.route('/nichos')
+def pagina_nichos():
+    conn = get_db()
+    nichos_crm = conn.execute("""
+        SELECT nicho, COUNT(*) as qtd
+        FROM contacts WHERE nicho IS NOT NULL AND nicho != ''
+        GROUP BY nicho ORDER BY qtd DESC
+    """).fetchall()
+    total_com_nicho = sum(r['qtd'] for r in nichos_crm)
+    total_sem_nicho = conn.execute(
+        "SELECT COUNT(*) as qtd FROM contacts WHERE nicho IS NULL OR nicho=''"
+    ).fetchone()['qtd']
+    total_contatos = total_com_nicho + total_sem_nicho
+
+    nichos_mailing = conn.execute("""
+        SELECT COALESCE(NULLIF(c.nicho,''), NULLIF(mc.nicho,'')) as nicho,
+               COUNT(DISTINCT mc.email) as qtd,
+               STRING_AGG(DISTINCT m.name, ', ') as mailings
+        FROM mailing_contacts mc
+        LEFT JOIN contacts c ON LOWER(c.email) = LOWER(mc.email)
+        LEFT JOIN mailings m ON m.id = mc.mailing_id
+        WHERE COALESCE(NULLIF(c.nicho,''), NULLIF(mc.nicho,'')) IS NOT NULL
+          AND COALESCE(NULLIF(c.nicho,''), NULLIF(mc.nicho,'')) != ''
+        GROUP BY COALESCE(NULLIF(c.nicho,''), NULLIF(mc.nicho,''))
+        ORDER BY qtd DESC
+    """).fetchall()
+
+    conn.close()
+    return render_template('nichos.html',
+                           nichos_crm=nichos_crm,
+                           nichos_mailing=nichos_mailing,
+                           total_com_nicho=total_com_nicho,
+                           total_sem_nicho=total_sem_nicho,
+                           total_contatos=total_contatos)
+
 @app.route('/api/nichos')
 def api_nichos():
     mailing_ids = request.args.get('mailing_ids', '').strip()

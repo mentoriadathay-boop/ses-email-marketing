@@ -1,0 +1,300 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <div>
+    <h4 class="fw-bold mb-0">Nichos</h4>
+    <small class="text-muted">Visualize e crie campanhas segmentadas por nicho</small>
+  </div>
+</div>
+
+<!-- Stats -->
+<div class="row g-3 mb-4">
+  <div class="col-md-4">
+    <div class="stat-card" style="background:linear-gradient(135deg,#6366f1,#4f46e5)">
+      <div class="opacity-75 small mb-1">Total de Contatos</div>
+      <div class="fs-3 fw-bold">{{ total_contatos }}</div>
+    </div>
+  </div>
+  <div class="col-md-4">
+    <div class="stat-card" style="background:linear-gradient(135deg,#10b981,#059669)">
+      <div class="opacity-75 small mb-1">Com Nicho Definido</div>
+      <div class="fs-3 fw-bold">{{ total_com_nicho }}</div>
+    </div>
+  </div>
+  <div class="col-md-4">
+    <div class="stat-card" style="background:linear-gradient(135deg,#f59e0b,#d97706)">
+      <div class="opacity-75 small mb-1">Sem Nicho</div>
+      <div class="fs-3 fw-bold">{{ total_sem_nicho }}</div>
+    </div>
+  </div>
+</div>
+
+<!-- Grafico -->
+<div class="card mb-4">
+  <div class="card-body">
+    <h6 class="fw-semibold mb-3"><i class="bi bi-bar-chart me-2 text-primary"></i>Contatos por Nicho</h6>
+    <canvas id="chartNichos" height="100"></canvas>
+  </div>
+</div>
+
+<!-- Cards de nichos clicaveis -->
+<div class="card mb-4">
+  <div class="card-header bg-white border-0 pt-4 pb-0 px-4">
+    <h6 class="fw-semibold mb-0"><i class="bi bi-diagram-3 me-2 text-primary"></i>Clique no nicho para iniciar campanha</h6>
+  </div>
+  <div class="card-body">
+    {% if nichos_crm %}
+    <div class="row g-3">
+      {% set cores = [
+        ('#4361ee','#eef0ff'), ('#10b981','#ecfdf5'), ('#f59e0b','#fffbeb'),
+        ('#ef4444','#fef2f2'), ('#8b5cf6','#f5f3ff'), ('#ec4899','#fdf2f8'),
+        ('#14b8a6','#f0fdfa'), ('#f97316','#fff7ed'), ('#6366f1','#eef2ff'),
+        ('#06b6d4','#ecfeff'), ('#84cc16','#f7fee7'), ('#d946ef','#fdf4ff'),
+        ('#0ea5e9','#f0f9ff'), ('#e11d48','#fff1f2'), ('#a855f7','#faf5ff'),
+        ('#22c55e','#f0fdf4'), ('#eab308','#fefce8'), ('#64748b','#f8fafc')
+      ] %}
+      {% for n in nichos_crm %}
+      {% set cor = cores[loop.index0 % cores|length] %}
+      <div class="col-md-4 col-lg-3">
+        <div class="card h-100 border-0 shadow-sm nicho-card" style="cursor:pointer;transition:transform .2s"
+             onmouseover="this.style.transform='translateY(-4px)'"
+             onmouseout="this.style.transform='none'"
+             onclick="iniciarCampanhaNicho('{{ n.nicho }}', {{ n.qtd }})">
+          <div class="card-body text-center py-4">
+            <div class="rounded-circle d-inline-flex align-items-center justify-content-center mb-3"
+                 style="width:56px;height:56px;background:{{ cor[1] }}">
+              <i class="bi bi-people-fill fs-4" style="color:{{ cor[0] }}"></i>
+            </div>
+            <h6 class="fw-bold mb-1" style="font-size:.9rem">{{ n.nicho }}</h6>
+            <div class="fs-4 fw-bold" style="color:{{ cor[0] }}">{{ n.qtd }}</div>
+            <div class="text-muted small">contatos</div>
+            <div class="mt-2">
+              <span class="badge" style="background:{{ cor[1] }};color:{{ cor[0] }};font-size:.7rem">
+                <i class="bi bi-send me-1"></i>Criar Campanha
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+    {% else %}
+    <div class="text-center py-5 text-muted">
+      <i class="bi bi-diagram-3 fs-1 d-block mb-2"></i>
+      Nenhum contato com nicho definido.<br>
+      <small>Atribua nichos nos <a href="{{ url_for('lista_mailings') }}">Mailings</a> ou no <a href="{{ url_for('lista_contatos') }}">CRM</a>.</small>
+    </div>
+    {% endif %}
+  </div>
+</div>
+
+<!-- Modal campanha por nicho -->
+<div class="modal fade" id="modalCampanhaNicho" tabindex="-1">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">
+          <i class="bi bi-send me-2"></i>Campanha para: <strong id="modalNichoNome"></strong>
+          <span class="badge bg-primary ms-2" id="modalNichoQtd"></span>
+        </h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="row g-3">
+          <div class="col-md-6">
+            <label class="form-label fw-semibold">Nome da Campanha *</label>
+            <input type="text" id="nichoNomeCampanha" class="form-control" placeholder="Ex: Promos Nutrição">
+          </div>
+          <div class="col-md-6">
+            <label class="form-label fw-semibold">E-mail Remetente *</label>
+            <input type="email" id="nichoSenderEmail" class="form-control" placeholder="contato@seudominio.com.br">
+          </div>
+        </div>
+        <div class="mb-3 mt-3">
+          <label class="form-label fw-semibold">Assunto *</label>
+          <input type="text" id="nichoSubject" class="form-control" placeholder="Use {nicho} para personalizar">
+          <div class="form-text">Use <code>{nicho}</code> para inserir o nome do nicho no assunto</div>
+        </div>
+
+        <hr>
+        <h6 class="fw-semibold mb-3"><i class="bi bi-stars me-2 text-success"></i>A IA vai gerar o conteudo alinhado com o nicho</h6>
+        <p class="text-muted small">A inteligencia artificial cria um email com linguagem, exemplos, dores e beneficios especificos para o nicho selecionado.</p>
+
+        <div class="mb-2">
+          <label class="form-label small fw-semibold">Publico-alvo</label>
+          <input type="text" id="nichoPublicoModal" class="form-control form-control-sm"
+                 placeholder="Ex: profissionais e empreendedores do nicho">
+        </div>
+        <div class="mb-2">
+          <label class="form-label small fw-semibold">Objetivo do email</label>
+          <input type="text" id="nichoObjetivoModal" class="form-control form-control-sm"
+                 placeholder="Ex: gerar agendamento de diagnostico">
+        </div>
+        <div class="mb-2">
+          <label class="form-label small fw-semibold">Tema</label>
+          <input type="text" id="nichoTemaModal" class="form-control form-control-sm"
+                 placeholder="Ex: como escalar seu negocio em 2025">
+        </div>
+        <div class="mb-2">
+          <label class="form-label small fw-semibold">Contexto adicional</label>
+          <textarea id="nichoContextoModal" class="form-control form-control-sm" rows="2"
+                    placeholder="Ex: divulgando novo programa de mentoria..."></textarea>
+        </div>
+        <div class="mb-3">
+          <label class="form-label small fw-semibold">Kit de Marca</label>
+          <select id="nichoKitIdModal" class="form-select form-select-sm">
+            <option value="">Sem kit (cores padrao)</option>
+          </select>
+        </div>
+
+        <div id="nicho-modal-resultado"></div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+        <button type="button" class="btn btn-success fw-semibold px-4" id="btnDispararNichoModal"
+                onclick="dispararCampanhaNichoModal()">
+          <i class="bi bi-stars me-2"></i>Gerar com IA e Disparar
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let _nichoSelecionado = '';
+
+// Grafico de barras
+const nichosData = {{ nichos_crm|tojson }};
+if (nichosData.length) {
+  const labels = nichosData.map(n => n.nicho.length > 25 ? n.nicho.slice(0,23) + '...' : n.nicho);
+  const counts = nichosData.map(n => n.qtd);
+  const cores = ['#4361ee','#10b981','#f59e0b','#ef4444','#8b5cf6','#ec4899',
+                 '#14b8a6','#f97316','#6366f1','#06b6d4','#84cc16','#d946ef',
+                 '#0ea5e9','#e11d48','#a855f7','#22c55e','#eab308','#64748b'];
+  const bgColors = counts.map((_, i) => cores[i % cores.length] + '33');
+  const borderColors = counts.map((_, i) => cores[i % cores.length]);
+
+  new Chart(document.getElementById('chartNichos'), {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [{
+        label: 'Contatos',
+        data: counts,
+        backgroundColor: bgColors,
+        borderColor: borderColors,
+        borderWidth: 2,
+        borderRadius: 6,
+      }]
+    },
+    options: {
+      indexAxis: 'y',
+      responsive: true,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { beginAtZero: true, ticks: { precision: 0 } }
+      },
+      onClick: (evt, elements) => {
+        if (elements.length) {
+          const idx = elements[0].index;
+          const nicho = nichosData[idx].nicho;
+          const qtd = nichosData[idx].qtd;
+          iniciarCampanhaNicho(nicho, qtd);
+        }
+      }
+    }
+  });
+}
+
+function iniciarCampanhaNicho(nicho, qtd) {
+  _nichoSelecionado = nicho;
+  document.getElementById('modalNichoNome').textContent = nicho;
+  document.getElementById('modalNichoQtd').textContent = qtd + ' contatos';
+  document.getElementById('nichoNomeCampanha').value = nicho;
+  document.getElementById('nichoSubject').value = '';
+  document.getElementById('nicho-modal-resultado').innerHTML = '';
+
+  // Carregar kits
+  fetch('/api/brand-kits')
+    .then(r => r.json())
+    .then(kits => {
+      const sel = document.getElementById('nichoKitIdModal');
+      sel.innerHTML = '<option value="">Sem kit (cores padrao)</option>';
+      kits.forEach(k => { sel.innerHTML += `<option value="${k.id}">${k.name}</option>`; });
+    }).catch(() => {});
+
+  new bootstrap.Modal(document.getElementById('modalCampanhaNicho')).show();
+}
+
+async function dispararCampanhaNichoModal() {
+  const nome = document.getElementById('nichoNomeCampanha').value.trim();
+  const sender = document.getElementById('nichoSenderEmail').value.trim();
+  const subject = document.getElementById('nichoSubject').value.trim();
+
+  if (!nome || !sender || !subject) {
+    alert('Preencha nome, email remetente e assunto.');
+    return;
+  }
+
+  const btn = document.getElementById('btnDispararNichoModal');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Gerando email com IA...';
+  document.getElementById('nicho-modal-resultado').innerHTML = '';
+
+  const body = {
+    campaign_name: nome,
+    sender_email: sender,
+    subject: subject,
+    nichos: [_nichoSelecionado],
+    mailing_ids: '',
+    ia_config: {
+      publico: document.getElementById('nichoPublicoModal').value.trim(),
+      objetivo: document.getElementById('nichoObjetivoModal').value.trim(),
+      tema: document.getElementById('nichoTemaModal').value.trim(),
+      contexto: document.getElementById('nichoContextoModal').value.trim(),
+      kit_id: document.getElementById('nichoKitIdModal').value || null,
+    }
+  };
+
+  try {
+    const res = await fetch('/campanha/segmentada', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+    const data = await res.json();
+    btn.disabled = false;
+    btn.innerHTML = '<i class="bi bi-stars me-2"></i>Gerar com IA e Disparar';
+
+    if (data.error) {
+      document.getElementById('nicho-modal-resultado').innerHTML =
+        `<div class="alert alert-danger small">${data.error}</div>`;
+      return;
+    }
+
+    let html = '';
+    data.campanhas.forEach(c => {
+      if (c.status === 'iniciada') {
+        html += `<div class="alert alert-success small">
+          <i class="bi bi-check-circle-fill me-2"></i>
+          Campanha criada para <strong>${c.nicho}</strong> com <strong>${c.count}</strong> contatos!
+          <a href="${c.url}" class="ms-2" target="_blank">Ver campanha <i class="bi bi-arrow-right"></i></a>
+        </div>`;
+      } else {
+        html += `<div class="alert alert-warning small">
+          <i class="bi bi-exclamation-triangle me-2"></i>${c.nicho}: sem contatos encontrados.
+        </div>`;
+      }
+    });
+    document.getElementById('nicho-modal-resultado').innerHTML = html;
+  } catch (e) {
+    btn.disabled = false;
+    btn.innerHTML = '<i class="bi bi-stars me-2"></i>Gerar com IA e Disparar';
+    document.getElementById('nicho-modal-resultado').innerHTML =
+      `<div class="alert alert-danger small">Erro: ${e}</div>`;
+  }
+}
+</script>
+{% endblock %}
