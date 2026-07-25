@@ -144,6 +144,10 @@
                 <span class="badge badge-running px-2 py-1"><i class="bi bi-hourglass-split me-1"></i>Enviando</span>
               {% elif c.status == 'done' %}
                 <span class="badge badge-done px-2 py-1"><i class="bi bi-check-circle me-1"></i>Concluida</span>
+              {% elif c.status == 'draft' %}
+                <span class="badge px-2 py-1" style="background:#e0e7ff;color:#3730a3"><i class="bi bi-pencil-square me-1"></i>Rascunho</span>
+              {% elif c.status == 'scheduled' %}
+                <span class="badge px-2 py-1" style="background:#fef3c7;color:#92400e"><i class="bi bi-calendar-event me-1"></i>Agendada</span>
               {% else %}
                 <span class="badge bg-secondary px-2 py-1">{{ c.status }}</span>
               {% endif %}

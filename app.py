@@ -1148,6 +1148,38 @@ def api_nichos():
     conn.close()
     return jsonify([{'nicho': r['nicho'], 'qtd': r['qtd']} for r in rows])
 
+@app.route('/campanha/rascunho', methods=['POST'])
+def campanha_rascunho():
+    data = request.get_json() or {}
+    nome = data.get('campaign_name', '').strip()
+    sender = data.get('sender_email', '').strip()
+    subject = data.get('subject', '').strip()
+    body_html = data.get('body_html', '')
+    mailing_ids_raw = data.get('mailing_ids', '')
+    sequence_id = data.get('sequence_id') or None
+
+    if not nome:
+        return jsonify({'error': 'Preencha o nome da campanha.'}), 400
+
+    conn = get_db()
+    mailing_id_list = [m.strip() for m in mailing_ids_raw.split(',') if m.strip()] if mailing_ids_raw else []
+    mailing_id = int(mailing_id_list[0]) if mailing_id_list else None
+
+    total_contacts = 0
+    if mailing_id_list:
+        placeholders = ','.join(['%s'] * len(mailing_id_list))
+        row = conn.execute(f"SELECT COUNT(DISTINCT email) as cnt FROM mailing_contacts WHERE mailing_id IN ({placeholders})", mailing_id_list).fetchone()
+        total_contacts = row['cnt'] if row else 0
+
+    cur = conn.execute(
+        "INSERT INTO campaigns (name,subject,body,sender_email,total_contacts,status,mailing_id,sequence_id) "
+        "VALUES (%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id",
+        (nome, subject, body_html, sender or '', total_contacts, 'draft', mailing_id, sequence_id))
+    campaign_id = cur.fetchone()['id']
+    conn.commit()
+    conn.close()
+    return jsonify({'ok': True, 'campaign_id': campaign_id, 'url': url_for('campanha_detalhe', campaign_id=campaign_id)})
+
 @app.route('/campanha/segmentada', methods=['POST'])
 def campanha_segmentada():
     data = request.get_json() or {}
