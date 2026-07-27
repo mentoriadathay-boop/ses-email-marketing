@@ -16,6 +16,8 @@ import sib_api_v3_sdk
 from sib_api_v3_sdk.rest import ApiException
 from apscheduler.schedulers.background import BackgroundScheduler
 import re
+import math
+import email_client as ec
 
 try:
     from bs4 import BeautifulSoup
@@ -230,6 +232,20 @@ def init_db():
             name TEXT DEFAULT '',
             tags TEXT DEFAULT '',
             UNIQUE(mailing_id, email)
+        )''',
+        '''CREATE TABLE IF NOT EXISTS email_accounts (
+            id SERIAL PRIMARY KEY,
+            label TEXT NOT NULL DEFAULT 'Principal',
+            imap_server TEXT NOT NULL,
+            imap_port INTEGER NOT NULL DEFAULT 993,
+            smtp_server TEXT NOT NULL,
+            smtp_port INTEGER NOT NULL DEFAULT 587,
+            email TEXT NOT NULL,
+            password TEXT NOT NULL,
+            use_ssl BOOLEAN DEFAULT TRUE,
+            sent_folder TEXT DEFAULT 'Sent',
+            active BOOLEAN DEFAULT TRUE,
+            created_at TIMESTAMP DEFAULT NOW()
         )''',
         '''CREATE TABLE IF NOT EXISTS brand_kits (
             id SERIAL PRIMARY KEY,
@@ -1411,8 +1427,9 @@ def api_verificar_ses():
 def configuracoes():
     conn = get_db()
     sig = conn.execute('SELECT * FROM signature ORDER BY id DESC LIMIT 1').fetchone()
+    email_accounts = conn.execute('SELECT * FROM email_accounts ORDER BY id').fetchall()
     conn.close()
-    return render_template('configuracoes.html', signature=sig)
+    return render_template('configuracoes.html', signature=sig, email_accounts=email_accounts)
 
 @app.route('/configuracoes/assinatura', methods=['POST'])
 def salvar_assinatura():
@@ -1431,6 +1448,230 @@ def salvar_assinatura():
     conn.close()
     flash('Configuracoes salvas com sucesso!', 'success')
     return redirect(url_for('configuracoes'))
+
+# ── Email Client (IMAP/SMTP) ──────────────────────────────────────────────────
+
+def _get_email_account():
+    conn = get_db()
+    acc = conn.execute('SELECT * FROM email_accounts WHERE active=TRUE ORDER BY id LIMIT 1').fetchone()
+    conn.close()
+    return acc
+
+@app.route('/configuracoes/email-account', methods=['POST'])
+def salvar_email_account():
+    label = request.form.get('label', 'Principal').strip()
+    imap_server = request.form.get('imap_server', '').strip()
+    imap_port = int(request.form.get('imap_port', 993))
+    smtp_server = request.form.get('smtp_server', '').strip()
+    smtp_port = int(request.form.get('smtp_port', 587))
+    email_addr = request.form.get('email_addr', '').strip()
+    password = request.form.get('password', '').strip()
+    use_ssl = request.form.get('use_ssl') == 'on'
+    account_id = request.form.get('account_id', '').strip()
+
+    if not all([imap_server, smtp_server, email_addr, password]):
+        flash('Preencha todos os campos obrigatorios.', 'danger')
+        return redirect(url_for('configuracoes'))
+
+    try:
+        imap_conn = ec.imap_connect(imap_server, imap_port, email_addr, password, use_ssl)
+        sent_folder = ec.detect_sent_folder(imap_conn)
+        imap_conn.logout()
+    except Exception as e:
+        flash(f'Erro ao conectar IMAP: {e}', 'danger')
+        return redirect(url_for('configuracoes'))
+
+    conn = get_db()
+    if account_id:
+        conn.execute("""UPDATE email_accounts SET label=%s,imap_server=%s,imap_port=%s,
+            smtp_server=%s,smtp_port=%s,email=%s,password=%s,use_ssl=%s,sent_folder=%s WHERE id=%s""",
+            (label, imap_server, imap_port, smtp_server, smtp_port, email_addr, password, use_ssl, sent_folder, account_id))
+    else:
+        conn.execute("""INSERT INTO email_accounts (label,imap_server,imap_port,smtp_server,smtp_port,email,password,use_ssl,sent_folder)
+            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
+            (label, imap_server, imap_port, smtp_server, smtp_port, email_addr, password, use_ssl, sent_folder))
+    conn.commit()
+    conn.close()
+    flash('Conta de email configurada com sucesso!', 'success')
+    return redirect(url_for('configuracoes'))
+
+@app.route('/configuracoes/email-account/<int:account_id>/deletar', methods=['POST'])
+def deletar_email_account(account_id):
+    conn = get_db()
+    conn.execute('DELETE FROM email_accounts WHERE id=%s', (account_id,))
+    conn.commit()
+    conn.close()
+    flash('Conta removida.', 'success')
+    return redirect(url_for('configuracoes'))
+
+@app.route('/configuracoes/email-account/testar', methods=['POST'])
+def testar_email_account():
+    data = request.get_json()
+    try:
+        imap_conn = ec.imap_connect(data['imap_server'], int(data['imap_port']),
+                                     data['email'], data['password'], data.get('use_ssl', True))
+        folders = ec.list_folders(imap_conn)
+        imap_conn.logout()
+        return jsonify({'ok': True, 'folders': folders})
+    except Exception as e:
+        return jsonify({'ok': False, 'erro': str(e)})
+
+@app.route('/email/inbox')
+def email_inbox():
+    acc = _get_email_account()
+    if not acc:
+        flash('Configure sua conta de email em Configuracoes primeiro.', 'warning')
+        return redirect(url_for('configuracoes'))
+    page = int(request.args.get('page', 1))
+    per_page = 25
+    try:
+        imap_conn = ec.imap_connect(acc['imap_server'], acc['imap_port'],
+                                     acc['email'], acc['password'], acc['use_ssl'])
+        messages, total = ec.fetch_mailbox(imap_conn, 'INBOX', page, per_page)
+        imap_conn.logout()
+    except Exception as e:
+        flash(f'Erro ao conectar: {e}', 'danger')
+        return redirect(url_for('configuracoes'))
+    total_pages = math.ceil(total / per_page) if total else 1
+    return render_template('email_inbox.html', messages=messages, page=page,
+                           total_pages=total_pages, total=total, folder='INBOX',
+                           account=acc)
+
+@app.route('/email/enviados')
+def email_enviados():
+    acc = _get_email_account()
+    if not acc:
+        flash('Configure sua conta de email em Configuracoes primeiro.', 'warning')
+        return redirect(url_for('configuracoes'))
+    page = int(request.args.get('page', 1))
+    per_page = 25
+    sent_folder = acc.get('sent_folder') or 'Sent'
+    try:
+        imap_conn = ec.imap_connect(acc['imap_server'], acc['imap_port'],
+                                     acc['email'], acc['password'], acc['use_ssl'])
+        messages, total = ec.fetch_mailbox(imap_conn, sent_folder, page, per_page)
+        imap_conn.logout()
+    except Exception as e:
+        flash(f'Erro ao conectar: {e}', 'danger')
+        return redirect(url_for('configuracoes'))
+    total_pages = math.ceil(total / per_page) if total else 1
+    return render_template('email_enviados.html', messages=messages, page=page,
+                           total_pages=total_pages, total=total, folder=sent_folder,
+                           account=acc)
+
+@app.route('/email/ler/<folder>/<uid>')
+def email_ler(folder, uid):
+    acc = _get_email_account()
+    if not acc:
+        return redirect(url_for('configuracoes'))
+    try:
+        imap_conn = ec.imap_connect(acc['imap_server'], acc['imap_port'],
+                                     acc['email'], acc['password'], acc['use_ssl'])
+        msg = ec.fetch_email(imap_conn, uid, folder)
+        imap_conn.logout()
+    except Exception as e:
+        flash(f'Erro ao ler email: {e}', 'danger')
+        return redirect(url_for('email_inbox'))
+    if not msg:
+        flash('Email nao encontrado.', 'warning')
+        return redirect(url_for('email_inbox'))
+    msg['attachments'] = [dict(a, size_fmt=ec.format_size(a['size'])) for a in msg.get('attachments', [])]
+    return render_template('email_ler.html', msg=msg, folder=folder, account=acc)
+
+@app.route('/email/anexo/<folder>/<uid>/<int:index>')
+def email_anexo(folder, uid, index):
+    acc = _get_email_account()
+    if not acc:
+        return redirect(url_for('configuracoes'))
+    try:
+        imap_conn = ec.imap_connect(acc['imap_server'], acc['imap_port'],
+                                     acc['email'], acc['password'], acc['use_ssl'])
+        filename, content_type, data = ec.fetch_attachment(imap_conn, uid, index, folder)
+        imap_conn.logout()
+    except Exception as e:
+        flash(f'Erro ao baixar anexo: {e}', 'danger')
+        return redirect(url_for('email_inbox'))
+    if not data:
+        flash('Anexo nao encontrado.', 'warning')
+        return redirect(url_for('email_inbox'))
+    return Response(data, mimetype=content_type,
+                    headers={'Content-Disposition': f'attachment; filename="{filename}"'})
+
+@app.route('/email/compor')
+def email_compor():
+    acc = _get_email_account()
+    if not acc:
+        flash('Configure sua conta de email primeiro.', 'warning')
+        return redirect(url_for('configuracoes'))
+    reply_uid = request.args.get('reply')
+    forward_uid = request.args.get('forward')
+    folder = request.args.get('folder', 'INBOX')
+    prefill = {}
+    if reply_uid or forward_uid:
+        try:
+            imap_conn = ec.imap_connect(acc['imap_server'], acc['imap_port'],
+                                         acc['email'], acc['password'], acc['use_ssl'])
+            orig = ec.fetch_email(imap_conn, reply_uid or forward_uid, folder)
+            imap_conn.logout()
+            if orig:
+                body_content = orig['html_body'] or orig['text_body'].replace('\n', '<br>')
+                if reply_uid:
+                    prefill['to'] = orig['from_email']
+                    prefill['subject'] = ('Re: ' + orig['subject']) if not orig['subject'].startswith('Re:') else orig['subject']
+                    prefill['body'] = f'<br><br><blockquote style="border-left:3px solid #ccc;padding-left:12px;margin-left:0;color:#666">Em {orig["date"].strftime("%d/%m/%Y %H:%M")}, {orig["from_name"] or orig["from_email"]} escreveu:<br><br>{body_content}</blockquote>'
+                    prefill['reply_to_msg_id'] = orig.get('message_id', '')
+                    prefill['references'] = orig.get('references', '')
+                else:
+                    prefill['subject'] = ('Fwd: ' + orig['subject']) if not orig['subject'].startswith('Fwd:') else orig['subject']
+                    prefill['body'] = f'<br><br>---------- Mensagem encaminhada ----------<br>De: {orig["from_name"]} &lt;{orig["from_email"]}&gt;<br>Data: {orig["date"].strftime("%d/%m/%Y %H:%M")}<br>Assunto: {orig["subject"]}<br><br>{body_content}'
+        except Exception:
+            pass
+    return render_template('email_compor.html', account=acc, prefill=prefill)
+
+@app.route('/email/enviar', methods=['POST'])
+def email_enviar():
+    acc = _get_email_account()
+    if not acc:
+        return redirect(url_for('configuracoes'))
+    to = request.form.get('to', '').strip()
+    cc = request.form.get('cc', '').strip() or None
+    bcc = request.form.get('bcc', '').strip() or None
+    subject = request.form.get('subject', '').strip()
+    body_html = request.form.get('body_html', '')
+    reply_to_msg_id = request.form.get('reply_to_msg_id', '').strip() or None
+    references = request.form.get('references', '').strip() or None
+
+    if not to or not subject:
+        flash('Preencha destinatario e assunto.', 'danger')
+        return redirect(url_for('email_compor'))
+
+    attachments = request.files.getlist('attachments')
+    attachments = [f for f in attachments if f.filename]
+
+    try:
+        ec.send_email(acc['smtp_server'], acc['smtp_port'], acc['email'], acc['password'],
+                      to, subject, body_html, cc=cc, bcc=bcc,
+                      reply_to_msg_id=reply_to_msg_id, references=references,
+                      attachments=attachments if attachments else None)
+        flash('Email enviado com sucesso!', 'success')
+    except Exception as e:
+        flash(f'Erro ao enviar: {e}', 'danger')
+        return redirect(url_for('email_compor'))
+    return redirect(url_for('email_enviados'))
+
+@app.route('/email/deletar/<folder>/<uid>', methods=['POST'])
+def email_deletar(folder, uid):
+    acc = _get_email_account()
+    if not acc:
+        return jsonify({'ok': False})
+    try:
+        imap_conn = ec.imap_connect(acc['imap_server'], acc['imap_port'],
+                                     acc['email'], acc['password'], acc['use_ssl'])
+        ec.delete_email(imap_conn, uid, folder)
+        imap_conn.logout()
+        return jsonify({'ok': True})
+    except Exception as e:
+        return jsonify({'ok': False, 'erro': str(e)})
 
 @app.route('/api/contatos/buscar')
 def api_contatos_buscar():

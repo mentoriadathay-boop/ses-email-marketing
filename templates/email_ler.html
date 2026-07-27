@@ -1,0 +1,92 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="mb-3">
+  <a href="{{ url_for('email_inbox') if folder == 'INBOX' else url_for('email_enviados') }}" class="btn btn-outline-secondary btn-sm">
+    <i class="bi bi-arrow-left me-1"></i>Voltar
+  </a>
+</div>
+
+<div class="card">
+  <div class="card-body">
+    <div class="d-flex justify-content-between align-items-start mb-3">
+      <div>
+        <h5 class="fw-bold mb-1">{{ msg.subject }}</h5>
+        <div class="text-muted small">
+          <strong>De:</strong> {{ msg.from_name }} &lt;{{ msg.from_email }}&gt;
+        </div>
+        <div class="text-muted small">
+          <strong>Para:</strong> {{ msg.to }}
+        </div>
+        {% if msg.cc %}
+        <div class="text-muted small">
+          <strong>Cc:</strong> {{ msg.cc }}
+        </div>
+        {% endif %}
+        <div class="text-muted small">
+          <strong>Data:</strong> {{ msg.date.strftime('%d/%m/%Y %H:%M') }}
+        </div>
+      </div>
+      <div class="d-flex gap-2">
+        <a href="{{ url_for('email_compor', reply=msg.uid, folder=folder) }}" class="btn btn-outline-primary btn-sm">
+          <i class="bi bi-reply me-1"></i>Responder
+        </a>
+        <a href="{{ url_for('email_compor', forward=msg.uid, folder=folder) }}" class="btn btn-outline-secondary btn-sm">
+          <i class="bi bi-forward me-1"></i>Encaminhar
+        </a>
+        <button class="btn btn-outline-danger btn-sm" onclick="deletarEmail()">
+          <i class="bi bi-trash me-1"></i>Excluir
+        </button>
+      </div>
+    </div>
+
+    {% if msg.attachments %}
+    <div class="mb-3 p-2 bg-light rounded">
+      <small class="text-muted fw-semibold d-block mb-1">
+        <i class="bi bi-paperclip me-1"></i>{{ msg.attachments|length }} anexo(s)
+      </small>
+      <div class="d-flex gap-2 flex-wrap">
+        {% for att in msg.attachments %}
+        <a href="{{ url_for('email_anexo', folder=folder, uid=msg.uid, index=att.index) }}"
+           class="btn btn-sm btn-outline-secondary">
+          <i class="bi bi-file-earmark me-1"></i>{{ att.filename }}
+          <span class="text-muted">({{ att.size_fmt }})</span>
+        </a>
+        {% endfor %}
+      </div>
+    </div>
+    {% endif %}
+
+    <hr>
+
+    {% if msg.html_body %}
+    <iframe id="emailFrame" class="w-100 border-0" style="min-height:400px"
+            srcdoc="{{ msg.html_body|e }}" onload="autoResizeFrame(this)"></iframe>
+    {% else %}
+    <div class="p-3" style="white-space:pre-wrap;font-family:sans-serif;line-height:1.6">{{ msg.text_body }}</div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function autoResizeFrame(frame) {
+  try {
+    frame.style.height = frame.contentWindow.document.body.scrollHeight + 40 + 'px';
+  } catch(e) {}
+}
+
+function deletarEmail() {
+  if (!confirm('Tem certeza que deseja excluir este email?')) return;
+  fetch('{{ url_for("email_deletar", folder=folder, uid=msg.uid) }}', {method:'POST'})
+    .then(r => r.json())
+    .then(data => {
+      if (data.ok) {
+        window.location = '{{ url_for("email_inbox") if folder == "INBOX" else url_for("email_enviados") }}';
+      } else {
+        alert('Erro ao excluir: ' + (data.erro || 'desconhecido'));
+      }
+    });
+}
+</script>
+{% endblock %}
