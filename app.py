@@ -934,6 +934,10 @@ def setup_page():
 # ── Rotas de campanhas ────────────────────────────────────────────────────────
 
 @app.route('/')
+def landing():
+    return render_template('landing.html')
+
+@app.route('/dashboard')
 def index():
     conn = get_db()
     campaigns = conn.execute("SELECT * FROM campaigns ORDER BY created_at DESC LIMIT 20").fetchall()
