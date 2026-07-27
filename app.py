@@ -1682,10 +1682,30 @@ def email_enviar():
     attachments = [f for f in attachments if f.filename]
 
     try:
-        ec.send_email(acc['smtp_server'], acc['smtp_port'], acc['email'], acc['password'],
-                      to, subject, body_html, cc=cc, bcc=bcc,
-                      reply_to_msg_id=reply_to_msg_id, references=references,
-                      attachments=attachments if attachments else None)
+        if BREVO_API_KEY:
+            configuration = sib_api_v3_sdk.Configuration()
+            configuration.api_key['api-key'] = BREVO_API_KEY
+            api_instance = sib_api_v3_sdk.TransactionalEmailsApi(sib_api_v3_sdk.ApiClient(configuration))
+            to_list = [{'email': addr.strip()} for addr in to.split(',')]
+            params = {
+                'to': to_list,
+                'sender': {'email': acc['email'], 'name': get_sender_name()},
+                'subject': subject,
+                'html_content': body_html,
+            }
+            if cc:
+                params['cc'] = [{'email': addr.strip()} for addr in cc.split(',')]
+            if bcc:
+                params['bcc'] = [{'email': addr.strip()} for addr in bcc.split(',')]
+            if reply_to_msg_id:
+                params['headers'] = {'In-Reply-To': reply_to_msg_id}
+            email_obj = sib_api_v3_sdk.SendSmtpEmail(**params)
+            api_instance.send_transac_email(email_obj)
+        else:
+            ec.send_email(acc['smtp_server'], acc['smtp_port'], acc['email'], acc['password'],
+                          to, subject, body_html, cc=cc, bcc=bcc,
+                          reply_to_msg_id=reply_to_msg_id, references=references,
+                          attachments=attachments if attachments else None)
         flash('Email enviado com sucesso!', 'success')
     except Exception as e:
         flash(f'Erro ao enviar: {e}', 'danger')
