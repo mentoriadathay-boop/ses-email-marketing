@@ -171,7 +171,7 @@
           {% elif cad.status == 'finished' %}
             <span class="badge" style="background:#dbeafe;color:#1e40af">Finalizado</span>
           {% elif cad.status == 'unsubscribed' %}
-            <span class="badge" style="background:#fee2e2;color:#991b1b">Descadastrado</span>
+            <span class="badge" style="background:#EDE0F2;color:#5B2A6E">Descadastrado</span>
           {% else %}
             <span class="badge bg-secondary">{{ cad.status }}</span>
           {% endif %}
@@ -201,7 +201,7 @@
               {% elif act.type == 'link_clicked' %}
                 <span class="badge rounded-pill" style="background:#fef3c7;color:#92400e;font-size:.7rem"><i class="bi bi-cursor"></i></span>
               {% elif act.type == 'unsubscribed' %}
-                <span class="badge rounded-pill" style="background:#fee2e2;color:#991b1b;font-size:.7rem"><i class="bi bi-x-lg"></i></span>
+                <span class="badge rounded-pill" style="background:#EDE0F2;color:#5B2A6E;font-size:.7rem"><i class="bi bi-x-lg"></i></span>
               {% elif act.type == 'contact_updated' %}
                 <span class="badge rounded-pill" style="background:#f3f4f6;color:#6b7280;font-size:.7rem"><i class="bi bi-pencil"></i></span>
               {% else %}

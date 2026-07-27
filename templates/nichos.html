@@ -47,10 +47,10 @@
     <div class="row g-3">
       {% set cores = [
         ('#4361ee','#eef0ff'), ('#10b981','#ecfdf5'), ('#f59e0b','#fffbeb'),
-        ('#ef4444','#fef2f2'), ('#8b5cf6','#f5f3ff'), ('#ec4899','#fdf2f8'),
+        ('#5B2A6E','#F3EBF6'), ('#8b5cf6','#f5f3ff'), ('#ec4899','#fdf2f8'),
         ('#14b8a6','#f0fdfa'), ('#f97316','#fff7ed'), ('#6366f1','#eef2ff'),
         ('#06b6d4','#ecfeff'), ('#84cc16','#f7fee7'), ('#d946ef','#fdf4ff'),
-        ('#0ea5e9','#f0f9ff'), ('#e11d48','#fff1f2'), ('#a855f7','#faf5ff'),
+        ('#0ea5e9','#f0f9ff'), ('#7B3F8E','#F3EBF6'), ('#a855f7','#faf5ff'),
         ('#22c55e','#f0fdf4'), ('#eab308','#fefce8'), ('#64748b','#f8fafc')
       ] %}
       {% for n in nichos_crm %}
@@ -170,9 +170,9 @@ const nichosData = {{ nichos_crm|tojson }};
 if (nichosData.length) {
   const labels = nichosData.map(n => n.nicho.length > 25 ? n.nicho.slice(0,23) + '...' : n.nicho);
   const counts = nichosData.map(n => n.qtd);
-  const cores = ['#4361ee','#10b981','#f59e0b','#ef4444','#8b5cf6','#ec4899',
+  const cores = ['#4361ee','#10b981','#f59e0b','#5B2A6E','#8b5cf6','#ec4899',
                  '#14b8a6','#f97316','#6366f1','#06b6d4','#84cc16','#d946ef',
-                 '#0ea5e9','#e11d48','#a855f7','#22c55e','#eab308','#64748b'];
+                 '#0ea5e9','#5B2A6E','#a855f7','#22c55e','#eab308','#64748b'];
   const bgColors = counts.map((_, i) => cores[i % cores.length] + '33');
   const borderColors = counts.map((_, i) => cores[i % cores.length]);
 

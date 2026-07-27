@@ -345,7 +345,7 @@
               {% elif d.contact.status == 'paused' %}
                 <span class="badge" style="background:#fef3c7;color:#92400e">Pausado</span>
               {% elif d.contact.status == 'unsubscribed' %}
-                <span class="badge" style="background:#fee2e2;color:#991b1b">Descadastrado</span>
+                <span class="badge" style="background:#EDE0F2;color:#5B2A6E">Descadastrado</span>
               {% elif d.contact.status == 'stopped' %}
                 <span class="badge bg-secondary">Parado</span>
               {% else %}
@@ -609,7 +609,7 @@ function abrirHistorico(email, label) {
         const isLast = idx === items.length - 1;
         const icon = item.status === 'sent' ? (hasOpen ? '✅' : '📨') : '❌';
         const statusLabel = item.status === 'sent' ? (hasOpen ? '<span class="text-success fw-semibold">Aberto</span>' : '<span style="color:#2563eb">Enviado</span>') : '<span class="text-danger">Erro</span>';
-        const dot_bg = item.status === 'sent' ? (hasOpen ? '#dcfce7' : '#dbeafe') : '#fee2e2';
+        const dot_bg = item.status === 'sent' ? (hasOpen ? '#dcfce7' : '#dbeafe') : '#EDE0F2';
         html += `<div class="d-flex gap-3 mb-0">
           <div class="d-flex flex-column align-items-center" style="width:36px">
             <div class="rounded-circle d-flex align-items-center justify-content-center flex-shrink-0"

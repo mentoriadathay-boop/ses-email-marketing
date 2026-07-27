@@ -31,7 +31,7 @@
     </div>
   </div>
   <div class="col-md-3">
-    <div class="stat-card" style="background:linear-gradient(135deg,#ef4444,#dc2626)">
+    <div class="stat-card" style="background:linear-gradient(135deg,#7B3F8E,#5B2A6E)">
       <div class="opacity-75 small mb-1">Erros Totais</div>
       <div class="fs-3 fw-bold">{{ campaigns|sum(attribute='errors') }}</div>
     </div>
@@ -194,7 +194,7 @@ function verificarSES() {
           `Dominios: ${data.dominios.join(', ') || 'nenhum verificado'}`;
         document.getElementById('quota-valor').textContent = data.quota_diaria.toLocaleString();
       } else {
-        document.getElementById('ses-status-icon').innerHTML = '<span style="color:#ef4444">&#9679;</span>';
+        document.getElementById('ses-status-icon').innerHTML = '<span style="color:#5B2A6E">&#9679;</span>';
         document.getElementById('ses-status-text').innerHTML =
           `<span class="text-danger">Erro SES: ${data.erro}</span>`;
       }
