@@ -1,0 +1,937 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ConvertMail — E-mail Marketing com IA</title>
+  <link rel="icon" type="image/png" href="/static/favicon.png">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700;9..144,800&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --verde: #1AC78A;
+      --verde-escuro: #15a572;
+      --vermelho: #B80E02;
+      --vermelho-hover: #9a0c02;
+      --bege: #FAF7F2;
+      --dourado: #C9A86A;
+      --dourado-claro: #E5D2A1;
+      --texto: #2D2D2D;
+      --texto-suave: #6B6B6B;
+      --verde-suave: #E8FAF3;
+      --vermelho-suave: #FDF0EF;
+      --branco: #FFFFFF;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+      color: var(--texto);
+      background: var(--bege);
+      line-height: 1.6;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    h1, h2, h3, h4 {
+      font-family: 'Fraunces', Georgia, 'Palatino Linotype', serif;
+      text-wrap: balance;
+      line-height: 1.2;
+    }
+
+    .container {
+      max-width: 1120px;
+      margin: 0 auto;
+      padding: 0 24px;
+    }
+
+    /* NAV */
+    nav {
+      position: fixed;
+      top: 0; left: 0; right: 0;
+      z-index: 100;
+      background: rgba(250, 247, 242, 0.92);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid rgba(0,0,0,0.06);
+      transition: box-shadow 0.3s;
+    }
+    nav.scrolled { box-shadow: 0 2px 20px rgba(0,0,0,0.08); }
+    .nav-inner {
+      max-width: 1120px;
+      margin: 0 auto;
+      padding: 0 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      height: 64px;
+    }
+    .nav-logo {
+      font-family: 'Fraunces', Georgia, serif;
+      font-weight: 800;
+      font-size: 1.4rem;
+      color: var(--verde);
+      text-decoration: none;
+      letter-spacing: -0.02em;
+    }
+    .nav-logo span { color: var(--texto); }
+    .nav-links {
+      display: flex;
+      align-items: center;
+      gap: 28px;
+      list-style: none;
+    }
+    .nav-links a {
+      color: var(--texto-suave);
+      text-decoration: none;
+      font-size: 0.9rem;
+      font-weight: 500;
+      transition: color 0.2s;
+    }
+    .nav-links a:hover { color: var(--verde); }
+    .btn-cta {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: var(--vermelho);
+      color: var(--branco) !important;
+      padding: 10px 24px;
+      border-radius: 8px;
+      font-weight: 600;
+      font-size: 0.9rem;
+      text-decoration: none;
+      border: none;
+      cursor: pointer;
+      transition: background 0.2s, transform 0.15s;
+    }
+    .btn-cta:hover { background: var(--vermelho-hover); transform: translateY(-1px); }
+    .btn-entrar {
+      background: var(--verde);
+      color: var(--branco) !important;
+      padding: 10px 24px;
+      border-radius: 8px;
+      font-weight: 600;
+      font-size: 0.9rem;
+      text-decoration: none;
+      transition: background 0.2s, transform 0.15s;
+    }
+    .btn-entrar:hover { background: var(--verde-escuro); transform: translateY(-1px); }
+    .nav-mobile {
+      display: none;
+      background: none;
+      border: none;
+      cursor: pointer;
+      padding: 8px;
+      color: var(--texto);
+      font-size: 1.5rem;
+    }
+
+    /* HERO */
+    .hero {
+      padding: 140px 0 80px;
+      background: linear-gradient(180deg, var(--bege) 0%, var(--verde-suave) 100%);
+      text-align: center;
+    }
+    .hero-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: var(--verde-suave);
+      border: 1px solid rgba(26, 199, 138, 0.25);
+      color: var(--verde-escuro);
+      padding: 6px 16px;
+      border-radius: 100px;
+      font-size: 0.82rem;
+      font-weight: 600;
+      margin-bottom: 24px;
+      letter-spacing: 0.02em;
+    }
+    .hero h1 {
+      font-size: clamp(2.2rem, 5vw, 3.4rem);
+      font-weight: 800;
+      color: var(--texto);
+      margin-bottom: 20px;
+      letter-spacing: -0.02em;
+    }
+    .hero h1 em {
+      font-style: normal;
+      color: var(--verde);
+    }
+    .hero p {
+      font-size: clamp(1rem, 2vw, 1.15rem);
+      color: var(--texto-suave);
+      max-width: 620px;
+      margin: 0 auto 32px;
+      line-height: 1.7;
+    }
+    .hero-cta-group {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 12px;
+    }
+    .hero-cta-group .price-note {
+      font-size: 0.85rem;
+      color: var(--texto-suave);
+    }
+
+    /* SECTION SHARED */
+    section { padding: 80px 0; }
+    .section-label {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 0.72rem;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--verde);
+      margin-bottom: 12px;
+    }
+    .section-title {
+      font-size: clamp(1.6rem, 3.5vw, 2.2rem);
+      font-weight: 700;
+      margin-bottom: 16px;
+      letter-spacing: -0.01em;
+    }
+    .section-sub {
+      font-size: 1.05rem;
+      color: var(--texto-suave);
+      max-width: 580px;
+      line-height: 1.7;
+    }
+    .section-sub.center { margin: 0 auto; text-align: center; }
+    .section-header { text-align: center; margin-bottom: 48px; }
+
+    /* PARA QUEM */
+    .para-quem { background: var(--branco); }
+    .audience-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 20px;
+    }
+    .audience-card {
+      background: var(--bege);
+      border-radius: 16px;
+      padding: 32px 24px;
+      text-align: center;
+      transition: transform 0.25s, box-shadow 0.25s;
+      border: 1px solid transparent;
+    }
+    .audience-card:hover {
+      transform: translateY(-4px);
+      box-shadow: 0 12px 32px rgba(26, 199, 138, 0.1);
+      border-color: rgba(26, 199, 138, 0.2);
+    }
+    .audience-icon {
+      width: 56px; height: 56px;
+      border-radius: 14px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.5rem;
+      margin-bottom: 16px;
+    }
+    .audience-card h4 { font-size: 1rem; font-weight: 700; margin-bottom: 8px; }
+    .audience-card p { font-size: 0.85rem; color: var(--texto-suave); line-height: 1.55; }
+
+    /* RECURSOS */
+    .recursos { background: var(--bege); }
+    .recursos-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 20px;
+    }
+    .recurso-card {
+      background: var(--branco);
+      border-radius: 16px;
+      padding: 32px;
+      border: 1px solid rgba(0,0,0,0.05);
+      transition: transform 0.25s, box-shadow 0.25s;
+    }
+    .recurso-card:hover {
+      transform: translateY(-3px);
+      box-shadow: 0 8px 24px rgba(0,0,0,0.06);
+    }
+    .recurso-card.destaque {
+      grid-column: 1 / -1;
+      background: linear-gradient(135deg, var(--verde-suave) 0%, var(--branco) 100%);
+      border: 1px solid rgba(26, 199, 138, 0.15);
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 32px;
+      align-items: center;
+    }
+    .recurso-icon {
+      width: 44px; height: 44px;
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.3rem;
+      margin-bottom: 16px;
+    }
+    .recurso-card h3 { font-size: 1.15rem; font-weight: 700; margin-bottom: 10px; }
+    .recurso-card p { font-size: 0.9rem; color: var(--texto-suave); line-height: 1.6; }
+    .tag-ia {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      background: var(--verde-suave);
+      color: var(--verde-escuro);
+      padding: 3px 10px;
+      border-radius: 100px;
+      font-size: 0.72rem;
+      font-weight: 700;
+      margin-bottom: 12px;
+      letter-spacing: 0.04em;
+    }
+
+    /* DIFERENCIAIS */
+    .diferenciais { background: var(--branco); }
+    .dif-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 16px;
+    }
+    .dif-item {
+      display: flex;
+      align-items: flex-start;
+      gap: 14px;
+      padding: 20px;
+      border-radius: 12px;
+      background: var(--bege);
+      transition: transform 0.2s;
+    }
+    .dif-item:hover { transform: translateY(-2px); }
+    .dif-check {
+      width: 28px; height: 28px;
+      border-radius: 8px;
+      background: var(--verde-suave);
+      color: var(--verde);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      font-size: 0.85rem;
+      font-weight: 700;
+      margin-top: 2px;
+    }
+    .dif-item h4 {
+      font-family: 'Inter', sans-serif;
+      font-size: 0.88rem;
+      font-weight: 600;
+      margin-bottom: 4px;
+    }
+    .dif-item p { font-size: 0.8rem; color: var(--texto-suave); line-height: 1.5; }
+
+    /* COMO FUNCIONA */
+    .como-funciona { background: var(--verde-suave); }
+    .steps-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 32px;
+    }
+    .step { text-align: center; }
+    .step-number {
+      width: 48px; height: 48px;
+      border-radius: 50%;
+      background: var(--verde);
+      color: var(--branco);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-family: 'Fraunces', serif;
+      font-weight: 800;
+      font-size: 1.2rem;
+      margin-bottom: 20px;
+    }
+    .step h3 { font-size: 1.1rem; font-weight: 700; margin-bottom: 10px; }
+    .step p { font-size: 0.9rem; color: var(--texto-suave); line-height: 1.6; }
+
+    /* PRICING */
+    .pricing { background: var(--branco); }
+    .pricing-card {
+      max-width: 480px;
+      margin: 0 auto;
+      background: var(--bege);
+      border-radius: 20px;
+      overflow: hidden;
+      border: 2px solid var(--dourado-claro);
+    }
+    .pricing-header {
+      background: linear-gradient(135deg, var(--texto) 0%, #1a1a1a 50%, var(--verde-escuro) 100%);
+      padding: 40px 40px 32px;
+      text-align: center;
+      color: var(--branco);
+    }
+    .pricing-header .plan-name {
+      font-family: 'Inter', sans-serif;
+      font-size: 0.78rem;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--dourado-claro);
+      margin-bottom: 12px;
+    }
+    .pricing-header .price {
+      font-family: 'Fraunces', serif;
+      font-size: 3.4rem;
+      font-weight: 800;
+      line-height: 1;
+      margin-bottom: 4px;
+    }
+    .pricing-header .price-period {
+      font-size: 0.95rem;
+      color: rgba(255,255,255,0.7);
+    }
+    .pricing-body { padding: 32px 40px 40px; }
+    .pricing-features { list-style: none; margin-bottom: 28px; }
+    .pricing-features li {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 10px 0;
+      border-bottom: 1px solid rgba(0,0,0,0.05);
+      font-size: 0.9rem;
+    }
+    .pricing-features li:last-child { border-bottom: none; }
+    .pricing-features .check {
+      color: var(--verde);
+      font-weight: 700;
+      font-size: 1rem;
+      flex-shrink: 0;
+    }
+    .pricing-footer { text-align: center; }
+    .pricing-footer .btn-cta {
+      width: 100%;
+      justify-content: center;
+      padding: 14px 24px;
+      font-size: 1rem;
+    }
+    .pricing-note {
+      text-align: center;
+      margin-top: 12px;
+      font-size: 0.82rem;
+      color: var(--texto-suave);
+    }
+    .pricing-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: rgba(201, 168, 106, 0.15);
+      color: var(--dourado);
+      padding: 4px 12px;
+      border-radius: 100px;
+      font-size: 0.72rem;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      margin-bottom: 16px;
+    }
+
+    /* FAQ */
+    .faq { background: var(--bege); }
+    .faq-list { max-width: 700px; margin: 0 auto; }
+    .faq-item { border-bottom: 1px solid rgba(0,0,0,0.08); }
+    .faq-question {
+      width: 100%;
+      text-align: left;
+      background: none;
+      border: none;
+      padding: 20px 0;
+      font-family: 'Inter', sans-serif;
+      font-size: 1rem;
+      font-weight: 600;
+      color: var(--texto);
+      cursor: pointer;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 16px;
+      transition: color 0.2s;
+    }
+    .faq-question:hover { color: var(--verde); }
+    .faq-arrow {
+      font-size: 0.75rem;
+      transition: transform 0.3s;
+      flex-shrink: 0;
+      color: var(--verde);
+    }
+    .faq-item.open .faq-arrow { transform: rotate(180deg); }
+    .faq-answer {
+      max-height: 0;
+      overflow: hidden;
+      transition: max-height 0.35s ease, padding 0.35s;
+    }
+    .faq-item.open .faq-answer {
+      max-height: 200px;
+      padding: 0 0 20px 0;
+    }
+    .faq-answer p { font-size: 0.9rem; color: var(--texto-suave); line-height: 1.7; }
+
+    /* CTA FINAL */
+    .cta-final {
+      background: linear-gradient(135deg, var(--texto) 0%, #1a1a1a 40%, var(--verde-escuro) 100%);
+      padding: 80px 0;
+      text-align: center;
+      color: var(--branco);
+    }
+    .cta-final h2 { color: var(--branco); margin-bottom: 16px; }
+    .cta-final p {
+      color: rgba(255,255,255,0.7);
+      max-width: 500px;
+      margin: 0 auto 32px;
+      font-size: 1.05rem;
+      line-height: 1.7;
+    }
+
+    /* FOOTER */
+    footer {
+      background: var(--texto);
+      color: rgba(255,255,255,0.5);
+      padding: 40px 0;
+    }
+    .footer-inner {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .footer-logo {
+      font-family: 'Fraunces', Georgia, serif;
+      font-weight: 800;
+      font-size: 1.1rem;
+      color: var(--verde);
+    }
+    .footer-logo span { color: rgba(255,255,255,0.8); }
+    .footer-links { display: flex; gap: 24px; list-style: none; }
+    .footer-links a {
+      color: rgba(255,255,255,0.5);
+      text-decoration: none;
+      font-size: 0.85rem;
+      transition: color 0.2s;
+    }
+    .footer-links a:hover { color: var(--verde); }
+    .footer-copy {
+      font-size: 0.78rem;
+      text-align: center;
+      margin-top: 24px;
+      padding-top: 24px;
+      border-top: 1px solid rgba(255,255,255,0.08);
+      color: rgba(255,255,255,0.35);
+    }
+
+    /* CHAT IA FAB */
+    .chat-fab {
+      position: fixed;
+      bottom: 24px; right: 24px;
+      z-index: 99;
+      width: 56px; height: 56px;
+      border-radius: 50%;
+      background: var(--verde);
+      color: var(--branco);
+      border: none;
+      cursor: pointer;
+      font-size: 1.4rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 4px 20px rgba(26, 199, 138, 0.4);
+      transition: transform 0.2s, box-shadow 0.2s;
+    }
+    .chat-fab:hover {
+      transform: scale(1.08);
+      box-shadow: 0 6px 28px rgba(26, 199, 138, 0.5);
+    }
+    .chat-tooltip {
+      position: fixed;
+      bottom: 88px; right: 24px;
+      background: var(--branco);
+      color: var(--texto);
+      padding: 12px 18px;
+      border-radius: 12px 12px 4px 12px;
+      font-size: 0.85rem;
+      font-weight: 500;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.12);
+      z-index: 99;
+      max-width: 220px;
+      animation: chatPulse 4s ease-in-out infinite;
+    }
+    @keyframes chatPulse {
+      0%, 100% { opacity: 1; transform: translateY(0); }
+      50% { opacity: 0.85; transform: translateY(-3px); }
+    }
+
+    /* RESPONSIVE */
+    @media (max-width: 900px) {
+      .audience-grid { grid-template-columns: repeat(2, 1fr); }
+      .recursos-grid { grid-template-columns: 1fr; }
+      .recurso-card.destaque { grid-template-columns: 1fr; }
+      .dif-grid { grid-template-columns: repeat(2, 1fr); }
+      .steps-grid { grid-template-columns: 1fr; gap: 24px; }
+    }
+    @media (max-width: 640px) {
+      .nav-links { display: none; }
+      .nav-mobile { display: block; }
+      .hero { padding: 120px 0 60px; }
+      .audience-grid { grid-template-columns: 1fr; }
+      .dif-grid { grid-template-columns: 1fr; }
+      section { padding: 60px 0; }
+      .pricing-header, .pricing-body { padding-left: 24px; padding-right: 24px; }
+      .footer-inner { flex-direction: column; gap: 16px; text-align: center; }
+      .footer-links { flex-wrap: wrap; justify-content: center; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav id="mainNav">
+  <div class="nav-inner">
+    <a href="/" class="nav-logo">Convert<span>Mail</span></a>
+    <ul class="nav-links">
+      <li><a href="#recursos">Recursos</a></li>
+      <li><a href="#para-quem">Para Quem</a></li>
+      <li><a href="#diferenciais">Diferenciais</a></li>
+      <li><a href="#precos">Pre&ccedil;os</a></li>
+      <li><a href="#faq">FAQ</a></li>
+      <li><a href="{{ url_for('index') }}" class="btn-entrar">Entrar no App</a></li>
+      <li><a href="#precos" class="btn-cta">Come&ccedil;ar Agora</a></li>
+    </ul>
+    <button class="nav-mobile" onclick="document.querySelector('.nav-links').style.display=document.querySelector('.nav-links').style.display==='flex'?'none':'flex'" aria-label="Menu">&#9776;</button>
+  </div>
+</nav>
+
+<!-- HERO -->
+<section class="hero">
+  <div class="container">
+    <div class="hero-badge">Emails criados e lapidados por IA</div>
+    <h1>Potencialize as suas vendas<br>com <em>ConvertMail</em></h1>
+    <p>Uma solu&ccedil;&atilde;o que une e-mail marketing com IA, prospec&ccedil;&atilde;o de clientes, CRM e estrat&eacute;gias segmentadas para transformar contatos em vendas reais.</p>
+    <div class="hero-cta-group">
+      <a href="#precos" class="btn-cta" style="padding:14px 40px;font-size:1.05rem">Assinar por R$ 39/m&ecirc;s &rarr;</a>
+      <a href="{{ url_for('index') }}" class="btn-entrar" style="padding:12px 32px;font-size:0.95rem">J&aacute; tenho conta &mdash; Entrar</a>
+      <span class="price-note">Sem contrato. Cancele quando quiser.</span>
+    </div>
+  </div>
+</section>
+
+<!-- PARA QUEM -->
+<section class="para-quem" id="para-quem">
+  <div class="container">
+    <div class="section-header">
+      <div class="section-label">P&uacute;blico</div>
+      <h2 class="section-title">Para quem &eacute; o ConvertMail?</h2>
+      <p class="section-sub center">Para quem precisa vender mais usando e-mail de forma inteligente e profissional.</p>
+    </div>
+    <div class="audience-grid">
+      <div class="audience-card">
+        <div class="audience-icon" style="background:var(--verde-suave);color:var(--verde)">&#127970;</div>
+        <h4>Pequenas e M&eacute;dias Empresas</h4>
+        <p>Automatize a comunica&ccedil;&atilde;o com sua base de clientes e potencialize suas vendas sem equipe de marketing.</p>
+      </div>
+      <div class="audience-card">
+        <div class="audience-icon" style="background:var(--vermelho-suave);color:var(--vermelho)">&#128188;</div>
+        <h4>Profissionais Liberais</h4>
+        <p>Dentistas, advogados, nutricionistas &mdash; mantenha contato ativo com pacientes e clientes via email profissional.</p>
+      </div>
+      <div class="audience-card">
+        <div class="audience-icon" style="background:rgba(201,168,106,0.15);color:var(--dourado)">&#128200;</div>
+        <h4>Profissionais de Vendas</h4>
+        <p>Gerencie leads com scoring, cad&ecirc;ncias autom&aacute;ticas e acompanhe o funil do primeiro contato ao fechamento.</p>
+      </div>
+      <div class="audience-card">
+        <div class="audience-icon" style="background:var(--verde-suave);color:var(--verde-escuro)">&#127891;</div>
+        <h4>Consultores e Mentores</h4>
+        <p>Segmente por nicho, envie conte&uacute;do personalizado por IA e converta leads em mentorados e clientes.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- RECURSOS -->
+<section class="recursos" id="recursos">
+  <div class="container">
+    <div class="section-header">
+      <div class="section-label">Recursos</div>
+      <h2 class="section-title">Tudo que voc&ecirc; precisa em um s&oacute; lugar</h2>
+      <p class="section-sub center">Ferramentas poderosas que trabalham juntas para maximizar suas convers&otilde;es.</p>
+    </div>
+    <div class="recursos-grid">
+      <div class="recurso-card destaque">
+        <div>
+          <div class="tag-ia">INTELIG&Ecirc;NCIA ARTIFICIAL</div>
+          <h3>Emails criados e lapidados por IA</h3>
+          <p>A IA analisa o nicho do seu p&uacute;blico e gera emails com linguagem, exemplos, dores e benef&iacute;cios espec&iacute;ficos. Voc&ecirc; define o tema, a IA entrega o conte&uacute;do pronto para enviar ou editar.</p>
+        </div>
+        <div style="background:var(--branco);border-radius:12px;padding:24px;border:1px solid rgba(0,0,0,0.06)">
+          <div style="font-size:0.72rem;color:var(--verde);font-weight:700;margin-bottom:8px;letter-spacing:0.06em">EXEMPLO DE GERA&Ccedil;&Atilde;O</div>
+          <div style="font-size:0.82rem;color:var(--texto-suave);line-height:1.6">
+            <strong style="color:var(--texto)">Nicho:</strong> Nutri&ccedil;&atilde;o<br>
+            <strong style="color:var(--texto)">Tema:</strong> Reten&ccedil;&atilde;o de pacientes<br><br>
+            <em>&ldquo;Ol&aacute; {nome}, sabemos que manter pacientes engajados entre consultas &eacute; um dos maiores desafios da nutri&ccedil;&atilde;o cl&iacute;nica&hellip;&rdquo;</em>
+          </div>
+        </div>
+      </div>
+      <div class="recurso-card">
+        <div class="recurso-icon" style="background:var(--verde-suave);color:var(--verde)">&#128202;</div>
+        <h3>CRM com Lead Scoring</h3>
+        <p>Cada contato recebe pontua&ccedil;&atilde;o baseada em aberturas, cliques e intera&ccedil;&otilde;es. Identifique quem est&aacute; pronto para comprar.</p>
+      </div>
+      <div class="recurso-card">
+        <div class="recurso-icon" style="background:var(--vermelho-suave);color:var(--vermelho)">&#128260;</div>
+        <h3>Cad&ecirc;ncias Autom&aacute;ticas</h3>
+        <p>Sequ&ecirc;ncias de follow-up com intervalos personalizados. O sistema dispara nos melhores hor&aacute;rios automaticamente.</p>
+      </div>
+      <div class="recurso-card">
+        <div class="recurso-icon" style="background:rgba(201,168,106,0.15);color:var(--dourado)">&#127758;</div>
+        <h3>Prospec&ccedil;&atilde;o Inteligente</h3>
+        <p>Extraia leads de qualquer site com Firecrawl. Construa listas segmentadas automaticamente a partir de p&aacute;ginas web.</p>
+      </div>
+      <div class="recurso-card">
+        <div class="recurso-icon" style="background:var(--verde-suave);color:var(--verde)">&#127919;</div>
+        <h3>Campanhas por Nicho</h3>
+        <p>Visualize seus contatos por segmento, clique no nicho e dispare campanhas com conte&uacute;do personalizado por IA.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- DIFERENCIAIS -->
+<section class="diferenciais" id="diferenciais">
+  <div class="container">
+    <div class="section-header">
+      <div class="section-label">Diferenciais</div>
+      <h2 class="section-title">Por que escolher o ConvertMail?</h2>
+    </div>
+    <div class="dif-grid">
+      <div class="dif-item">
+        <div class="dif-check">&#10003;</div>
+        <div>
+          <h4>API de qualquer provedor de email</h4>
+          <p>Conecte Amazon SES, Brevo, ou qualquer servi&ccedil;o SMTP de sua prefer&ecirc;ncia.</p>
+        </div>
+      </div>
+      <div class="dif-item">
+        <div class="dif-check">&#10003;</div>
+        <div>
+          <h4>Templates de email e Kit de Marca</h4>
+          <p>Crie templates visuais e kits de marca por projeto com cores, tom de voz e identidade pr&oacute;pria.</p>
+        </div>
+      </div>
+      <div class="dif-item">
+        <div class="dif-check">&#10003;</div>
+        <div>
+          <h4>Conex&atilde;o do seu email na ferramenta</h4>
+          <p>Use seu pr&oacute;prio dom&iacute;nio e remetente verificado para enviar com credibilidade.</p>
+        </div>
+      </div>
+      <div class="dif-item">
+        <div class="dif-check">&#10003;</div>
+        <div>
+          <h4>Agendamento de emails</h4>
+          <p>Programe campanhas para o dia e hora ideais. O sistema dispara automaticamente.</p>
+        </div>
+      </div>
+      <div class="dif-item">
+        <div class="dif-check">&#10003;</div>
+        <div>
+          <h4>Duplica&ccedil;&atilde;o de campanhas</h4>
+          <p>Reutilize campanhas anteriores com um clique. Salve rascunhos para usar depois.</p>
+        </div>
+      </div>
+      <div class="dif-item">
+        <div class="dif-check">&#10003;</div>
+        <div>
+          <h4>Dashboard de resultados</h4>
+          <p>Acompanhe envios, aberturas, cliques e erros em tempo real com gr&aacute;ficos detalhados.</p>
+        </div>
+      </div>
+      <div class="dif-item">
+        <div class="dif-check">&#10003;</div>
+        <div>
+          <h4>Captura de leads em sites</h4>
+          <p>Extraia contatos de qualquer p&aacute;gina web e construa listas segmentadas automaticamente.</p>
+        </div>
+      </div>
+      <div class="dif-item">
+        <div class="dif-check">&#10003;</div>
+        <div>
+          <h4>Emails personalizados por nicho</h4>
+          <p>A IA adapta linguagem, exemplos e dores para cada segmento do seu p&uacute;blico.</p>
+        </div>
+      </div>
+      <div class="dif-item">
+        <div class="dif-check">&#10003;</div>
+        <div>
+          <h4>Chat IA na plataforma</h4>
+          <p>Tire d&uacute;vidas em tempo real com o assistente de IA integrado diretamente na ferramenta.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- COMO FUNCIONA -->
+<section class="como-funciona">
+  <div class="container">
+    <div class="section-header">
+      <div class="section-label">Como funciona</div>
+      <h2 class="section-title">Tr&ecirc;s passos para come&ccedil;ar a vender</h2>
+    </div>
+    <div class="steps-grid">
+      <div class="step">
+        <div class="step-number">1</div>
+        <h3>Importe seus contatos</h3>
+        <p>Suba seu CSV, prospecte em sites, ou adicione manualmente. Defina o nicho de cada contato.</p>
+      </div>
+      <div class="step">
+        <div class="step-number">2</div>
+        <h3>Configure com IA</h3>
+        <p>Escolha o nicho, defina o tema da campanha e a IA gera o email completo alinhado ao seu p&uacute;blico.</p>
+      </div>
+      <div class="step">
+        <div class="step-number">3</div>
+        <h3>Dispare e acompanhe</h3>
+        <p>Envie ou agende. Acompanhe aberturas, cliques e convers&otilde;es em tempo real pelo dashboard.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- PRICING -->
+<section class="pricing" id="precos">
+  <div class="container">
+    <div class="section-header">
+      <div class="section-label">Plano</div>
+      <h2 class="section-title">Pre&ccedil;o &uacute;nico, tudo incluso</h2>
+      <p class="section-sub center">Sem planos confusos. Um valor, todos os recursos.</p>
+    </div>
+    <div class="pricing-card">
+      <div class="pricing-header">
+        <div class="pricing-badge">&#9733; MELHOR CUSTO-BENEF&Iacute;CIO</div>
+        <div class="plan-name">CONVERTMAIL PRO</div>
+        <div class="price">R$ 39</div>
+        <div class="price-period">/m&ecirc;s</div>
+      </div>
+      <div class="pricing-body">
+        <ul class="pricing-features">
+          <li><span class="check">&#10003;</span> Campanhas ilimitadas</li>
+          <li><span class="check">&#10003;</span> IA para gera&ccedil;&atilde;o de conte&uacute;do por nicho</li>
+          <li><span class="check">&#10003;</span> CRM completo com lead scoring</li>
+          <li><span class="check">&#10003;</span> Cad&ecirc;ncias autom&aacute;ticas de follow-up</li>
+          <li><span class="check">&#10003;</span> Prospec&ccedil;&atilde;o de leads com Firecrawl</li>
+          <li><span class="check">&#10003;</span> Templates de email e Kit de Marca</li>
+          <li><span class="check">&#10003;</span> Dashboard com m&eacute;tricas em tempo real</li>
+          <li><span class="check">&#10003;</span> API com Amazon SES, Brevo e SMTP</li>
+          <li><span class="check">&#10003;</span> Chat IA para suporte na plataforma</li>
+          <li><span class="check">&#10003;</span> Agendamento e duplica&ccedil;&atilde;o de campanhas</li>
+        </ul>
+        <div class="pricing-footer">
+          <a href="{{ url_for('index') }}" class="btn-cta">Come&ccedil;ar Agora &rarr;</a>
+        </div>
+        <p class="pricing-note">Sem fidelidade. Cancele a qualquer momento.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- FAQ -->
+<section class="faq" id="faq">
+  <div class="container">
+    <div class="section-header">
+      <div class="section-label">D&uacute;vidas</div>
+      <h2 class="section-title">Perguntas frequentes</h2>
+    </div>
+    <div class="faq-list">
+      <div class="faq-item">
+        <button class="faq-question" onclick="this.parentElement.classList.toggle('open')">
+          Preciso ter dom&iacute;nio verificado para enviar?
+          <span class="faq-arrow">&#9660;</span>
+        </button>
+        <div class="faq-answer">
+          <p>Sim, voc&ecirc; precisa de um dom&iacute;nio verificado na Amazon SES ou Brevo. Ajudamos na configura&ccedil;&atilde;o inicial para garantir que seus emails cheguem na caixa de entrada.</p>
+        </div>
+      </div>
+      <div class="faq-item">
+        <button class="faq-question" onclick="this.parentElement.classList.toggle('open')">
+          Quantos emails posso enviar por m&ecirc;s?
+          <span class="faq-arrow">&#9660;</span>
+        </button>
+        <div class="faq-answer">
+          <p>O ConvertMail n&atilde;o limita envios. A quantidade depende da quota do seu provedor de email (SES, Brevo, etc). Na Amazon SES, por exemplo, voc&ecirc; pode enviar milhares por dia.</p>
+        </div>
+      </div>
+      <div class="faq-item">
+        <button class="faq-question" onclick="this.parentElement.classList.toggle('open')">
+          A IA realmente gera o email inteiro?
+          <span class="faq-arrow">&#9660;</span>
+        </button>
+        <div class="faq-answer">
+          <p>Sim. Voc&ecirc; define o nicho, tema e objetivo, e a IA gera o email completo em HTML com conte&uacute;do personalizado. Voc&ecirc; pode editar antes de enviar ou usar como est&aacute;.</p>
+        </div>
+      </div>
+      <div class="faq-item">
+        <button class="faq-question" onclick="this.parentElement.classList.toggle('open')">
+          Posso importar minha base de contatos atual?
+          <span class="faq-arrow">&#9660;</span>
+        </button>
+        <div class="faq-answer">
+          <p>Sim, via upload de CSV com colunas nome, email e nicho. O sistema tamb&eacute;m importa automaticamente contatos para o CRM com lead scoring.</p>
+        </div>
+      </div>
+      <div class="faq-item">
+        <button class="faq-question" onclick="this.parentElement.classList.toggle('open')">
+          O que &eacute; o Chat IA na plataforma?
+          <span class="faq-arrow">&#9660;</span>
+        </button>
+        <div class="faq-answer">
+          <p>&Eacute; um assistente de intelig&ecirc;ncia artificial integrado no ConvertMail que responde suas d&uacute;vidas sobre a ferramenta, ajuda a criar estrat&eacute;gias e sugere melhorias nas suas campanhas.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- CTA FINAL -->
+<section class="cta-final">
+  <div class="container">
+    <h2 class="section-title" style="color:var(--branco)">Pronto para vender mais com email inteligente?</h2>
+    <p>Comece agora por apenas R$ 39/m&ecirc;s e transforme sua comunica&ccedil;&atilde;o com clientes.</p>
+    <a href="{{ url_for('index') }}" class="btn-cta" style="padding:16px 48px;font-size:1.1rem">Entrar no ConvertMail &rarr;</a>
+  </div>
+</section>
+
+<!-- FOOTER -->
+<footer>
+  <div class="container">
+    <div class="footer-inner">
+      <div class="footer-logo">Convert<span>Mail</span></div>
+      <ul class="footer-links">
+        <li><a href="#recursos">Recursos</a></li>
+        <li><a href="#para-quem">Para Quem</a></li>
+        <li><a href="#diferenciais">Diferenciais</a></li>
+        <li><a href="#precos">Pre&ccedil;os</a></li>
+        <li><a href="#faq">FAQ</a></li>
+        <li><a href="{{ url_for('index') }}">Entrar</a></li>
+      </ul>
+    </div>
+    <div class="footer-copy">ConvertMail &mdash; por TFA ConvertBusiness. Todos os direitos reservados.</div>
+  </div>
+</footer>
+
+<!-- CHAT IA FAB -->
+<div class="chat-tooltip">D&uacute;vidas? Fale com a IA</div>
+<button class="chat-fab" title="Chat IA" aria-label="Abrir chat com IA">&#128172;</button>
+
+<script>
+window.addEventListener('scroll', () => {
+  document.getElementById('mainNav').classList.toggle('scrolled', window.scrollY > 10);
+});
+document.querySelectorAll('a[href^="#"]').forEach(a => {
+  a.addEventListener('click', e => {
+    const t = document.querySelector(a.getAttribute('href'));
+    if (t) { e.preventDefault(); t.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
+  });
+});
+</script>
+
+</body>
+</html>
