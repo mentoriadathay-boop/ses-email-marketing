@@ -9,10 +9,22 @@
     <a href="{{ url_for('email_enviados') }}" class="btn btn-outline-secondary btn-sm">
       <i class="bi bi-send me-1"></i>Enviados
     </a>
+    <a href="{{ url_for('email_lixeira') }}" class="btn btn-outline-secondary btn-sm">
+      <i class="bi bi-trash me-1"></i>Lixeira
+    </a>
     <a href="{{ url_for('email_compor') }}" class="btn btn-primary btn-sm">
       <i class="bi bi-pencil-square me-1"></i>Novo Email
     </a>
   </div>
+</div>
+
+<!-- Barra de acoes em massa -->
+<div id="bulkBar" class="alert alert-light border d-none mb-3 d-flex align-items-center gap-3 py-2">
+  <span class="small fw-semibold"><span id="bulkCount">0</span> selecionado(s)</span>
+  <button class="btn btn-outline-danger btn-sm" onclick="bulkDelete()">
+    <i class="bi bi-trash me-1"></i>Mover para Lixeira
+  </button>
+  <button class="btn btn-outline-secondary btn-sm ms-auto" onclick="bulkClear()">Limpar</button>
 </div>
 
 <div class="card">
@@ -22,6 +34,9 @@
       <table class="table table-hover mb-0 align-middle">
         <thead class="bg-light">
           <tr>
+            <th style="width:36px" class="ps-3">
+              <input type="checkbox" class="form-check-input" id="selectAll" onchange="toggleAll(this)">
+            </th>
             <th style="width:28px"></th>
             <th style="width:220px">De</th>
             <th>Assunto</th>
@@ -30,14 +45,18 @@
         </thead>
         <tbody>
           {% for m in messages %}
-          <tr class="{{ '' if m.is_read else 'fw-bold' }}" style="cursor:pointer"
-              onclick="window.location='{{ url_for('email_ler', folder=folder, uid=m.uid) }}'">
-            <td class="text-center">
+          <tr class="{{ '' if m.is_read else 'fw-bold' }}" id="row-{{ m.uid }}">
+            <td class="ps-3" onclick="event.stopPropagation()">
+              <input type="checkbox" class="form-check-input email-check" value="{{ m.uid }}" onchange="updateBulk()">
+            </td>
+            <td class="text-center" style="cursor:pointer"
+                onclick="window.location='{{ url_for('email_ler', folder=folder, uid=m.uid) }}'">
               {% if not m.is_read %}
                 <span class="badge bg-primary rounded-circle p-1" style="width:10px;height:10px">&nbsp;</span>
               {% endif %}
             </td>
-            <td>
+            <td style="cursor:pointer"
+                onclick="window.location='{{ url_for('email_ler', folder=folder, uid=m.uid) }}'">
               <div class="text-truncate" style="max-width:200px">
                 {{ m.from_name or m.from_email }}
               </div>
@@ -45,12 +64,14 @@
                 {{ m.from_email if m.from_name else '' }}
               </small>
             </td>
-            <td>
+            <td style="cursor:pointer"
+                onclick="window.location='{{ url_for('email_ler', folder=folder, uid=m.uid) }}'">
               <span class="text-truncate d-inline-block" style="max-width:400px">
                 {{ m.subject }}
               </span>
             </td>
-            <td class="text-end text-muted small" style="font-weight:normal">
+            <td class="text-end text-muted small" style="font-weight:normal;cursor:pointer"
+                onclick="window.location='{{ url_for('email_ler', folder=folder, uid=m.uid) }}'">
               {{ m.date.strftime('%d/%m/%Y %H:%M') }}
             </td>
           </tr>
@@ -88,4 +109,37 @@
   </ul>
 </nav>
 {% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+function toggleAll(master) {
+  document.querySelectorAll('.email-check').forEach(c => c.checked = master.checked);
+  updateBulk();
+}
+function updateBulk() {
+  const checked = document.querySelectorAll('.email-check:checked');
+  const bar = document.getElementById('bulkBar');
+  document.getElementById('bulkCount').textContent = checked.length;
+  bar.classList.toggle('d-none', checked.length === 0);
+}
+function bulkClear() {
+  document.querySelectorAll('.email-check').forEach(c => c.checked = false);
+  document.getElementById('selectAll').checked = false;
+  updateBulk();
+}
+function bulkDelete() {
+  const uids = [...document.querySelectorAll('.email-check:checked')].map(c => c.value);
+  if (!uids.length) return;
+  if (!confirm(`Mover ${uids.length} email(s) para a lixeira?`)) return;
+  fetch('{{ url_for("email_deletar_bulk") }}', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({uids, folder: '{{ folder }}'})
+  }).then(r => r.json()).then(d => {
+    if (d.ok) location.reload();
+    else alert('Erro: ' + (d.erro || 'desconhecido'));
+  });
+}
+</script>
 {% endblock %}

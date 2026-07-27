@@ -2,19 +2,21 @@
 {% block content %}
 <div class="d-flex align-items-center justify-content-between mb-4">
   <div>
-    <h4 class="fw-bold mb-0"><i class="bi bi-send me-2"></i>Enviados</h4>
+    <h4 class="fw-bold mb-0"><i class="bi bi-trash me-2"></i>Lixeira</h4>
     <small class="text-muted">{{ account.email }} &mdash; {{ total }} mensagens</small>
   </div>
   <div class="d-flex gap-2">
     <a href="{{ url_for('email_inbox') }}" class="btn btn-outline-secondary btn-sm">
       <i class="bi bi-inbox me-1"></i>Caixa de Entrada
     </a>
-    <a href="{{ url_for('email_lixeira') }}" class="btn btn-outline-secondary btn-sm">
-      <i class="bi bi-trash me-1"></i>Lixeira
+    <a href="{{ url_for('email_enviados') }}" class="btn btn-outline-secondary btn-sm">
+      <i class="bi bi-send me-1"></i>Enviados
     </a>
-    <a href="{{ url_for('email_compor') }}" class="btn btn-primary btn-sm">
-      <i class="bi bi-pencil-square me-1"></i>Novo Email
-    </a>
+    {% if total > 0 %}
+    <button class="btn btn-outline-danger btn-sm" onclick="esvaziarLixeira()">
+      <i class="bi bi-trash me-1"></i>Esvaziar Lixeira
+    </button>
+    {% endif %}
   </div>
 </div>
 
@@ -22,7 +24,7 @@
 <div id="bulkBar" class="alert alert-light border d-none mb-3 d-flex align-items-center gap-3 py-2">
   <span class="small fw-semibold"><span id="bulkCount">0</span> selecionado(s)</span>
   <button class="btn btn-outline-danger btn-sm" onclick="bulkDelete()">
-    <i class="bi bi-trash me-1"></i>Mover para Lixeira
+    <i class="bi bi-x-circle me-1"></i>Excluir Permanentemente
   </button>
   <button class="btn btn-outline-secondary btn-sm ms-auto" onclick="bulkClear()">Limpar</button>
 </div>
@@ -37,7 +39,7 @@
             <th style="width:36px" class="ps-3">
               <input type="checkbox" class="form-check-input" id="selectAll" onchange="toggleAll(this)">
             </th>
-            <th style="width:220px">Para</th>
+            <th style="width:220px">De</th>
             <th>Assunto</th>
             <th style="width:140px" class="text-end">Data</th>
           </tr>
@@ -53,6 +55,9 @@
               <div class="text-truncate" style="max-width:200px">
                 {{ m.from_name or m.from_email }}
               </div>
+              <small class="text-muted d-block text-truncate" style="max-width:200px">
+                {{ m.from_email if m.from_name else '' }}
+              </small>
             </td>
             <td style="cursor:pointer"
                 onclick="window.location='{{ url_for('email_ler', folder=folder, uid=m.uid) }}'">
@@ -71,8 +76,8 @@
     </div>
     {% else %}
     <div class="text-center text-muted py-5">
-      <i class="bi bi-send" style="font-size:3rem"></i>
-      <p class="mt-2 mb-0">Nenhuma mensagem enviada.</p>
+      <i class="bi bi-trash" style="font-size:3rem"></i>
+      <p class="mt-2 mb-0">A lixeira esta vazia.</p>
     </div>
     {% endif %}
   </div>
@@ -82,19 +87,19 @@
 <nav class="mt-3 d-flex justify-content-center">
   <ul class="pagination pagination-sm mb-0">
     <li class="page-item {{ 'disabled' if page == 1 }}">
-      <a class="page-link" href="{{ url_for('email_enviados', page=page-1) }}">&laquo;</a>
+      <a class="page-link" href="{{ url_for('email_lixeira', page=page-1) }}">&laquo;</a>
     </li>
     {% for p in range(1, total_pages+1) %}
       {% if p <= 3 or p > total_pages-3 or (p >= page-1 and p <= page+1) %}
       <li class="page-item {{ 'active' if p == page }}">
-        <a class="page-link" href="{{ url_for('email_enviados', page=p) }}">{{ p }}</a>
+        <a class="page-link" href="{{ url_for('email_lixeira', page=p) }}">{{ p }}</a>
       </li>
       {% elif p == 4 or p == total_pages-3 %}
       <li class="page-item disabled"><span class="page-link">...</span></li>
       {% endif %}
     {% endfor %}
     <li class="page-item {{ 'disabled' if page == total_pages }}">
-      <a class="page-link" href="{{ url_for('email_enviados', page=page+1) }}">&raquo;</a>
+      <a class="page-link" href="{{ url_for('email_lixeira', page=page+1) }}">&raquo;</a>
     </li>
   </ul>
 </nav>
@@ -121,7 +126,7 @@ function bulkClear() {
 function bulkDelete() {
   const uids = [...document.querySelectorAll('.email-check:checked')].map(c => c.value);
   if (!uids.length) return;
-  if (!confirm(`Mover ${uids.length} email(s) para a lixeira?`)) return;
+  if (!confirm(`Excluir permanentemente ${uids.length} email(s)?`)) return;
   fetch('{{ url_for("email_deletar_bulk") }}', {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
@@ -130,6 +135,14 @@ function bulkDelete() {
     if (d.ok) location.reload();
     else alert('Erro: ' + (d.erro || 'desconhecido'));
   });
+}
+function esvaziarLixeira() {
+  if (!confirm('Excluir permanentemente TODOS os emails da lixeira?')) return;
+  fetch('{{ url_for("email_esvaziar_lixeira") }}', {method:'POST'})
+    .then(r => r.json()).then(d => {
+      if (d.ok) location.reload();
+      else alert('Erro: ' + (d.erro || 'desconhecido'));
+    });
 }
 </script>
 {% endblock %}

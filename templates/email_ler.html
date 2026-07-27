@@ -34,7 +34,7 @@
           <i class="bi bi-forward me-1"></i>Encaminhar
         </a>
         <button class="btn btn-outline-danger btn-sm" onclick="deletarEmail()">
-          <i class="bi bi-trash me-1"></i>Excluir
+          <i class="bi bi-trash me-1"></i>Lixeira
         </button>
       </div>
     </div>
@@ -77,14 +77,14 @@ function autoResizeFrame(frame) {
 }
 
 function deletarEmail() {
-  if (!confirm('Tem certeza que deseja excluir este email?')) return;
+  if (!confirm('Mover este email para a lixeira?')) return;
   fetch('{{ url_for("email_deletar", folder=folder, uid=msg.uid) }}', {method:'POST'})
     .then(r => r.json())
     .then(data => {
       if (data.ok) {
         window.location = '{{ url_for("email_inbox") if folder == "INBOX" else url_for("email_enviados") }}';
       } else {
-        alert('Erro ao excluir: ' + (data.erro || 'desconhecido'));
+        alert('Erro: ' + (data.erro || 'desconhecido'));
       }
     });
 }

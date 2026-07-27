@@ -61,6 +61,9 @@
         <button type="submit" class="btn btn-primary">
           <i class="bi bi-send me-1"></i>Enviar
         </button>
+        <button type="button" class="btn btn-outline-primary" onclick="salvarRascunho()">
+          <i class="bi bi-save me-1"></i>Salvar Rascunho
+        </button>
         <a href="{{ url_for('email_inbox') }}" class="btn btn-outline-secondary">Cancelar</a>
       </div>
     </form>
@@ -120,6 +123,26 @@ document.addEventListener('DOMContentLoaded', function() {
   document.addEventListener('click', function(e) {
     if (!suggestions.contains(e.target) && e.target !== inputTo) suggestions.style.display = 'none';
   });
+
+  window.salvarRascunho = function() {
+    const html = quill.root.innerHTML;
+    const form = new FormData();
+    form.append('to', document.querySelector('[name=to]').value);
+    form.append('subject', document.querySelector('[name=subject]').value);
+    form.append('body_html', html);
+    fetch('{{ url_for("email_salvar_rascunho") }}', {method:'POST', body: form})
+      .then(r => r.json()).then(d => {
+        if (d.ok) {
+          const toast = document.createElement('div');
+          toast.className = 'alert alert-success alert-dismissible fade show';
+          toast.innerHTML = '<i class="bi bi-check-circle me-1"></i>Rascunho salvo!<button type="button" class="btn-close" data-bs-dismiss="alert"></button>';
+          document.getElementById('toastContainer').appendChild(toast);
+          setTimeout(() => toast.remove(), 3000);
+        } else {
+          alert('Erro ao salvar: ' + (d.erro || 'desconhecido'));
+        }
+      });
+  };
 });
 </script>
 {% endblock %}

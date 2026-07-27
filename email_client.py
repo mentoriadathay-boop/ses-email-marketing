@@ -278,10 +278,63 @@ def mark_unread(imap_conn, uid, folder='INBOX'):
     imap_conn.uid('store', uid.encode() if isinstance(uid, str) else uid, '-FLAGS', '\\Seen')
 
 
+def detect_trash_folder(imap_conn):
+    folders = list_folders(imap_conn)
+    candidates = ['Trash', 'INBOX.Trash', 'Deleted Messages', 'Deleted Items',
+                  '[Gmail]/Trash', 'INBOX.Deleted Messages', 'Lixeira']
+    for c in candidates:
+        if c in folders:
+            return c
+    for f in folders:
+        if 'trash' in f.lower() or 'lixeira' in f.lower() or 'deleted' in f.lower():
+            return f
+    return 'Trash'
+
+
+def detect_drafts_folder(imap_conn):
+    folders = list_folders(imap_conn)
+    candidates = ['Drafts', 'INBOX.Drafts', 'Draft', '[Gmail]/Drafts',
+                  'INBOX.Draft', 'Rascunhos']
+    for c in candidates:
+        if c in folders:
+            return c
+    for f in folders:
+        if 'draft' in f.lower() or 'rascunho' in f.lower():
+            return f
+    return 'Drafts'
+
+
+def move_to_trash(imap_conn, uid, folder='INBOX', trash_folder='Trash'):
+    uid_b = uid.encode() if isinstance(uid, str) else uid
+    imap_conn.select(folder)
+    imap_conn.uid('copy', uid_b, trash_folder)
+    imap_conn.uid('store', uid_b, '+FLAGS', '\\Deleted')
+    imap_conn.expunge()
+
+
+def move_to_trash_bulk(imap_conn, uids, folder='INBOX', trash_folder='Trash'):
+    imap_conn.select(folder)
+    for uid in uids:
+        uid_b = uid.encode() if isinstance(uid, str) else uid
+        imap_conn.uid('copy', uid_b, trash_folder)
+        imap_conn.uid('store', uid_b, '+FLAGS', '\\Deleted')
+    imap_conn.expunge()
+
+
 def delete_email(imap_conn, uid, folder='INBOX'):
     imap_conn.select(folder)
     imap_conn.uid('store', uid.encode() if isinstance(uid, str) else uid, '+FLAGS', '\\Deleted')
     imap_conn.expunge()
+
+
+def save_draft(imap_conn, email_addr, to, subject, body_html, drafts_folder='Drafts'):
+    msg = MIMEMultipart('mixed')
+    msg['From'] = email_addr
+    msg['To'] = to or ''
+    msg['Subject'] = subject or '(sem assunto)'
+    msg['Date'] = email.utils.formatdate(localtime=True)
+    msg.attach(MIMEText(body_html or '', 'html', 'utf-8'))
+    imap_conn.append(drafts_folder, '\\Draft', None, msg.as_bytes())
 
 
 def format_size(size_bytes):

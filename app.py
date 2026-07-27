@@ -1667,7 +1667,92 @@ def email_deletar(folder, uid):
     try:
         imap_conn = ec.imap_connect(acc['imap_server'], acc['imap_port'],
                                      acc['email'], acc['password'], acc['use_ssl'])
-        ec.delete_email(imap_conn, uid, folder)
+        trash_folder = ec.detect_trash_folder(imap_conn)
+        if folder == trash_folder:
+            ec.delete_email(imap_conn, uid, folder)
+        else:
+            ec.move_to_trash(imap_conn, uid, folder, trash_folder)
+        imap_conn.logout()
+        return jsonify({'ok': True})
+    except Exception as e:
+        return jsonify({'ok': False, 'erro': str(e)})
+
+@app.route('/email/deletar-bulk', methods=['POST'])
+def email_deletar_bulk():
+    acc = _get_email_account()
+    if not acc:
+        return jsonify({'ok': False})
+    data = request.get_json()
+    uids = data.get('uids', [])
+    folder = data.get('folder', 'INBOX')
+    if not uids:
+        return jsonify({'ok': False, 'erro': 'Nenhum email selecionado'})
+    try:
+        imap_conn = ec.imap_connect(acc['imap_server'], acc['imap_port'],
+                                     acc['email'], acc['password'], acc['use_ssl'])
+        trash_folder = ec.detect_trash_folder(imap_conn)
+        if folder == trash_folder:
+            for uid in uids:
+                ec.delete_email(imap_conn, uid, folder)
+        else:
+            ec.move_to_trash_bulk(imap_conn, uids, folder, trash_folder)
+        imap_conn.logout()
+        return jsonify({'ok': True, 'count': len(uids)})
+    except Exception as e:
+        return jsonify({'ok': False, 'erro': str(e)})
+
+@app.route('/email/lixeira')
+def email_lixeira():
+    acc = _get_email_account()
+    if not acc:
+        flash('Configure sua conta de email em Configuracoes primeiro.', 'warning')
+        return redirect(url_for('configuracoes'))
+    page = int(request.args.get('page', 1))
+    per_page = 25
+    try:
+        imap_conn = ec.imap_connect(acc['imap_server'], acc['imap_port'],
+                                     acc['email'], acc['password'], acc['use_ssl'])
+        trash_folder = ec.detect_trash_folder(imap_conn)
+        messages, total = ec.fetch_mailbox(imap_conn, trash_folder, page, per_page)
+        imap_conn.logout()
+    except Exception as e:
+        flash(f'Erro ao conectar: {e}', 'danger')
+        return redirect(url_for('email_inbox'))
+    total_pages = math.ceil(total / per_page) if total else 1
+    return render_template('email_lixeira.html', messages=messages, page=page,
+                           total_pages=total_pages, total=total, folder=trash_folder,
+                           account=acc)
+
+@app.route('/email/esvaziar-lixeira', methods=['POST'])
+def email_esvaziar_lixeira():
+    acc = _get_email_account()
+    if not acc:
+        return jsonify({'ok': False})
+    try:
+        imap_conn = ec.imap_connect(acc['imap_server'], acc['imap_port'],
+                                     acc['email'], acc['password'], acc['use_ssl'])
+        trash_folder = ec.detect_trash_folder(imap_conn)
+        imap_conn.select(trash_folder)
+        imap_conn.uid('store', '1:*', '+FLAGS', '\\Deleted')
+        imap_conn.expunge()
+        imap_conn.logout()
+        return jsonify({'ok': True})
+    except Exception as e:
+        return jsonify({'ok': False, 'erro': str(e)})
+
+@app.route('/email/salvar-rascunho', methods=['POST'])
+def email_salvar_rascunho():
+    acc = _get_email_account()
+    if not acc:
+        return jsonify({'ok': False, 'erro': 'Conta nao configurada'})
+    to = request.form.get('to', '').strip()
+    subject = request.form.get('subject', '').strip()
+    body_html = request.form.get('body_html', '')
+    try:
+        imap_conn = ec.imap_connect(acc['imap_server'], acc['imap_port'],
+                                     acc['email'], acc['password'], acc['use_ssl'])
+        drafts_folder = ec.detect_drafts_folder(imap_conn)
+        ec.save_draft(imap_conn, acc['email'], to, subject, body_html, drafts_folder)
         imap_conn.logout()
         return jsonify({'ok': True})
     except Exception as e:
