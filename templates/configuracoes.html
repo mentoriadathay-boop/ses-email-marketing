@@ -73,6 +73,110 @@
   </div>
 </div>
 
+<!-- Contas de Email (IMAP/SMTP) -->
+<div class="card mb-4">
+  <div class="card-body">
+    <h6 class="fw-semibold mb-3"><i class="bi bi-envelope-at me-2 text-primary"></i>Contas de Email (IMAP/SMTP)</h6>
+    <p class="text-muted small mb-3">
+      Configure sua conta de email para usar a caixa de entrada integrada. Funciona com Hostinger, Gmail, Outlook, etc.
+    </p>
+
+    {% if email_accounts %}
+    <div class="table-responsive mb-3">
+      <table class="table table-sm table-bordered mb-0">
+        <thead class="bg-light">
+          <tr>
+            <th>Label</th>
+            <th>Email</th>
+            <th>IMAP</th>
+            <th>SMTP</th>
+            <th style="width:80px"></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for acc in email_accounts %}
+          <tr>
+            <td>{{ acc.label }}</td>
+            <td><code>{{ acc.email }}</code></td>
+            <td class="small">{{ acc.imap_server }}:{{ acc.imap_port }}</td>
+            <td class="small">{{ acc.smtp_server }}:{{ acc.smtp_port }}</td>
+            <td>
+              <form method="POST" action="{{ url_for('deletar_email_account', account_id=acc.id) }}"
+                    onsubmit="return confirm('Remover esta conta?')" class="d-inline">
+                <button class="btn btn-outline-danger btn-sm py-0 px-1" title="Remover">
+                  <i class="bi bi-trash"></i>
+                </button>
+              </form>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% endif %}
+
+    <button class="btn btn-sm btn-outline-primary mb-3" type="button"
+            data-bs-toggle="collapse" data-bs-target="#formEmailAccount">
+      <i class="bi bi-plus-lg me-1"></i>{{ 'Adicionar outra conta' if email_accounts else 'Configurar conta' }}
+    </button>
+
+    <div class="collapse {{ '' if email_accounts else 'show' }}" id="formEmailAccount">
+      <form method="POST" action="{{ url_for('salvar_email_account') }}">
+        <div class="row g-3">
+          <div class="col-md-6">
+            <label class="form-label small fw-semibold">Label</label>
+            <input type="text" name="label" class="form-control form-control-sm"
+                   value="Principal" placeholder="Ex: Principal">
+          </div>
+          <div class="col-md-6">
+            <label class="form-label small fw-semibold">Email <span class="text-danger">*</span></label>
+            <input type="email" name="email_addr" class="form-control form-control-sm" required
+                   placeholder="seu@email.com">
+          </div>
+          <div class="col-md-6">
+            <label class="form-label small fw-semibold">Senha <span class="text-danger">*</span></label>
+            <input type="password" name="password" class="form-control form-control-sm" required
+                   placeholder="Senha do email">
+          </div>
+          <div class="col-md-6">
+            <div class="form-check mt-4">
+              <input class="form-check-input" type="checkbox" name="use_ssl" id="useSsl" checked>
+              <label class="form-check-label small" for="useSsl">Usar SSL</label>
+            </div>
+          </div>
+          <div class="col-md-6">
+            <label class="form-label small fw-semibold">Servidor IMAP <span class="text-danger">*</span></label>
+            <input type="text" name="imap_server" class="form-control form-control-sm" required
+                   placeholder="imap.hostinger.com">
+          </div>
+          <div class="col-md-6">
+            <label class="form-label small fw-semibold">Porta IMAP</label>
+            <input type="number" name="imap_port" class="form-control form-control-sm" value="993">
+          </div>
+          <div class="col-md-6">
+            <label class="form-label small fw-semibold">Servidor SMTP <span class="text-danger">*</span></label>
+            <input type="text" name="smtp_server" class="form-control form-control-sm" required
+                   placeholder="smtp.hostinger.com">
+          </div>
+          <div class="col-md-6">
+            <label class="form-label small fw-semibold">Porta SMTP</label>
+            <input type="number" name="smtp_port" class="form-control form-control-sm" value="587">
+          </div>
+        </div>
+        <div class="mt-3 d-flex gap-2">
+          <button type="submit" class="btn btn-primary btn-sm">
+            <i class="bi bi-check-lg me-1"></i>Salvar Conta
+          </button>
+          <button type="button" class="btn btn-outline-secondary btn-sm" onclick="testarConexao()">
+            <i class="bi bi-plug me-1"></i>Testar Conexao
+          </button>
+        </div>
+        <div id="testeResult" class="mt-2"></div>
+      </form>
+    </div>
+  </div>
+</div>
+
 <div class="row g-4">
   <div class="col-lg-6">
     <!-- Status SES -->
@@ -225,6 +329,31 @@ function verificarSES() {
     });
 }
 verificarSES();
+
+// Testar conexao email
+function testarConexao() {
+  const form = document.querySelector('#formEmailAccount form');
+  const data = {
+    imap_server: form.querySelector('[name=imap_server]').value,
+    imap_port: form.querySelector('[name=imap_port]').value,
+    email: form.querySelector('[name=email_addr]').value,
+    password: form.querySelector('[name=password]').value,
+    use_ssl: form.querySelector('[name=use_ssl]').checked
+  };
+  const el = document.getElementById('testeResult');
+  el.innerHTML = '<span class="text-muted small">Testando...</span>';
+  fetch('{{ url_for("testar_email_account") }}', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify(data)
+  }).then(r => r.json()).then(d => {
+    if (d.ok) {
+      el.innerHTML = '<span class="text-success small"><i class="bi bi-check-circle me-1"></i>Conectado! Pastas: ' + d.folders.join(', ') + '</span>';
+    } else {
+      el.innerHTML = '<span class="text-danger small"><i class="bi bi-x-circle me-1"></i>Erro: ' + d.erro + '</span>';
+    }
+  });
+}
 
 // Editor de assinatura
 function syncSigEditor() {

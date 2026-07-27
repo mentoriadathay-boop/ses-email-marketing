@@ -1,0 +1,125 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="d-flex align-items-center justify-content-between mb-4">
+  <div>
+    <h4 class="fw-bold mb-0"><i class="bi bi-pencil-square me-2"></i>Compor Email</h4>
+    <small class="text-muted">Enviando como {{ account.email }}</small>
+  </div>
+  <a href="{{ url_for('email_inbox') }}" class="btn btn-outline-secondary btn-sm">
+    <i class="bi bi-arrow-left me-1"></i>Voltar
+  </a>
+</div>
+
+<div class="card">
+  <div class="card-body">
+    <form method="POST" action="{{ url_for('email_enviar') }}" enctype="multipart/form-data" id="composeForm">
+      <div class="mb-3">
+        <label class="form-label fw-semibold small">Para <span class="text-danger">*</span></label>
+        <input type="text" name="to" class="form-control form-control-sm" required
+               placeholder="email@exemplo.com" id="inputTo"
+               value="{{ prefill.to or '' }}">
+        <div id="toSuggestions" class="list-group position-absolute shadow-sm" style="z-index:10;display:none"></div>
+      </div>
+
+      <div class="row g-3 mb-3">
+        <div class="col-md-6">
+          <label class="form-label fw-semibold small">Cc</label>
+          <input type="text" name="cc" class="form-control form-control-sm"
+                 placeholder="Opcional" value="{{ prefill.cc or '' }}">
+        </div>
+        <div class="col-md-6">
+          <label class="form-label fw-semibold small">Bcc</label>
+          <input type="text" name="bcc" class="form-control form-control-sm"
+                 placeholder="Opcional">
+        </div>
+      </div>
+
+      <div class="mb-3">
+        <label class="form-label fw-semibold small">Assunto <span class="text-danger">*</span></label>
+        <input type="text" name="subject" class="form-control form-control-sm" required
+               placeholder="Assunto do email"
+               value="{{ prefill.subject or '' }}">
+      </div>
+
+      <div class="mb-3">
+        <label class="form-label fw-semibold small">Mensagem</label>
+        <div id="compose-editor" style="min-height:250px"></div>
+        <textarea name="body_html" id="compose-html" class="d-none"></textarea>
+      </div>
+
+      {% if prefill.reply_to_msg_id %}
+      <input type="hidden" name="reply_to_msg_id" value="{{ prefill.reply_to_msg_id }}">
+      <input type="hidden" name="references" value="{{ prefill.references or '' }}">
+      {% endif %}
+
+      <div class="mb-3">
+        <label class="form-label fw-semibold small">Anexos</label>
+        <input type="file" name="attachments" class="form-control form-control-sm" multiple>
+      </div>
+
+      <div class="d-flex gap-2">
+        <button type="submit" class="btn btn-primary">
+          <i class="bi bi-send me-1"></i>Enviar
+        </button>
+        <a href="{{ url_for('email_inbox') }}" class="btn btn-outline-secondary">Cancelar</a>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+  const quill = new Quill('#compose-editor', {
+    theme: 'snow',
+    modules: {
+      toolbar: [
+        [{'header': [1,2,3,false]}],
+        ['bold','italic','underline','strike'],
+        [{'color':[]},{'background':[]}],
+        [{'list':'ordered'},{'list':'bullet'}],
+        [{'align':[]}],
+        ['link','image'],
+        ['clean']
+      ]
+    }
+  });
+
+  {% if prefill.body %}
+  quill.root.innerHTML = {{ prefill.body|tojson }};
+  {% endif %}
+
+  document.getElementById('composeForm').addEventListener('submit', function() {
+    document.getElementById('compose-html').value = quill.root.innerHTML;
+  });
+
+  // autocomplete contatos
+  const inputTo = document.getElementById('inputTo');
+  const suggestions = document.getElementById('toSuggestions');
+  let debounce;
+  inputTo.addEventListener('input', function() {
+    clearTimeout(debounce);
+    const q = this.value.trim();
+    if (q.length < 2) { suggestions.style.display='none'; return; }
+    debounce = setTimeout(() => {
+      fetch('/api/contatos/buscar?q=' + encodeURIComponent(q))
+        .then(r => r.json())
+        .then(data => {
+          if (!data.length) { suggestions.style.display='none'; return; }
+          suggestions.innerHTML = data.map(c =>
+            `<button type="button" class="list-group-item list-group-item-action small py-1"
+                     onclick="document.getElementById('inputTo').value='${c.email}';document.getElementById('toSuggestions').style.display='none'">
+              <strong>${c.name || ''}</strong> <span class="text-muted">${c.email}</span>
+            </button>`
+          ).join('');
+          suggestions.style.display = 'block';
+        });
+    }, 300);
+  });
+  document.addEventListener('click', function(e) {
+    if (!suggestions.contains(e.target) && e.target !== inputTo) suggestions.style.display = 'none';
+  });
+});
+</script>
+{% endblock %}
