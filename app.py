@@ -507,12 +507,20 @@ def send_email_brevo(sender, recipient_email, recipient_name, subject, body_html
     configuration = sib_api_v3_sdk.Configuration()
     configuration.api_key['api-key'] = BREVO_API_KEY
     api_instance = sib_api_v3_sdk.TransactionalEmailsApi(sib_api_v3_sdk.ApiClient(configuration))
-    to_entry = {'email': recipient_email}
-    if recipient_name and recipient_name.strip():
-        to_entry['name'] = recipient_name.strip()
+    emails = [e.strip() for e in re.split(r'[;,]', recipient_email) if e.strip()]
+    if not emails:
+        raise ValueError(f'Email invalido: {recipient_email}')
+    to_list = []
+    for em in emails:
+        entry = {'email': em}
+        if recipient_name and recipient_name.strip() and len(emails) == 1:
+            entry['name'] = recipient_name.strip()
+        to_list.append(entry)
+    sender_info = {'email': sender, 'name': get_sender_name()}
     email_obj = sib_api_v3_sdk.SendSmtpEmail(
-        to=[to_entry],
-        sender={'email': sender, 'name': get_sender_name()},
+        to=to_list,
+        sender=sender_info,
+        reply_to=sender_info,
         subject=personalized_subject,
         html_content=personalized_body
     )
@@ -720,6 +728,7 @@ def run_campaign(campaign_id, contacts, sender, subject, body_html, sequence_id=
 
         pixel_url = f"{APP_URL}/track/open?email={quote(email)}&campaign={campaign_id}"
         unsub_url = f"{APP_URL}/descadastrar?email={quote(email)}"
+        print(f"[CAMPAIGN] Pixel URL: {pixel_url[:80]}...", flush=True)
         body_with_tracking = (body_html
             + f'<img src="{pixel_url}" width="1" height="1" style="display:none;border:0" />'
             + f'<div style="text-align:center;margin-top:24px;font-size:11px;color:#aaa"><a href="{unsub_url}" style="color:#aaa">Descadastrar</a></div>')
@@ -1936,8 +1945,9 @@ def track_open():
                 log_activity(email, 'email_opened', f'Campanha {camp_id}', conn)
             conn.commit()
             conn.close()
-        except Exception:
-            pass
+            print(f"[TRACK] Abertura registrada: {email} campaign={camp_id} seq={seq_id}", flush=True)
+        except Exception as e:
+            print(f"[TRACK] Erro ao registrar abertura: {e}", flush=True)
     return Response(PIXEL_GIF, mimetype='image/gif',
                     headers={'Cache-Control': 'no-cache,no-store,must-revalidate'})
 
