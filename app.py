@@ -286,6 +286,7 @@ def init_db():
         "ALTER TABLE signature ADD COLUMN sender_name TEXT DEFAULT 'ConvertMail'",
         "ALTER TABLE contacts ADD COLUMN nicho TEXT",
         "ALTER TABLE mailing_contacts ADD COLUMN nicho TEXT DEFAULT ''",
+        "ALTER TABLE email_opens ADD COLUMN campaign_id INTEGER",
     ]:
         try:
             conn.execute(f"DO $$ BEGIN {col_sql}; EXCEPTION WHEN duplicate_column THEN NULL; END $$")
@@ -706,17 +707,25 @@ def run_campaign(campaign_id, contacts, sender, subject, body_html, sequence_id=
     conn.execute("UPDATE campaigns SET status='running',total_contacts=%s WHERE id=%s", (len(contacts), campaign_id))
     conn.commit()
 
+    blacklisted_count = 0
     for contact in contacts:
         email = contact['email']
         name = contact.get('name', '')
 
         if is_blacklisted(email, conn):
+            blacklisted_count += 1
             continue
 
         upsert_contact(email, name, contact.get('tags', ''), conn)
 
+        pixel_url = f"{APP_URL}/track/open?email={quote(email)}&campaign={campaign_id}"
+        unsub_url = f"{APP_URL}/descadastrar?email={quote(email)}"
+        body_with_tracking = (body_html
+            + f'<img src="{pixel_url}" width="1" height="1" style="display:none;border:0" />'
+            + f'<div style="text-align:center;margin-top:24px;font-size:11px;color:#aaa"><a href="{unsub_url}" style="color:#aaa">Descadastrar</a></div>')
+
         try:
-            send_email_brevo(sender, email, name, subject, body_html)
+            send_email_brevo(sender, email, name, subject, body_with_tracking)
             status = 'sent'
             campaign_progress[campaign_id]['sent'] += 1
             campaign_progress[campaign_id]['logs'].append({'email': email, 'name': name, 'status': 'sent', 'error': None})
@@ -960,13 +969,25 @@ def index():
     total_contacts = conn.execute('SELECT COUNT(*) as n FROM contacts').fetchone()['n']
     blacklist_count = conn.execute('SELECT COUNT(*) as n FROM blacklist').fetchone()['n']
     hot_leads = conn.execute('SELECT COUNT(*) as n FROM contact_scores WHERE score > 50').fetchone()['n']
-    sent_total = conn.execute("SELECT COUNT(*) as n FROM sequence_logs WHERE status='sent'").fetchone()['n']
+    sent_cadencias = conn.execute("SELECT COUNT(*) as n FROM sequence_logs WHERE status='sent'").fetchone()['n']
+    sent_campanhas = conn.execute("SELECT COALESCE(SUM(sent),0) as n FROM campaigns").fetchone()['n']
+    sent_total = sent_cadencias + sent_campanhas
     opens_total = conn.execute('SELECT COUNT(*) as n FROM email_opens').fetchone()['n']
     open_rate = round(opens_total / sent_total * 100, 1) if sent_total > 0 else 0
+    now = datetime.now()
+    month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    sent_campanhas_mes = conn.execute(
+        "SELECT COALESCE(SUM(sent),0) as n FROM campaigns WHERE created_at >= %s", (month_start,)
+    ).fetchone()['n']
+    sent_cadencias_mes = conn.execute(
+        "SELECT COUNT(*) as n FROM sequence_logs WHERE status='sent' AND sent_at >= %s", (month_start,)
+    ).fetchone()['n']
+    sent_mes = sent_campanhas_mes + sent_cadencias_mes
     conn.close()
     return render_template('index.html', campaigns=campaigns,
                            total_contacts=total_contacts, blacklist_count=blacklist_count,
-                           hot_leads=hot_leads, open_rate=open_rate)
+                           hot_leads=hot_leads, open_rate=open_rate,
+                           sent_total=sent_total, sent_mes=sent_mes)
 
 @app.route('/nova-campanha', methods=['GET', 'POST'])
 def nova_campanha():
@@ -1107,11 +1128,24 @@ def campanha_detalhe(campaign_id):
     logs = conn.execute(
         "SELECT * FROM campaign_logs WHERE campaign_id=%s ORDER BY id DESC LIMIT 200",
         (campaign_id,)).fetchall()
+    camp_opens = conn.execute(
+        'SELECT COUNT(*) as n FROM email_opens WHERE campaign_id=%s', (campaign_id,)).fetchone()['n']
+    camp_open_rate = round(camp_opens / campaign['sent'] * 100, 1) if campaign and campaign['sent'] > 0 else 0
+    blacklisted_in_campaign = 0
+    if campaign:
+        log_emails = [l['contact_email'] for l in logs if l['status'] == 'sent']
+        if log_emails:
+            placeholders = ','.join(['%s'] * len(log_emails))
+            blacklisted_in_campaign = conn.execute(
+                f'SELECT COUNT(*) as n FROM blacklist WHERE email IN ({placeholders})', tuple(log_emails)
+            ).fetchone()['n']
     conn.close()
     if not campaign:
         flash('Campanha não encontrada.', 'danger')
         return redirect(url_for('index'))
-    return render_template('campanha_detalhe.html', campaign=campaign, logs=logs)
+    return render_template('campanha_detalhe.html', campaign=campaign, logs=logs,
+                           camp_open_rate=camp_open_rate, camp_opens=camp_opens,
+                           blacklisted_in_campaign=blacklisted_in_campaign)
 
 @app.route('/campanha/<int:campaign_id>/reutilizar')
 def campanha_reutilizar(campaign_id):
@@ -1852,17 +1886,22 @@ def api_templates():
 
 @app.route('/upload/imagem', methods=['POST'])
 def upload_imagem():
+    import base64
     if 'imagem' not in request.files:
         return jsonify({'erro': 'Nenhum arquivo enviado'}), 400
     file = request.files['imagem']
     if file.filename == '' or not allowed_image(file.filename):
         return jsonify({'erro': 'Tipo não permitido'}), 400
     ext = file.filename.rsplit('.', 1)[1].lower()
+    mime_map = {'jpg': 'image/jpeg', 'jpeg': 'image/jpeg', 'png': 'image/png', 'gif': 'image/gif', 'webp': 'image/webp'}
+    mime = mime_map.get(ext, 'image/png')
+    data = file.read()
+    b64 = base64.b64encode(data).decode('utf-8')
+    data_uri = f'data:{mime};base64,{b64}'
     filename = f"{uuid.uuid4().hex}.{ext}"
+    file.seek(0)
     file.save(os.path.join(IMAGES_FOLDER, filename))
-    # Usa APP_URL se configurada (Railway), senão deduz a partir da requisição atual
-    base_url = APP_URL if os.environ.get('APP_URL') else request.host_url.rstrip('/')
-    return jsonify({'url': f'{base_url}/uploads/imagens/{filename}'})
+    return jsonify({'url': data_uri})
 
 @app.route('/uploads/imagens/<path:filename>')
 def serve_imagem(filename):
@@ -1875,12 +1914,13 @@ def track_open():
     email = request.args.get('email', '')
     seq_id = request.args.get('seq', type=int)
     step_num = request.args.get('step', type=int)
-    if email and seq_id and step_num is not None:
+    camp_id = request.args.get('campaign', type=int)
+    if email and (seq_id or camp_id):
         try:
             conn = get_db()
             conn.execute(
-                'INSERT INTO email_opens (sequence_id,contact_email,step_number) VALUES (%s,%s,%s)',
-                (seq_id, email, step_num))
+                'INSERT INTO email_opens (sequence_id,contact_email,step_number,campaign_id) VALUES (%s,%s,%s,%s)',
+                (seq_id, email, step_num, camp_id))
             now = datetime.now()
             conn.execute(
                 'UPDATE send_analytics SET opened_at=%s,hour_of_day=%s,day_of_week=%s'
@@ -1890,7 +1930,10 @@ def track_open():
                 'SELECT COUNT(*) as n FROM email_opens WHERE contact_email=%s', (email,)
             ).fetchone()['n']
             update_score(email, 5 if opens_count == 1 else 2, conn)
-            log_activity(email, 'email_opened', f'Cadência {seq_id}, passo {step_num}', conn)
+            if seq_id:
+                log_activity(email, 'email_opened', f'Cadência {seq_id}, passo {step_num}', conn)
+            else:
+                log_activity(email, 'email_opened', f'Campanha {camp_id}', conn)
             conn.commit()
             conn.close()
         except Exception:
