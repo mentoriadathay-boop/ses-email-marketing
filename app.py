@@ -484,7 +484,7 @@ def get_best_send_hour(email):
 
 def score_label(score):
     s = score or 0
-    if s >= 100: return ('Muito Quente', '#dc2626', '#fee2e2')
+    if s >= 100: return ('Muito Quente', '#5B2A6E', '#EDE0F2')
     if s >= 51:  return ('Quente', '#ea580c', '#ffedd5')
     if s >= 21:  return ('Morno', '#ca8a04', '#fef9c3')
     return ('Frio', '#2563eb', '#dbeafe')
