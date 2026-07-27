@@ -20,8 +20,9 @@
   </div>
   <div class="col-md-3">
     <div class="stat-card" style="background:linear-gradient(135deg,#10b981,#059669)">
-      <div class="opacity-75 small mb-1">E-mails Enviados</div>
-      <div class="fs-3 fw-bold">{{ campaigns|sum(attribute='sent') }}</div>
+      <div class="opacity-75 small mb-1">E-mails Enviados (Total)</div>
+      <div class="fs-3 fw-bold">{{ sent_total }}</div>
+      <div class="opacity-75 small mt-1">Este mes: {{ sent_mes }}</div>
     </div>
   </div>
   <div class="col-md-3">

@@ -67,12 +67,36 @@
       <div class="opacity-75 small">Status</div>
       <div class="fs-5 fw-bold" id="status-text">
         {% if campaign.status == 'running' %}Enviando...
-        {% elif campaign.status == 'done' %}Concluída
+        {% elif campaign.status == 'done' %}Concluida
         {% elif campaign.status == 'scheduled' %}Agendada
         {% elif campaign.status == 'draft' %}Rascunho
         {% elif campaign.status == 'error' %}Erro
         {% else %}{{ campaign.status }}{% endif %}
       </div>
+    </div>
+  </div>
+</div>
+
+<!-- Metricas da campanha -->
+<div class="row g-3 mb-4">
+  <div class="col-md-4">
+    <div class="stat-card" style="background:linear-gradient(135deg,#14b8a6,#0d9488)">
+      <div class="opacity-75 small">Taxa de Abertura</div>
+      <div class="fs-3 fw-bold">{{ camp_open_rate }}%</div>
+      <div class="opacity-75 small mt-1">{{ camp_opens }} abertura(s)</div>
+    </div>
+  </div>
+  <div class="col-md-4">
+    <div class="stat-card" style="background:linear-gradient(135deg,#64748b,#475569)">
+      <div class="opacity-75 small">Blacklist nesta Campanha</div>
+      <div class="fs-3 fw-bold">{{ blacklisted_in_campaign }}</div>
+    </div>
+  </div>
+  <div class="col-md-4">
+    <div class="stat-card" style="background:linear-gradient(135deg,#ea580c,#c2410c)">
+      <div class="opacity-75 small">Leads Quentes (score &gt; 50)</div>
+      <div class="fs-3 fw-bold">{{ camp_opens }}</div>
+      <div class="opacity-75 small mt-1">Contatos que abriram</div>
     </div>
   </div>
 </div>
