@@ -1516,6 +1516,14 @@ def testar_email_account():
     except Exception as e:
         return jsonify({'ok': False, 'erro': str(e)})
 
+@app.route('/email')
+def email_hub():
+    acc = _get_email_account()
+    if not acc:
+        flash('Configure sua conta de email em Configuracoes primeiro.', 'warning')
+        return redirect(url_for('configuracoes'))
+    return render_template('email_hub.html', account=acc)
+
 @app.route('/email/inbox')
 def email_inbox():
     acc = _get_email_account()
@@ -1523,11 +1531,12 @@ def email_inbox():
         flash('Configure sua conta de email em Configuracoes primeiro.', 'warning')
         return redirect(url_for('configuracoes'))
     page = int(request.args.get('page', 1))
+    order = request.args.get('order', 'desc')
     per_page = 25
     try:
         imap_conn = ec.imap_connect(acc['imap_server'], acc['imap_port'],
                                      acc['email'], acc['password'], acc['use_ssl'])
-        messages, total = ec.fetch_mailbox(imap_conn, 'INBOX', page, per_page)
+        messages, total = ec.fetch_mailbox(imap_conn, 'INBOX', page, per_page, order)
         imap_conn.logout()
     except Exception as e:
         flash(f'Erro ao conectar: {e}', 'danger')
@@ -1535,7 +1544,7 @@ def email_inbox():
     total_pages = math.ceil(total / per_page) if total else 1
     return render_template('email_inbox.html', messages=messages, page=page,
                            total_pages=total_pages, total=total, folder='INBOX',
-                           account=acc)
+                           account=acc, order=order)
 
 @app.route('/email/enviados')
 def email_enviados():
@@ -1544,12 +1553,13 @@ def email_enviados():
         flash('Configure sua conta de email em Configuracoes primeiro.', 'warning')
         return redirect(url_for('configuracoes'))
     page = int(request.args.get('page', 1))
+    order = request.args.get('order', 'desc')
     per_page = 25
     sent_folder = acc.get('sent_folder') or 'Sent'
     try:
         imap_conn = ec.imap_connect(acc['imap_server'], acc['imap_port'],
                                      acc['email'], acc['password'], acc['use_ssl'])
-        messages, total = ec.fetch_mailbox(imap_conn, sent_folder, page, per_page)
+        messages, total = ec.fetch_mailbox(imap_conn, sent_folder, page, per_page, order)
         imap_conn.logout()
     except Exception as e:
         flash(f'Erro ao conectar: {e}', 'danger')
@@ -1557,7 +1567,30 @@ def email_enviados():
     total_pages = math.ceil(total / per_page) if total else 1
     return render_template('email_enviados.html', messages=messages, page=page,
                            total_pages=total_pages, total=total, folder=sent_folder,
-                           account=acc)
+                           account=acc, order=order)
+
+@app.route('/email/spam')
+def email_spam():
+    acc = _get_email_account()
+    if not acc:
+        flash('Configure sua conta de email em Configuracoes primeiro.', 'warning')
+        return redirect(url_for('configuracoes'))
+    page = int(request.args.get('page', 1))
+    order = request.args.get('order', 'desc')
+    per_page = 25
+    try:
+        imap_conn = ec.imap_connect(acc['imap_server'], acc['imap_port'],
+                                     acc['email'], acc['password'], acc['use_ssl'])
+        spam_folder = ec.detect_spam_folder(imap_conn)
+        messages, total = ec.fetch_mailbox(imap_conn, spam_folder, page, per_page, order)
+        imap_conn.logout()
+    except Exception as e:
+        flash(f'Erro ao conectar: {e}', 'danger')
+        return redirect(url_for('email_hub'))
+    total_pages = math.ceil(total / per_page) if total else 1
+    return render_template('email_spam.html', messages=messages, page=page,
+                           total_pages=total_pages, total=total, folder=spam_folder,
+                           account=acc, order=order)
 
 @app.route('/email/ler/<folder>/<uid>')
 def email_ler(folder, uid):
@@ -1708,12 +1741,13 @@ def email_lixeira():
         flash('Configure sua conta de email em Configuracoes primeiro.', 'warning')
         return redirect(url_for('configuracoes'))
     page = int(request.args.get('page', 1))
+    order = request.args.get('order', 'desc')
     per_page = 25
     try:
         imap_conn = ec.imap_connect(acc['imap_server'], acc['imap_port'],
                                      acc['email'], acc['password'], acc['use_ssl'])
         trash_folder = ec.detect_trash_folder(imap_conn)
-        messages, total = ec.fetch_mailbox(imap_conn, trash_folder, page, per_page)
+        messages, total = ec.fetch_mailbox(imap_conn, trash_folder, page, per_page, order)
         imap_conn.logout()
     except Exception as e:
         flash(f'Erro ao conectar: {e}', 'danger')
@@ -1721,7 +1755,7 @@ def email_lixeira():
     total_pages = math.ceil(total / per_page) if total else 1
     return render_template('email_lixeira.html', messages=messages, page=page,
                            total_pages=total_pages, total=total, folder=trash_folder,
-                           account=acc)
+                           account=acc, order=order)
 
 @app.route('/email/esvaziar-lixeira', methods=['POST'])
 def email_esvaziar_lixeira():
