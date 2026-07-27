@@ -46,7 +46,14 @@ UPLOAD_FOLDER = os.path.join(os.path.dirname(__file__), 'uploads')
 IMAGES_FOLDER = os.path.join(UPLOAD_FOLDER, 'imagens')
 ALLOWED_EXTENSIONS = {'csv'}
 ALLOWED_IMAGE_EXT = {'jpg', 'jpeg', 'png', 'gif', 'webp'}
-APP_URL = os.environ.get('APP_URL', 'http://127.0.0.1:5000').rstrip('/')
+_raw_app_url = os.environ.get('APP_URL', '').strip().rstrip('/')
+if not _raw_app_url:
+    _railway_domain = os.environ.get('RAILWAY_PUBLIC_DOMAIN', '').strip()
+    if _railway_domain:
+        _raw_app_url = f'https://{_railway_domain}'
+    else:
+        _raw_app_url = 'http://127.0.0.1:5000'
+APP_URL = _raw_app_url
 UNSPLASH_ACCESS_KEY = os.environ.get('UNSPLASH_ACCESS_KEY', '')
 BREVO_API_KEY = os.environ.get('BREVO_API_KEY', '')
 FIRECRAWL_API_KEY = os.environ.get('FIRECRAWL_API_KEY', '')
