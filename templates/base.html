@@ -11,7 +11,12 @@
   <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;700&family=Open+Sans:wght@400;700&family=Montserrat:wght@400;700&display=swap" rel="stylesheet">
   <style>
     body { background: #f0f2f5; font-family: 'Segoe UI', sans-serif; }
-    .sidebar { width: 240px; min-height: 100vh; background: #1a1a2e; position: fixed; left: 0; top: 0; z-index: 100; }
+    .sidebar { width: 240px; height: 100vh; background: #1a1a2e; position: fixed; left: 0; top: 0; z-index: 100; display: flex; flex-direction: column; }
+    .sidebar nav { flex: 1; overflow-y: auto; overflow-x: hidden; scrollbar-width: thin; scrollbar-color: #ffffff33 transparent; }
+    .sidebar nav::-webkit-scrollbar { width: 5px; }
+    .sidebar nav::-webkit-scrollbar-thumb { background: #ffffff33; border-radius: 3px; }
+    .email-submenu { max-height: 0; overflow: hidden; transition: max-height .25s ease; }
+    .email-submenu.open { max-height: 200px; }
     .sidebar .brand { padding: 24px 20px 16px; border-bottom: 1px solid #ffffff22; }
     .sidebar .brand h5 { color: #fff; font-weight: 700; margin: 0; font-size: 1rem; }
     .sidebar .brand small { color: #aaa; font-size: .75rem; }
@@ -53,21 +58,27 @@
       <a href="{{ url_for('index') }}" class="nav-link {% if request.endpoint == 'index' %}active{% endif %}">
         <i class="bi bi-speedometer2"></i> Dashboard
       </a>
-      <a href="{{ url_for('email_hub') }}" class="nav-link {% if request.endpoint == 'email_hub' %}active{% endif %}">
-        <i class="bi bi-envelope"></i> Email
+      <a href="{{ url_for('email_hub') }}" class="nav-link {% if 'email' in (request.endpoint or '') %}active{% endif %}" onclick="event.preventDefault();toggleEmailMenu()" style="cursor:pointer;display:flex;align-items:center;justify-content:space-between">
+        <span><i class="bi bi-envelope"></i> Email</span>
+        <i class="bi bi-chevron-down" id="emailChevron" style="font-size:.7rem;transition:transform .25s"></i>
       </a>
-      <a href="{{ url_for('email_inbox') }}" class="nav-link {% if request.endpoint in ('email_inbox','email_ler','email_compor') %}active{% endif %}" style="padding-left:36px;font-size:.85rem">
-        <i class="bi bi-inbox"></i> Entrada
-      </a>
-      <a href="{{ url_for('email_enviados') }}" class="nav-link {% if request.endpoint == 'email_enviados' %}active{% endif %}" style="padding-left:36px;font-size:.85rem">
-        <i class="bi bi-send"></i> Enviados
-      </a>
-      <a href="{{ url_for('email_lixeira') }}" class="nav-link {% if request.endpoint == 'email_lixeira' %}active{% endif %}" style="padding-left:36px;font-size:.85rem">
-        <i class="bi bi-trash"></i> Lixeira
-      </a>
-      <a href="{{ url_for('email_spam') }}" class="nav-link {% if request.endpoint == 'email_spam' %}active{% endif %}" style="padding-left:36px;font-size:.85rem">
-        <i class="bi bi-exclamation-triangle"></i> Spam
-      </a>
+      <div class="email-submenu {% if 'email' in (request.endpoint or '') %}open{% endif %}" id="emailSubmenu">
+        <a href="{{ url_for('email_hub') }}" class="nav-link {% if request.endpoint == 'email_hub' %}active{% endif %}" style="padding-left:36px;font-size:.85rem">
+          <i class="bi bi-grid"></i> Gestao
+        </a>
+        <a href="{{ url_for('email_inbox') }}" class="nav-link {% if request.endpoint in ('email_inbox','email_ler','email_compor') %}active{% endif %}" style="padding-left:36px;font-size:.85rem">
+          <i class="bi bi-inbox"></i> Entrada
+        </a>
+        <a href="{{ url_for('email_enviados') }}" class="nav-link {% if request.endpoint == 'email_enviados' %}active{% endif %}" style="padding-left:36px;font-size:.85rem">
+          <i class="bi bi-send"></i> Enviados
+        </a>
+        <a href="{{ url_for('email_lixeira') }}" class="nav-link {% if request.endpoint == 'email_lixeira' %}active{% endif %}" style="padding-left:36px;font-size:.85rem">
+          <i class="bi bi-trash"></i> Lixeira
+        </a>
+        <a href="{{ url_for('email_spam') }}" class="nav-link {% if request.endpoint == 'email_spam' %}active{% endif %}" style="padding-left:36px;font-size:.85rem">
+          <i class="bi bi-exclamation-triangle"></i> Spam
+        </a>
+      </div>
       <div style="border-top:1px solid #ffffff22;margin:8px 20px 4px;"></div>
       <a href="{{ url_for('nova_campanha') }}" class="nav-link {% if request.endpoint == 'nova_campanha' %}active{% endif %}">
         <i class="bi bi-plus-circle"></i> Nova Campanha
@@ -280,6 +291,14 @@
   <script src="{{ url_for('static', filename='js/image_editor.js') }}"></script>
   <script src="{{ url_for('static', filename='js/email_templates_data.js') }}"></script>
   <script src="{{ url_for('static', filename='js/ia_modal.js') }}"></script>
+  <script>
+  function toggleEmailMenu() {
+    var sub = document.getElementById('emailSubmenu');
+    var chev = document.getElementById('emailChevron');
+    sub.classList.toggle('open');
+    chev.style.transform = sub.classList.contains('open') ? 'rotate(180deg)' : '';
+  }
+  </script>
   {% block scripts %}{% endblock %}
 </body>
 </html>
