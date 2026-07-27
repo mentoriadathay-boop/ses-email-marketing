@@ -6,11 +6,8 @@
     <small class="text-muted">{{ account.email }} &mdash; {{ total }} mensagens</small>
   </div>
   <div class="d-flex gap-2">
-    <a href="{{ url_for('email_inbox') }}" class="btn btn-outline-secondary btn-sm">
-      <i class="bi bi-inbox me-1"></i>Caixa de Entrada
-    </a>
-    <a href="{{ url_for('email_enviados') }}" class="btn btn-outline-secondary btn-sm">
-      <i class="bi bi-send me-1"></i>Enviados
+    <a href="{{ url_for('email_hub') }}" class="btn btn-outline-secondary btn-sm">
+      <i class="bi bi-grid me-1"></i>Gestao
     </a>
     {% if total > 0 %}
     <button class="btn btn-outline-danger btn-sm" onclick="esvaziarLixeira()">
@@ -18,6 +15,19 @@
     </button>
     {% endif %}
   </div>
+</div>
+
+<!-- Ordenacao -->
+<div class="d-flex align-items-center gap-2 mb-3">
+  <small class="text-muted">Ordenar:</small>
+  <a href="{{ url_for('email_lixeira', order='desc', page=1) }}"
+     class="btn btn-sm {{ 'btn-primary' if order=='desc' else 'btn-outline-secondary' }}">
+    <i class="bi bi-sort-down me-1"></i>Mais recente
+  </a>
+  <a href="{{ url_for('email_lixeira', order='asc', page=1) }}"
+     class="btn btn-sm {{ 'btn-primary' if order=='asc' else 'btn-outline-secondary' }}">
+    <i class="bi bi-sort-up me-1"></i>Mais antigo
+  </a>
 </div>
 
 <!-- Barra de acoes em massa -->
@@ -46,7 +56,7 @@
         </thead>
         <tbody>
           {% for m in messages %}
-          <tr id="row-{{ m.uid }}">
+          <tr>
             <td class="ps-3" onclick="event.stopPropagation()">
               <input type="checkbox" class="form-check-input email-check" value="{{ m.uid }}" onchange="updateBulk()">
             </td>
@@ -87,19 +97,19 @@
 <nav class="mt-3 d-flex justify-content-center">
   <ul class="pagination pagination-sm mb-0">
     <li class="page-item {{ 'disabled' if page == 1 }}">
-      <a class="page-link" href="{{ url_for('email_lixeira', page=page-1) }}">&laquo;</a>
+      <a class="page-link" href="{{ url_for('email_lixeira', page=page-1, order=order) }}">&laquo;</a>
     </li>
     {% for p in range(1, total_pages+1) %}
       {% if p <= 3 or p > total_pages-3 or (p >= page-1 and p <= page+1) %}
       <li class="page-item {{ 'active' if p == page }}">
-        <a class="page-link" href="{{ url_for('email_lixeira', page=p) }}">{{ p }}</a>
+        <a class="page-link" href="{{ url_for('email_lixeira', page=p, order=order) }}">{{ p }}</a>
       </li>
       {% elif p == 4 or p == total_pages-3 %}
       <li class="page-item disabled"><span class="page-link">...</span></li>
       {% endif %}
     {% endfor %}
     <li class="page-item {{ 'disabled' if page == total_pages }}">
-      <a class="page-link" href="{{ url_for('email_lixeira', page=page+1) }}">&raquo;</a>
+      <a class="page-link" href="{{ url_for('email_lixeira', page=page+1, order=order) }}">&raquo;</a>
     </li>
   </ul>
 </nav>
@@ -114,9 +124,8 @@ function toggleAll(master) {
 }
 function updateBulk() {
   const checked = document.querySelectorAll('.email-check:checked');
-  const bar = document.getElementById('bulkBar');
   document.getElementById('bulkCount').textContent = checked.length;
-  bar.classList.toggle('d-none', checked.length === 0);
+  document.getElementById('bulkBar').classList.toggle('d-none', checked.length === 0);
 }
 function bulkClear() {
   document.querySelectorAll('.email-check').forEach(c => c.checked = false);

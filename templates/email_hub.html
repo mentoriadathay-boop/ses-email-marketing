@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="d-flex align-items-center justify-content-between mb-4">
+  <div>
+    <h4 class="fw-bold mb-0"><i class="bi bi-envelope-open me-2"></i>Email</h4>
+    <small class="text-muted">{{ account.email }}</small>
+  </div>
+  <a href="{{ url_for('email_compor') }}" class="btn btn-primary btn-sm">
+    <i class="bi bi-pencil-square me-1"></i>Novo Email
+  </a>
+</div>
+
+<div class="row g-3">
+  <div class="col-md-6 col-lg-3">
+    <a href="{{ url_for('email_inbox') }}" class="text-decoration-none">
+      <div class="card h-100 border-0 shadow-sm" style="transition:transform .15s">
+        <div class="card-body text-center py-4">
+          <div class="rounded-circle d-inline-flex align-items-center justify-content-center mb-3"
+               style="width:56px;height:56px;background:#dbeafe;color:#1e40af;font-size:1.5rem">
+            <i class="bi bi-inbox"></i>
+          </div>
+          <h6 class="fw-bold mb-1">Caixa de Entrada</h6>
+          <p class="text-muted small mb-0">Emails recebidos</p>
+        </div>
+      </div>
+    </a>
+  </div>
+
+  <div class="col-md-6 col-lg-3">
+    <a href="{{ url_for('email_enviados') }}" class="text-decoration-none">
+      <div class="card h-100 border-0 shadow-sm">
+        <div class="card-body text-center py-4">
+          <div class="rounded-circle d-inline-flex align-items-center justify-content-center mb-3"
+               style="width:56px;height:56px;background:#d1fae5;color:#065f46;font-size:1.5rem">
+            <i class="bi bi-send"></i>
+          </div>
+          <h6 class="fw-bold mb-1">Itens Enviados</h6>
+          <p class="text-muted small mb-0">Emails que voce enviou</p>
+        </div>
+      </div>
+    </a>
+  </div>
+
+  <div class="col-md-6 col-lg-3">
+    <a href="{{ url_for('email_lixeira') }}" class="text-decoration-none">
+      <div class="card h-100 border-0 shadow-sm">
+        <div class="card-body text-center py-4">
+          <div class="rounded-circle d-inline-flex align-items-center justify-content-center mb-3"
+               style="width:56px;height:56px;background:#EDE0F2;color:#5B2A6E;font-size:1.5rem">
+            <i class="bi bi-trash"></i>
+          </div>
+          <h6 class="fw-bold mb-1">Itens Excluidos</h6>
+          <p class="text-muted small mb-0">Emails na lixeira</p>
+        </div>
+      </div>
+    </a>
+  </div>
+
+  <div class="col-md-6 col-lg-3">
+    <a href="{{ url_for('email_spam') }}" class="text-decoration-none">
+      <div class="card h-100 border-0 shadow-sm">
+        <div class="card-body text-center py-4">
+          <div class="rounded-circle d-inline-flex align-items-center justify-content-center mb-3"
+               style="width:56px;height:56px;background:#fef3c7;color:#92400e;font-size:1.5rem">
+            <i class="bi bi-exclamation-triangle"></i>
+          </div>
+          <h6 class="fw-bold mb-1">Spam</h6>
+          <p class="text-muted small mb-0">Emails indesejados</p>
+        </div>
+      </div>
+    </a>
+  </div>
+</div>
+
+<div class="mt-4">
+  <a href="{{ url_for('configuracoes') }}" class="btn btn-outline-secondary btn-sm">
+    <i class="bi bi-gear me-1"></i>Configurar Conta de Email
+  </a>
+</div>
+{% endblock %}

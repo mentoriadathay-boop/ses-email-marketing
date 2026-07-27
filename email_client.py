@@ -69,7 +69,20 @@ def detect_sent_folder(imap_conn):
     return 'Sent'
 
 
-def fetch_mailbox(imap_conn, folder='INBOX', page=1, per_page=25):
+def detect_spam_folder(imap_conn):
+    folders = list_folders(imap_conn)
+    candidates = ['Spam', 'INBOX.Spam', 'Junk', 'INBOX.Junk', 'Junk E-mail',
+                  '[Gmail]/Spam', 'Bulk Mail', 'INBOX.Bulk Mail']
+    for c in candidates:
+        if c in folders:
+            return c
+    for f in folders:
+        if 'spam' in f.lower() or 'junk' in f.lower():
+            return f
+    return 'Spam'
+
+
+def fetch_mailbox(imap_conn, folder='INBOX', page=1, per_page=25, order='desc'):
     status, _ = imap_conn.select(folder, readonly=True)
     if status != 'OK':
         return [], 0
@@ -80,7 +93,8 @@ def fetch_mailbox(imap_conn, folder='INBOX', page=1, per_page=25):
 
     uids = data[0].split()
     total = len(uids)
-    uids.reverse()
+    if order == 'desc':
+        uids.reverse()
 
     start = (page - 1) * per_page
     end = start + per_page

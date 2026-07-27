@@ -53,14 +53,20 @@
       <a href="{{ url_for('index') }}" class="nav-link {% if request.endpoint == 'index' %}active{% endif %}">
         <i class="bi bi-speedometer2"></i> Dashboard
       </a>
-      <a href="{{ url_for('email_inbox') }}" class="nav-link {% if request.endpoint in ('email_inbox','email_ler','email_compor') %}active{% endif %}">
+      <a href="{{ url_for('email_hub') }}" class="nav-link {% if request.endpoint == 'email_hub' %}active{% endif %}">
         <i class="bi bi-envelope"></i> Email
+      </a>
+      <a href="{{ url_for('email_inbox') }}" class="nav-link {% if request.endpoint in ('email_inbox','email_ler','email_compor') %}active{% endif %}" style="padding-left:36px;font-size:.85rem">
+        <i class="bi bi-inbox"></i> Entrada
       </a>
       <a href="{{ url_for('email_enviados') }}" class="nav-link {% if request.endpoint == 'email_enviados' %}active{% endif %}" style="padding-left:36px;font-size:.85rem">
         <i class="bi bi-send"></i> Enviados
       </a>
       <a href="{{ url_for('email_lixeira') }}" class="nav-link {% if request.endpoint == 'email_lixeira' %}active{% endif %}" style="padding-left:36px;font-size:.85rem">
         <i class="bi bi-trash"></i> Lixeira
+      </a>
+      <a href="{{ url_for('email_spam') }}" class="nav-link {% if request.endpoint == 'email_spam' %}active{% endif %}" style="padding-left:36px;font-size:.85rem">
+        <i class="bi bi-exclamation-triangle"></i> Spam
       </a>
       <div style="border-top:1px solid #ffffff22;margin:8px 20px 4px;"></div>
       <a href="{{ url_for('nova_campanha') }}" class="nav-link {% if request.endpoint == 'nova_campanha' %}active{% endif %}">
