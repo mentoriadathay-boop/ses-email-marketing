@@ -66,8 +66,9 @@
         <a href="{{ url_for('email_hub') }}" class="nav-link {% if request.endpoint == 'email_hub' %}active{% endif %}" style="padding-left:36px;font-size:.85rem">
           <i class="bi bi-grid"></i> Gestao
         </a>
-        <a href="{{ url_for('email_inbox') }}" class="nav-link {% if request.endpoint in ('email_inbox','email_ler','email_compor') %}active{% endif %}" style="padding-left:36px;font-size:.85rem">
-          <i class="bi bi-inbox"></i> Entrada
+        <a href="{{ url_for('email_inbox') }}" class="nav-link {% if request.endpoint in ('email_inbox','email_ler','email_compor','email_busca') %}active{% endif %}" style="padding-left:36px;font-size:.85rem;display:flex;align-items:center;justify-content:space-between">
+          <span><i class="bi bi-inbox"></i> Entrada</span>
+          <span id="unreadBadge" class="badge bg-primary rounded-pill" style="font-size:.65rem;display:none"></span>
         </a>
         <a href="{{ url_for('email_enviados') }}" class="nav-link {% if request.endpoint == 'email_enviados' %}active{% endif %}" style="padding-left:36px;font-size:.85rem">
           <i class="bi bi-send"></i> Enviados
@@ -298,6 +299,18 @@
     sub.classList.toggle('open');
     chev.style.transform = sub.classList.contains('open') ? 'rotate(180deg)' : '';
   }
+  (function loadUnreadCount() {
+    fetch('/email/unread-count')
+      .then(r => r.json())
+      .then(d => {
+        var badge = document.getElementById('unreadBadge');
+        if (badge && d.count > 0) {
+          badge.textContent = d.count;
+          badge.style.display = '';
+        }
+      })
+      .catch(() => {});
+  })();
   </script>
   {% block scripts %}{% endblock %}
 </body>
