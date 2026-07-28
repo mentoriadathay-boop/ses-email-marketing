@@ -8,7 +8,9 @@ from email.mime.text import MIMEText
 from email.mime.base import MIMEBase
 from email import encoders
 import re
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
+
+BRT = timezone(timedelta(hours=-3))
 
 
 def _decode_hdr(raw):
@@ -126,8 +128,12 @@ def fetch_mailbox(imap_conn, folder='INBOX', page=1, per_page=25, order='desc'):
             date_str = msg.get('Date', '')
             try:
                 date = parsedate_to_datetime(date_str)
+                if date.tzinfo is not None:
+                    date = date.astimezone(BRT)
+                else:
+                    date = date.replace(tzinfo=BRT)
             except Exception:
-                date = datetime.now()
+                date = datetime.now(BRT)
 
             messages.append({
                 'uid': uid,
@@ -168,8 +174,12 @@ def fetch_email(imap_conn, uid, folder='INBOX'):
     date_str = msg.get('Date', '')
     try:
         date = parsedate_to_datetime(date_str)
+        if date.tzinfo is not None:
+            date = date.astimezone(BRT)
+        else:
+            date = date.replace(tzinfo=BRT)
     except Exception:
-        date = datetime.now()
+        date = datetime.now(BRT)
 
     text_body = ''
     html_body = ''
@@ -374,3 +384,96 @@ def format_size(size_bytes):
         return f'{size_bytes / 1024:.1f} KB'
     else:
         return f'{size_bytes / (1024 * 1024):.1f} MB'
+
+
+def get_unread_count(imap_conn, folder='INBOX'):
+    status, _ = imap_conn.select(folder, readonly=True)
+    if status != 'OK':
+        return 0
+    status, data = imap_conn.uid('search', None, 'UNSEEN')
+    if status != 'OK' or not data[0]:
+        return 0
+    return len(data[0].split())
+
+
+def search_mailbox(imap_conn, folder='INBOX', query='', field='all',
+                   page=1, per_page=25, order='desc'):
+    status, _ = imap_conn.select(folder, readonly=True)
+    if status != 'OK':
+        return [], 0
+
+    if field == 'from':
+        criteria = f'FROM "{query}"'
+    elif field == 'subject':
+        criteria = f'SUBJECT "{query}"'
+    elif field == 'to':
+        criteria = f'TO "{query}"'
+    else:
+        criteria = f'TEXT "{query}"'
+
+    try:
+        status, data = imap_conn.uid('search', 'UTF-8', criteria.encode('utf-8'))
+    except Exception:
+        status, data = imap_conn.uid('search', None, criteria)
+
+    if status != 'OK' or not data[0]:
+        return [], 0
+
+    uids = data[0].split()
+    total = len(uids)
+    if order == 'desc':
+        uids.reverse()
+
+    start = (page - 1) * per_page
+    end = start + per_page
+    page_uids = uids[start:end]
+
+    if not page_uids:
+        return [], total
+
+    uid_str = b','.join(page_uids)
+    status, msg_data = imap_conn.uid('fetch', uid_str,
+                                      '(FLAGS BODY.PEEK[HEADER.FIELDS (FROM SUBJECT DATE MESSAGE-ID)])')
+    if status != 'OK':
+        return [], total
+
+    messages = []
+    i = 0
+    while i < len(msg_data):
+        if isinstance(msg_data[i], tuple):
+            meta_line = msg_data[i][0].decode('utf-8', errors='replace')
+            header_bytes = msg_data[i][1]
+
+            uid_match = re.search(r'UID\s+(\d+)', meta_line)
+            uid = uid_match.group(1) if uid_match else '0'
+            is_read = b'\\Seen' in msg_data[i][0] if isinstance(msg_data[i][0], bytes) else '\\Seen' in meta_line
+
+            msg = email.message_from_bytes(header_bytes)
+            from_name, from_email_addr = _parse_addr(msg.get('From', ''))
+            subject = _decode_hdr(msg.get('Subject', '(sem assunto)'))
+            date_str = msg.get('Date', '')
+            try:
+                date = parsedate_to_datetime(date_str)
+                if date.tzinfo is not None:
+                    date = date.astimezone(BRT)
+                else:
+                    date = date.replace(tzinfo=BRT)
+            except Exception:
+                date = datetime.now(BRT)
+
+            messages.append({
+                'uid': uid,
+                'from_name': from_name,
+                'from_email': from_email_addr,
+                'subject': subject,
+                'date': date,
+                'is_read': is_read,
+                'message_id': msg.get('Message-ID', ''),
+            })
+        i += 1
+
+    if page_uids:
+        uid_order = {uid.decode('utf-8'): idx for idx, uid in enumerate(page_uids)}
+        messages.sort(key=lambda m: uid_order.get(m['uid'], 0))
+
+    return messages, total

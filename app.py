@@ -1830,6 +1830,70 @@ def email_deletar_bulk():
     except Exception as e:
         return jsonify({'ok': False, 'erro': str(e)})
 
+@app.route('/email/marcar', methods=['POST'])
+def email_marcar():
+    acc = _get_email_account()
+    if not acc:
+        return jsonify({'ok': False})
+    data = request.get_json()
+    uid = data.get('uid')
+    folder = data.get('folder', 'INBOX')
+    action = data.get('action', 'read')
+    if not uid:
+        return jsonify({'ok': False, 'erro': 'UID ausente'})
+    try:
+        imap_conn = ec.imap_connect(acc['imap_server'], acc['imap_port'],
+                                     acc['email'], acc['password'], acc['use_ssl'])
+        if action == 'unread':
+            ec.mark_unread(imap_conn, uid, folder)
+        else:
+            ec.mark_read(imap_conn, uid, folder)
+        imap_conn.logout()
+        return jsonify({'ok': True})
+    except Exception as e:
+        return jsonify({'ok': False, 'erro': str(e)})
+
+@app.route('/email/unread-count')
+def email_unread_count():
+    acc = _get_email_account()
+    if not acc:
+        return jsonify({'count': 0})
+    try:
+        imap_conn = ec.imap_connect(acc['imap_server'], acc['imap_port'],
+                                     acc['email'], acc['password'], acc['use_ssl'])
+        count = ec.get_unread_count(imap_conn)
+        imap_conn.logout()
+        return jsonify({'count': count})
+    except Exception:
+        return jsonify({'count': 0})
+
+@app.route('/email/busca')
+def email_busca():
+    acc = _get_email_account()
+    if not acc:
+        flash('Configure sua conta de email em Configuracoes primeiro.', 'warning')
+        return redirect(url_for('configuracoes'))
+    q = request.args.get('q', '').strip()
+    field = request.args.get('field', 'all')
+    folder = request.args.get('folder', 'INBOX')
+    page = int(request.args.get('page', 1))
+    order = request.args.get('order', 'desc')
+    per_page = 25
+    messages = []
+    total = 0
+    if q:
+        try:
+            imap_conn = ec.imap_connect(acc['imap_server'], acc['imap_port'],
+                                         acc['email'], acc['password'], acc['use_ssl'])
+            messages, total = ec.search_mailbox(imap_conn, folder, q, field, page, per_page, order)
+            imap_conn.logout()
+        except Exception as e:
+            flash(f'Erro na busca: {e}', 'danger')
+    total_pages = math.ceil(total / per_page) if total else 1
+    return render_template('email_busca.html', messages=messages, page=page,
+                           total_pages=total_pages, total=total, folder=folder,
+                           account=acc, order=order, q=q, field=field)
+
 @app.route('/email/lixeira')
 def email_lixeira():
     acc = _get_email_account()
