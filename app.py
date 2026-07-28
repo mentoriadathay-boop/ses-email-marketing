@@ -1566,6 +1566,28 @@ def testar_email_account():
     except Exception as e:
         return jsonify({'ok': False, 'erro': str(e)})
 
+@app.route('/email/diagnostico')
+def email_diagnostico():
+    acc = _get_email_account()
+    if not acc:
+        return jsonify({'ok': False, 'erro': 'Nenhuma conta configurada'})
+    try:
+        imap_conn = ec.imap_connect(acc['imap_server'], acc['imap_port'],
+                                     acc['email'], acc['password'], acc['use_ssl'])
+        folders = ec.list_folders(imap_conn)
+        folder_info = []
+        for f in folders:
+            try:
+                status, data = imap_conn.select(f, readonly=True)
+                count = int(data[0]) if status == 'OK' else 0
+                folder_info.append({'name': f, 'messages': count})
+            except Exception:
+                folder_info.append({'name': f, 'messages': '?'})
+        imap_conn.logout()
+        return jsonify({'ok': True, 'email': acc['email'], 'folders': folder_info})
+    except Exception as e:
+        return jsonify({'ok': False, 'erro': str(e)})
+
 @app.route('/email')
 def email_hub():
     acc = _get_email_account()
