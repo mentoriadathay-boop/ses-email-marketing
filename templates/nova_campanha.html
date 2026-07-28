@@ -159,6 +159,16 @@
 
           <!-- HTML tab -->
           <div id="html-quill-main" class="d-none">
+            <div class="d-flex gap-2 py-2 px-2 bg-light border-bottom">
+              <button type="button" class="btn btn-outline-secondary btn-sm"
+                      onclick="insertImageToHtml('textarea-main')">
+                <i class="bi bi-image me-1"></i>Inserir Imagem
+              </button>
+              <button type="button" class="btn btn-outline-secondary btn-sm"
+                      onclick="insertNomeToHtml('textarea-main')">
+                <i class="bi bi-person-badge me-1"></i>{nome}
+              </button>
+            </div>
             <textarea id="textarea-main" name="body_html"
                       class="form-control font-monospace border-top-0 rounded-top-0"
                       rows="14"
@@ -901,6 +911,25 @@ async function salvarRascunho() {
   } catch (e) {
     alert('Erro ao salvar rascunho: ' + e);
   }
+}
+
+function insertImageToHtml(textareaId) {
+  _abrirImagePicker(function(url) {
+    const ta = document.getElementById(textareaId);
+    if (!ta || !url) return;
+    const imgTag = '<img src="' + url + '" alt="imagem" style="max-width:100%;height:auto;display:block;margin:12px auto;border-radius:8px;">';
+    const pos = ta.selectionStart || ta.value.length;
+    ta.value = ta.value.slice(0, pos) + imgTag + ta.value.slice(pos);
+    ta.focus();
+  });
+}
+
+function insertNomeToHtml(textareaId) {
+  const ta = document.getElementById(textareaId);
+  if (!ta) return;
+  const pos = ta.selectionStart || ta.value.length;
+  ta.value = ta.value.slice(0, pos) + '{nome}' + ta.value.slice(pos);
+  ta.focus();
 }
 </script>
 {% endblock %}

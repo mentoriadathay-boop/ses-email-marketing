@@ -172,6 +172,12 @@
                     </div>
                   </div>
                   <div class="html-wrap d-none">
+                    <div class="d-flex gap-2 py-2 px-2 bg-light border-bottom">
+                      <button type="button" class="btn btn-outline-secondary btn-sm"
+                              onclick="insertImageToHtmlByEl(this)">
+                        <i class="bi bi-image me-1"></i>Inserir Imagem
+                      </button>
+                    </div>
                     <textarea name="step_body[]" class="step-body-textarea form-control font-monospace border-top-0 rounded-top-0"
                               rows="7">{{ st.body_html }}</textarea>
                   </div>
@@ -317,6 +323,12 @@
         </div>
       </div>
       <div class="html-wrap d-none">
+        <div class="d-flex gap-2 py-2 px-2 bg-light border-bottom">
+          <button type="button" class="btn btn-outline-secondary btn-sm"
+                  onclick="insertImageToHtmlByEl(this)">
+            <i class="bi bi-image me-1"></i>Inserir Imagem
+          </button>
+        </div>
         <textarea name="step_body[]" class="step-body-textarea form-control font-monospace border-top-0 rounded-top-0"
                   rows="7" placeholder="<p>Ola <strong>{nome}</strong>,</p>"></textarea>
       </div>
