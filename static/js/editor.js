@@ -178,6 +178,18 @@ function uploadImageToEditor(containerId) {
   if (quill) _uploadImage(quill);
 }
 
+function insertImageToHtmlByEl(btn) {
+  var ta = btn.closest('.html-wrap').querySelector('textarea');
+  if (!ta) return;
+  _abrirImagePicker(function(url) {
+    if (!url) return;
+    var imgTag = '<img src="' + url + '" alt="imagem" style="max-width:100%;height:auto;display:block;margin:12px auto;border-radius:8px;">';
+    var pos = ta.selectionStart || ta.value.length;
+    ta.value = ta.value.slice(0, pos) + imgTag + ta.value.slice(pos);
+    ta.focus();
+  });
+}
+
 // ─────────────────────────────────────────────
 // Inserir {nome} no cursor
 // ─────────────────────────────────────────────
