@@ -321,17 +321,29 @@ def detect_drafts_folder(imap_conn):
 def move_to_trash(imap_conn, uid, folder='INBOX', trash_folder='Trash'):
     uid_b = uid.encode() if isinstance(uid, str) else uid
     imap_conn.select(folder)
-    imap_conn.uid('copy', uid_b, trash_folder)
-    imap_conn.uid('store', uid_b, '+FLAGS', '\\Deleted')
-    imap_conn.expunge()
+    status, _ = imap_conn.uid('copy', uid_b, trash_folder)
+    if status != 'OK':
+        imap_conn.create(trash_folder)
+        status, _ = imap_conn.uid('copy', uid_b, trash_folder)
+    if status == 'OK':
+        imap_conn.uid('store', uid_b, '+FLAGS', '\\Deleted')
+        imap_conn.expunge()
+    else:
+        raise Exception(f'Falha ao copiar para {trash_folder}: {status}')
 
 
 def move_to_trash_bulk(imap_conn, uids, folder='INBOX', trash_folder='Trash'):
     imap_conn.select(folder)
+    created = False
     for uid in uids:
         uid_b = uid.encode() if isinstance(uid, str) else uid
-        imap_conn.uid('copy', uid_b, trash_folder)
-        imap_conn.uid('store', uid_b, '+FLAGS', '\\Deleted')
+        status, _ = imap_conn.uid('copy', uid_b, trash_folder)
+        if status != 'OK' and not created:
+            imap_conn.create(trash_folder)
+            created = True
+            status, _ = imap_conn.uid('copy', uid_b, trash_folder)
+        if status == 'OK':
+            imap_conn.uid('store', uid_b, '+FLAGS', '\\Deleted')
     imap_conn.expunge()
 
 

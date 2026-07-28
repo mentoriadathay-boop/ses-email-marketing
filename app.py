@@ -988,7 +988,7 @@ def index():
     sent_cadencias = conn.execute("SELECT COUNT(*) as n FROM sequence_logs WHERE status='sent'").fetchone()['n']
     sent_campanhas = conn.execute("SELECT COALESCE(SUM(sent),0) as n FROM campaigns").fetchone()['n']
     sent_total = sent_cadencias + sent_campanhas
-    opens_total = conn.execute('SELECT COUNT(*) as n FROM email_opens').fetchone()['n']
+    opens_total = conn.execute('SELECT COUNT(DISTINCT contact_email) as n FROM email_opens').fetchone()['n']
     open_rate = round(opens_total / sent_total * 100, 1) if sent_total > 0 else 0
     now = datetime.now()
     month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
@@ -1145,7 +1145,7 @@ def campanha_detalhe(campaign_id):
         "SELECT * FROM campaign_logs WHERE campaign_id=%s ORDER BY id DESC LIMIT 200",
         (campaign_id,)).fetchall()
     camp_opens = conn.execute(
-        'SELECT COUNT(*) as n FROM email_opens WHERE campaign_id=%s', (campaign_id,)).fetchone()['n']
+        'SELECT COUNT(DISTINCT contact_email) as n FROM email_opens WHERE campaign_id=%s', (campaign_id,)).fetchone()['n']
     camp_open_rate = round(camp_opens / campaign['sent'] * 100, 1) if campaign and campaign['sent'] > 0 else 0
     blacklisted_in_campaign = 0
     if campaign:
@@ -1771,6 +1771,9 @@ def email_deletar(folder, uid):
         imap_conn = ec.imap_connect(acc['imap_server'], acc['imap_port'],
                                      acc['email'], acc['password'], acc['use_ssl'])
         trash_folder = ec.detect_trash_folder(imap_conn)
+        folders = ec.list_folders(imap_conn)
+        print(f"[EMAIL] Pastas IMAP: {folders}", flush=True)
+        print(f"[EMAIL] Trash detectado: '{trash_folder}', Pasta atual: '{folder}', UID: {uid}", flush=True)
         if folder == trash_folder:
             ec.delete_email(imap_conn, uid, folder)
         else:
@@ -1778,6 +1781,7 @@ def email_deletar(folder, uid):
         imap_conn.logout()
         return jsonify({'ok': True})
     except Exception as e:
+        print(f"[EMAIL] Erro ao deletar: {e}", flush=True)
         return jsonify({'ok': False, 'erro': str(e)})
 
 @app.route('/email/deletar-bulk', methods=['POST'])
