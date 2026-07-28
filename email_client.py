@@ -140,6 +140,10 @@ def fetch_mailbox(imap_conn, folder='INBOX', page=1, per_page=25, order='desc'):
             })
         i += 1
 
+    if page_uids:
+        uid_order = {uid.decode('utf-8'): idx for idx, uid in enumerate(page_uids)}
+        messages.sort(key=lambda m: uid_order.get(m['uid'], 0))
+
     return messages, total
 
 
