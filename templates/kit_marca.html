@@ -50,7 +50,7 @@
         {% endif %}
         <div class="d-flex gap-2 mt-3">
           <button class="btn btn-sm btn-outline-primary flex-fill"
-                  onclick="editarKit({{ k|tojson }})">
+                  data-kit="{{ k|tojson|e }}" onclick="editarKit(JSON.parse(this.dataset.kit))">
             <i class="bi bi-pencil me-1"></i>Editar
           </button>
           <form method="POST" action="{{ url_for('deletar_kit_marca', kid=k.id) }}" class="d-inline"
