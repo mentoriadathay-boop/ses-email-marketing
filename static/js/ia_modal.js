@@ -29,12 +29,10 @@ function openAIModal(containerId, textareaId, subjectId) {
   new bootstrap.Modal(document.getElementById('modalCriarIA')).show();
 }
 
-// Pré-preenche o tema (passo 3) e pula para ele — usado a partir da galeria
 function openAIModalComTema(containerId, textareaId, subjectId, tema) {
   openAIModal(containerId, textareaId, subjectId);
   iamEscolherModo('novo');
   document.getElementById('iamTema').value = tema || '';
-  while (_iamStep < 3) iamMudarStep(1);
 }
 
 // ─────────────────────────────────────────────
