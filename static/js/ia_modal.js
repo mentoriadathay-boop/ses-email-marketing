@@ -87,7 +87,16 @@ async function iamFormatarConteudo() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ conteudo })
     });
-    const data = await res.json();
+    const texto = await res.text();
+    let data;
+    try { data = JSON.parse(texto); } catch (pe) {
+      clearInterval(timer);
+      document.getElementById('iamLoading').classList.add('d-none');
+      document.getElementById('iamPlaceholder').classList.remove('d-none');
+      console.error('Resposta nao-JSON:', res.status, texto.substring(0, 200));
+      alert('Erro do servidor (status ' + res.status + '). Tente novamente.');
+      return;
+    }
     clearInterval(timer);
     document.getElementById('iamLoading').classList.add('d-none');
     if (data.erro) {
@@ -333,7 +342,16 @@ async function iamGerarEmail() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(dados)
     });
-    const data = await res.json();
+    const texto = await res.text();
+    let data;
+    try { data = JSON.parse(texto); } catch (pe) {
+      clearInterval(timer);
+      document.getElementById('iamLoading').classList.add('d-none');
+      document.getElementById('iamPlaceholder').classList.remove('d-none');
+      console.error('Resposta nao-JSON:', res.status, texto.substring(0, 200));
+      alert('Erro do servidor (status ' + res.status + '). Tente novamente.');
+      return;
+    }
     clearInterval(timer);
     document.getElementById('iamLoading').classList.add('d-none');
     if (data.erro) {
