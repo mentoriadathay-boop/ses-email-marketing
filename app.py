@@ -3231,6 +3231,22 @@ def api_brand_kits():
 
 # ── Email com IA ──────────────────────────────────────────────────────────────
 
+def _strip_base64(html):
+    reps = {}
+    cnt = [0]
+    def _repl(m):
+        key = f'__B64IMG{cnt[0]}__'
+        cnt[0] += 1
+        reps[key] = m.group(1)
+        return f'src="{key}"'
+    clean = re.sub(r'src="(data:image/[^"]+)"', _repl, html)
+    return clean, reps
+
+def _restore_base64(html, reps):
+    for k, v in reps.items():
+        html = html.replace(k, v)
+    return html
+
 @app.route('/ia/gerar-email', methods=['POST'])
 def ia_gerar_email():
     if not ANTHROPIC_OK:
@@ -3270,7 +3286,7 @@ Kit de Marca — {kit['name']}:
     imagem_info = ''
     imagem_url = dados.get('imagem_url', '').strip()
     if imagem_url:
-        imagem_info = f'\nInserir esta imagem no corpo: <img src="{imagem_url}" alt="imagem" style="max-width:100%;border-radius:8px;margin:16px 0;">'
+        imagem_info = '\nInserir uma imagem no corpo do email usando exatamente esta tag: <img src="__IMAGEM_PLACEHOLDER__" alt="imagem" style="max-width:100%;border-radius:8px;margin:16px 0;">'
 
     prompt = f"""Crie um email profissional de marketing em HTML, com conteúdo RICO, ESPECÍFICO e APROFUNDADO — nada de texto genérico ou raso.
 
@@ -3315,6 +3331,8 @@ Instruções obrigatórias:
         html = resp.content[0].text.strip()
         html = re.sub(r'^```[a-z]*\n?', '', html)
         html = re.sub(r'\n?```$', '', html).strip()
+        if imagem_url:
+            html = html.replace('__IMAGEM_PLACEHOLDER__', imagem_url)
         return jsonify({'html': html})
     except Exception as e:
         return jsonify({'erro': str(e)}), 500
@@ -3332,6 +3350,8 @@ def ia_melhorar_texto():
     if not html:
         return jsonify({'erro': 'Conteúdo vazio.'}), 400
     instrucoes = dados.get('instrucoes', '').strip()
+
+    html, b64_reps = _strip_base64(html)
 
     prompt = f"""Você vai melhorar o TEXTO de um e-mail de marketing escrito por um usuário, mantendo a estrutura HTML, imagens, links, botões e formatação existentes.
 
@@ -3354,6 +3374,7 @@ Instruções:
         out = resp.content[0].text.strip()
         out = re.sub(r'^```[a-z]*\n?', '', out)
         out = re.sub(r'\n?```$', '', out).strip()
+        out = _restore_base64(out, b64_reps)
         return jsonify({'html': out})
     except Exception as e:
         return jsonify({'erro': str(e)}), 500
@@ -3370,6 +3391,8 @@ def ia_formatar_conteudo():
     conteudo = dados.get('conteudo', '').strip()
     if not conteudo:
         return jsonify({'erro': 'Conteúdo vazio.'}), 400
+
+    conteudo, b64_reps = _strip_base64(conteudo)
 
     prompt = f"""Você vai transformar o conteúdo de um e-mail escrito por um usuário em um e-mail HTML visualmente bem formatado.
 
@@ -3395,6 +3418,7 @@ Instruções obrigatórias:
         html = resp.content[0].text.strip()
         html = re.sub(r'^```[a-z]*\n?', '', html)
         html = re.sub(r'\n?```$', '', html).strip()
+        html = _restore_base64(html, b64_reps)
         return jsonify({'html': html})
     except Exception as e:
         return jsonify({'erro': str(e)}), 500
@@ -3412,6 +3436,9 @@ def ia_aplicar_template():
     template = dados.get('template_html', '').strip()
     if not conteudo or not template:
         return jsonify({'erro': 'Conteúdo e template são obrigatórios.'}), 400
+
+    conteudo, b64_reps_c = _strip_base64(conteudo)
+    template, b64_reps_t = _strip_base64(template)
 
     prompt = f"""Você vai aplicar um TEMPLATE VISUAL a um conteúdo de e-mail já escrito por um usuário.
 
@@ -3439,6 +3466,8 @@ Instruções:
         out = resp.content[0].text.strip()
         out = re.sub(r'^```[a-z]*\n?', '', out)
         out = re.sub(r'\n?```$', '', out).strip()
+        out = _restore_base64(out, b64_reps_c)
+        out = _restore_base64(out, b64_reps_t)
         return jsonify({'html': out})
     except Exception as e:
         return jsonify({'erro': str(e)}), 500
@@ -3456,6 +3485,9 @@ def ia_ajustar_visual():
     template = dados.get('template_html', '').strip()
     if not conteudo or not template:
         return jsonify({'erro': 'Conteúdo e template são obrigatórios.'}), 400
+
+    conteudo, b64_reps_c = _strip_base64(conteudo)
+    template, b64_reps_t = _strip_base64(template)
 
     prompt = f"""Você vai ajustar APENAS o visual de um e-mail, mantendo o conteúdo e a formatação de texto exatamente como estão.
 
@@ -3484,6 +3516,8 @@ Instruções obrigatórias:
         out = resp.content[0].text.strip()
         out = re.sub(r'^```[a-z]*\n?', '', out)
         out = re.sub(r'\n?```$', '', out).strip()
+        out = _restore_base64(out, b64_reps_c)
+        out = _restore_base64(out, b64_reps_t)
         return jsonify({'html': out})
     except Exception as e:
         return jsonify({'erro': str(e)}), 500
