@@ -84,7 +84,8 @@ def _erro_geral(e):
     app.logger.exception('Erro não tratado em %s', request.path)
     if request.path.startswith('/ia/') or request.path.startswith('/api/') or request.path.startswith('/email/'):
         return jsonify({'erro': f'Erro interno: {e}'}), 500
-    raise e
+    flash(f'Erro interno: {e}', 'danger')
+    return redirect(request.referrer or url_for('index'))
 
 PIXEL_GIF = (
     b'\x47\x49\x46\x38\x39\x61\x01\x00\x01\x00\x80\x00\x00'
@@ -254,6 +255,12 @@ def init_db():
             use_ssl BOOLEAN DEFAULT TRUE,
             sent_folder TEXT DEFAULT 'Sent',
             active BOOLEAN DEFAULT TRUE,
+            created_at TIMESTAMP DEFAULT NOW()
+        )''',
+        '''CREATE TABLE IF NOT EXISTS uploaded_images (
+            id TEXT PRIMARY KEY,
+            mime_type TEXT NOT NULL,
+            data TEXT NOT NULL,
             created_at TIMESTAMP DEFAULT NOW()
         )''',
         '''CREATE TABLE IF NOT EXISTS brand_kits (
@@ -1994,7 +2001,7 @@ def api_templates():
 
 @app.route('/upload/imagem', methods=['POST'])
 def upload_imagem():
-    import base64
+    import base64 as b64mod
     if 'imagem' not in request.files:
         return jsonify({'erro': 'Nenhum arquivo enviado'}), 400
     file = request.files['imagem']
@@ -2004,12 +2011,27 @@ def upload_imagem():
     mime_map = {'jpg': 'image/jpeg', 'jpeg': 'image/jpeg', 'png': 'image/png', 'gif': 'image/gif', 'webp': 'image/webp'}
     mime = mime_map.get(ext, 'image/png')
     data = file.read()
-    b64 = base64.b64encode(data).decode('utf-8')
-    data_uri = f'data:{mime};base64,{b64}'
-    filename = f"{uuid.uuid4().hex}.{ext}"
-    file.seek(0)
-    file.save(os.path.join(IMAGES_FOLDER, filename))
-    return jsonify({'url': data_uri})
+    b64 = b64mod.b64encode(data).decode('utf-8')
+    img_id = uuid.uuid4().hex
+    conn = get_db()
+    conn.execute('INSERT INTO uploaded_images (id, mime_type, data) VALUES (%s, %s, %s)',
+                 (img_id, mime, b64))
+    conn.commit()
+    conn.close()
+    return jsonify({'url': f'/img/{img_id}'})
+
+@app.route('/img/<img_id>')
+def serve_db_imagem(img_id):
+    import base64 as b64mod
+    conn = get_db()
+    row = conn.execute('SELECT mime_type, data FROM uploaded_images WHERE id=%s', (img_id,)).fetchone()
+    conn.close()
+    if not row:
+        from flask import abort
+        abort(404)
+    raw = b64mod.b64decode(row['data'])
+    return Response(raw, mimetype=row['mime_type'],
+                    headers={'Cache-Control': 'public, max-age=31536000'})
 
 @app.route('/uploads/imagens/<path:filename>')
 def serve_imagem(filename):
