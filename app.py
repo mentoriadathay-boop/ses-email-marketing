@@ -70,17 +70,19 @@ os.makedirs(IMAGES_FOLDER, exist_ok=True)
 
 @app.errorhandler(413)
 def _erro_payload_grande(e):
-    if request.path.startswith('/ia/'):
-        return jsonify({'erro': 'Conteúdo muito grande para a IA processar (limite de 5MB). Tente remover imagens grandes ou reduzir o texto.'}), 413
+    if request.path.startswith('/ia/') or request.path.startswith('/api/') or request.path.startswith('/email/'):
+        return jsonify({'erro': 'Conteúdo muito grande (limite de 5MB). Tente remover imagens grandes ou reduzir o texto.'}), 413
     return e
 
 @app.errorhandler(Exception)
 def _erro_geral(e):
     from werkzeug.exceptions import HTTPException
     if isinstance(e, HTTPException):
+        if request.path.startswith('/ia/') or request.path.startswith('/api/') or request.path.startswith('/email/'):
+            return jsonify({'erro': f'Erro {e.code}: {e.description}'}), e.code
         return e
     app.logger.exception('Erro não tratado em %s', request.path)
-    if request.path.startswith('/ia/'):
+    if request.path.startswith('/ia/') or request.path.startswith('/api/') or request.path.startswith('/email/'):
         return jsonify({'erro': f'Erro interno: {e}'}), 500
     raise e
 
