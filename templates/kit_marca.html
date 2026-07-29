@@ -50,7 +50,7 @@
         {% endif %}
         <div class="d-flex gap-2 mt-3">
           <button class="btn btn-sm btn-outline-primary flex-fill"
-                  data-kit="{{ k|tojson|e }}" onclick="editarKit(JSON.parse(this.dataset.kit))">
+                  onclick="editarKit(_kitsData[{{ k.id }}])">
             <i class="bi bi-pencil me-1"></i>Editar
           </button>
           <form method="POST" action="{{ url_for('deletar_kit_marca', kid=k.id) }}" class="d-inline"
@@ -191,6 +191,11 @@
 
 {% block scripts %}
 <script>
+  var _kitsData = {};
+  {% for k in kits %}
+  _kitsData[{{ k.id }}] = {{ k|tojson }};
+  {% endfor %}
+
   // Sincroniza color picker ↔ campo de texto
   document.querySelectorAll('input[type=color]').forEach(picker => {
     const txt = document.getElementById(picker.id + '_txt');
