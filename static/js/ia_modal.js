@@ -33,6 +33,7 @@ function openAIModalComTema(containerId, textareaId, subjectId, tema) {
   openAIModal(containerId, textareaId, subjectId);
   iamEscolherModo('novo');
   document.getElementById('iamTema').value = tema || '';
+  while (_iamStep < 3) iamMudarStep(1);
 }
 
 // ─────────────────────────────────────────────
@@ -314,7 +315,6 @@ function iamColetarDados() {
 
 async function iamGerarEmail() {
   const dados = iamColetarDados();
-  if (!dados.publico) { alert('Descreva o público-alvo no Passo 1.'); return; }
   if (!dados.tema) { alert('Informe o tema do email no Passo 3.'); return; }
 
   document.getElementById('iamPlaceholder').classList.add('d-none');
