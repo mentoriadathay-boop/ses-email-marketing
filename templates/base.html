@@ -115,6 +115,9 @@
         <i class="bi bi-palette2"></i> Kit de Marca
       </a>
       <div style="border-top:1px solid #ffffff22;margin:8px 20px 4px;"></div>
+      <a href="{{ url_for('assistente_ia') }}" class="nav-link {% if request.endpoint == 'assistente_ia' %}active{% endif %}" style="background:linear-gradient(90deg,#4361ee11,transparent);border-left:3px solid #7c3aed">
+        <i class="bi bi-stars" style="color:#7c3aed"></i> Assistente IA
+      </a>
       <a href="{{ url_for('configuracoes') }}" class="nav-link {% if request.endpoint == 'configuracoes' %}active{% endif %}">
         <i class="bi bi-gear"></i> Configuracoes
       </a>

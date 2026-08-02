@@ -3646,6 +3646,83 @@ Sempre termine convidando a pessoa a se cadastrar ou testar gratuitamente."""
         app.logger.exception('Erro no chat landing IA')
         return jsonify({'erro': f'Erro ao processar: {e}'}), 500
 
+# ── Chat IA Assistente (in-app) ───────────────────────────────────────────────
+
+@app.route('/assistente')
+def assistente_ia():
+    conn = get_db()
+    total_contacts = conn.execute('SELECT COUNT(*) as n FROM contacts').fetchone()['n']
+    total_campaigns = conn.execute('SELECT COUNT(*) as n FROM campaigns').fetchone()['n']
+    total_sequences = conn.execute('SELECT COUNT(*) as n FROM sequences').fetchone()['n']
+    recent_campaigns = conn.execute(
+        "SELECT name, status, subject, total_sent, total_opened, total_clicked FROM campaigns ORDER BY created_at DESC LIMIT 5"
+    ).fetchall()
+    conn.close()
+    return render_template('assistente.html',
+                           total_contacts=total_contacts,
+                           total_campaigns=total_campaigns,
+                           total_sequences=total_sequences,
+                           recent_campaigns=recent_campaigns)
+
+@app.route('/ia/chat-assistente', methods=['POST'])
+def ia_chat_assistente():
+    if not ANTHROPIC_OK:
+        return jsonify({'erro': 'Anthropic SDK não instalado.'}), 500
+    api_key = os.environ.get('ANTHROPIC_API_KEY', '')
+    if not api_key:
+        return jsonify({'erro': 'ANTHROPIC_API_KEY não configurada.'}), 500
+
+    dados = request.get_json() or {}
+    mensagem = (dados.get('mensagem') or '').strip()
+    historico = dados.get('historico') or []
+    contexto = dados.get('contexto') or ''
+    if not mensagem:
+        return jsonify({'erro': 'Mensagem vazia.'}), 400
+
+    system_prompt = f"""Você é o assistente de IA do ConvertMail — um consultor especialista em email marketing que ajuda o usuário a melhorar suas campanhas, criar estratégias e usar a plataforma da melhor forma.
+
+Dados atuais da conta do usuário:
+{contexto}
+
+Suas capacidades:
+1. ESTRATÉGIA DE EMAIL MARKETING — sugira melhores práticas, frequência de envio, segmentação, personalização
+2. ANÁLISE DE CAMPANHAS — analise métricas (aberturas, cliques, bounces), identifique problemas e sugira melhorias
+3. COPYWRITING — sugira assuntos, CTAs, estrutura de email, tom de voz
+4. AUTOMAÇÃO — ajude a configurar cadências/sequências, definir gatilhos, envio condicional
+5. SEGMENTAÇÃO — sugira como organizar contatos com tags, scoring, e segmentos
+6. DELIVERABILITY — dicas para evitar spam, melhorar entregabilidade, autenticação (SPF/DKIM/DMARC)
+7. LGPD — orientações sobre conformidade, opt-in, descadastro
+8. USO DA PLATAFORMA — explique como usar recursos do ConvertMail
+
+Regras:
+- Responda em português brasileiro, de forma clara e prática
+- Forneça respostas acionáveis com passos concretos
+- Quando relevante, referencie recursos da plataforma (ex: "vá em Cadências > Nova Cadência")
+- Use dados da conta do usuário para personalizar sugestões
+- Para perguntas sobre métricas, compare com benchmarks do mercado (ex: taxa de abertura média ~20-25%)
+- Limite respostas a 3-5 parágrafos curtos, use listas quando apropriado
+- Se perguntarem algo fora de email marketing, redirecione educadamente"""
+
+    messages = []
+    for h in historico[-20:]:
+        role = 'user' if h.get('role') == 'user' else 'assistant'
+        messages.append({'role': role, 'content': h.get('content', '')})
+    messages.append({'role': 'user', 'content': mensagem})
+
+    try:
+        client = _anthropic.Anthropic(api_key=api_key)
+        resp = client.messages.create(
+            model='claude-haiku-4-5-20251001',
+            max_tokens=800,
+            system=system_prompt,
+            messages=messages
+        )
+        resposta = resp.content[0].text
+        return jsonify({'resposta': resposta})
+    except Exception as e:
+        app.logger.exception('Erro no chat assistente IA')
+        return jsonify({'erro': f'Erro ao processar: {e}'}), 500
+
 _db_ready = False
 _db_error = ''
 _scheduler = None
