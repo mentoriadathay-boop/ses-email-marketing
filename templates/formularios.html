@@ -1,0 +1,130 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <div>
+    <h2 class="fw-bold"><i class="bi bi-window-plus me-2"></i>Formulários de Captura</h2>
+    <p class="text-muted mb-0 small">Crie formulários embutíveis para capturar leads no seu site</p>
+  </div>
+  <button class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#modalForm"><i class="bi bi-plus-lg me-1"></i>Novo Formulário</button>
+</div>
+
+{% if not forms %}
+<div class="card p-5 text-center">
+  <i class="bi bi-window-plus text-muted" style="font-size:3rem"></i>
+  <h5 class="mt-3">Nenhum formulário criado</h5>
+  <p class="text-muted">Crie um formulário de captura e cole o código no seu site para capturar leads automaticamente.</p>
+  <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#modalForm"><i class="bi bi-plus-lg me-1"></i>Criar Formulário</button>
+</div>
+{% else %}
+<div class="row g-3">
+  {% for f in forms %}
+  <div class="col-md-6">
+    <div class="card p-3">
+      <div class="d-flex justify-content-between align-items-start mb-2">
+        <div>
+          <h6 class="fw-bold mb-1">{{ f.name }}</h6>
+          <div class="text-muted small">Tag: {{ f.tag or '—' }} | Botão: {{ f.button_text }}</div>
+        </div>
+        <div class="d-flex gap-1">
+          <button class="btn btn-sm btn-outline-primary" onclick="mostrarCodigo({{ f.id }}, '{{ f.heading }}', '{{ f.description }}', '{{ f.button_text }}', '{{ f.primary_color }}')"><i class="bi bi-code-slash"></i></button>
+          <form method="POST" action="{{ url_for('formulario_deletar', form_id=f.id) }}" class="d-inline"
+                onsubmit="return confirm('Remover este formulário?')">
+            <button class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button>
+          </form>
+        </div>
+      </div>
+      <div class="p-3 rounded" style="background:{{ f.primary_color }}11;border:1px solid {{ f.primary_color }}33">
+        <div class="fw-semibold" style="color:{{ f.primary_color }}">{{ f.heading }}</div>
+        <div class="small text-muted">{{ f.description }}</div>
+      </div>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+
+<!-- Modal criar/editar -->
+<div class="modal fade" id="modalForm" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <form method="POST" action="{{ url_for('formulario_salvar') }}">
+        <div class="modal-header"><h5 class="modal-title"><i class="bi bi-window-plus me-2"></i>Novo Formulário</h5><button class="btn-close" data-bs-dismiss="modal"></button></div>
+        <div class="modal-body">
+          <div class="mb-3"><label class="form-label small fw-semibold">Nome interno</label><input type="text" name="name" class="form-control" required></div>
+          <div class="mb-3"><label class="form-label small fw-semibold">Título do formulário</label><input type="text" name="heading" class="form-control" value="Inscreva-se"></div>
+          <div class="mb-3"><label class="form-label small fw-semibold">Descrição</label><input type="text" name="description" class="form-control" value="Receba novidades no seu email."></div>
+          <div class="mb-3"><label class="form-label small fw-semibold">Texto do botão</label><input type="text" name="button_text" class="form-control" value="Cadastrar"></div>
+          <div class="row g-2 mb-3">
+            <div class="col-6"><label class="form-label small fw-semibold">Cor principal</label><input type="color" name="primary_color" class="form-control form-control-color" value="#4361ee"></div>
+            <div class="col-6"><label class="form-label small fw-semibold">Tag automática</label><input type="text" name="tag" class="form-control" placeholder="Ex: site-captura"></div>
+          </div>
+          <div class="mb-3">
+            <label class="form-label small fw-semibold">Inscrever em cadência</label>
+            <select name="sequence_id" class="form-select">
+              <option value="">Nenhuma</option>
+              {% for s in sequences %}<option value="{{ s.id }}">{{ s.name }}</option>{% endfor %}
+            </select>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+          <button class="btn btn-primary" type="submit"><i class="bi bi-check-lg me-1"></i>Salvar</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- Modal código embed -->
+<div class="modal fade" id="modalCodigo" tabindex="-1">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header"><h5 class="modal-title"><i class="bi bi-code-slash me-2"></i>Código para Embutir</h5><button class="btn-close" data-bs-dismiss="modal"></button></div>
+      <div class="modal-body">
+        <p class="text-muted small">Cole este código HTML no seu site. O formulário captura leads e envia direto para o ConvertMail.</p>
+        <textarea id="embedCode" class="form-control" rows="14" readonly style="font-family:monospace;font-size:.8rem"></textarea>
+        <button class="btn btn-sm btn-outline-primary mt-2" onclick="navigator.clipboard.writeText(document.getElementById('embedCode').value);this.textContent='Copiado!'"><i class="bi bi-clipboard me-1"></i>Copiar Código</button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function mostrarCodigo(formId, heading, desc, btnText, color) {
+  const appUrl = window.location.origin;
+  const code = `<!-- ConvertMail Formulário de Captura -->
+<div id="cm-form-${formId}" style="max-width:420px;margin:0 auto;font-family:Arial,sans-serif">
+  <div style="background:${color};color:#fff;padding:20px;border-radius:12px 12px 0 0;text-align:center">
+    <h3 style="margin:0 0 6px;font-size:1.2rem">${heading}</h3>
+    <p style="margin:0;opacity:.85;font-size:.9rem">${desc}</p>
+  </div>
+  <div style="background:#f9f9f9;padding:20px;border-radius:0 0 12px 12px;border:1px solid #e0e0e0;border-top:0">
+    <input type="text" id="cm-name-${formId}" placeholder="Seu nome" style="width:100%;padding:10px 14px;border:1px solid #ddd;border-radius:8px;margin-bottom:10px;font-size:.95rem;box-sizing:border-box">
+    <input type="email" id="cm-email-${formId}" placeholder="Seu melhor email" style="width:100%;padding:10px 14px;border:1px solid #ddd;border-radius:8px;margin-bottom:12px;font-size:.95rem;box-sizing:border-box">
+    <button onclick="cmSubmit${formId}()" id="cm-btn-${formId}" style="width:100%;padding:12px;background:${color};color:#fff;border:none;border-radius:8px;font-size:1rem;font-weight:700;cursor:pointer">${btnText}</button>
+    <div id="cm-msg-${formId}" style="text-align:center;margin-top:10px;font-size:.85rem"></div>
+  </div>
+</div>
+<script>
+function cmSubmit${formId}() {
+  var email = document.getElementById('cm-email-${formId}').value;
+  var name = document.getElementById('cm-name-${formId}').value;
+  var btn = document.getElementById('cm-btn-${formId}');
+  var msg = document.getElementById('cm-msg-${formId}');
+  if (!email || email.indexOf('@') === -1) { msg.innerHTML = '<span style="color:red">Informe um email válido.</span>'; return; }
+  btn.disabled = true; btn.textContent = 'Enviando...';
+  fetch('${appUrl}/api/captura', {method:'POST', headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({email:email, name:name, form_id:${formId}})})
+  .then(function(r){return r.json()}).then(function(d){
+    if(d.ok){msg.innerHTML='<span style="color:green">Cadastro realizado!</span>';btn.textContent='Enviado!';}
+    else{msg.innerHTML='<span style="color:red">'+(d.erro||'Erro')+'</span>';btn.disabled=false;btn.textContent='${btnText}';}
+  }).catch(function(){msg.innerHTML='<span style="color:red">Erro de conexão.</span>';btn.disabled=false;btn.textContent='${btnText}';});
+}
+<\/script>`;
+  document.getElementById('embedCode').value = code;
+  new bootstrap.Modal(document.getElementById('modalCodigo')).show();
+}
+</script>
+{% endblock %}

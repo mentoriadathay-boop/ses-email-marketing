@@ -1,0 +1,123 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <div>
+    <h2 class="fw-bold"><i class="bi bi-thermometer-half me-2"></i>Warm-up de Domínio</h2>
+    <p class="text-muted mb-0 small">Aqueça seu domínio gradualmente para evitar filtros de spam</p>
+  </div>
+  <button class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#modalWarmup"><i class="bi bi-plus-lg me-1"></i>Novo Plano</button>
+</div>
+
+{% if not plans %}
+<div class="card p-5 text-center">
+  <i class="bi bi-thermometer-half text-muted" style="font-size:3rem"></i>
+  <h5 class="mt-3">Nenhum plano de warm-up</h5>
+  <p class="text-muted">Crie um plano para aquecer gradualmente seu domínio de envio, começando com poucos emails por dia e aumentando progressivamente.</p>
+  <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#modalWarmup"><i class="bi bi-plus-lg me-1"></i>Criar Plano</button>
+</div>
+{% else %}
+<div class="row g-3">
+  {% for p in plans %}
+  <div class="col-md-6">
+    <div class="card p-3">
+      <div class="d-flex justify-content-between align-items-start mb-3">
+        <div>
+          <h6 class="fw-bold mb-1">{{ p.sender_email }}</h6>
+          <div class="text-muted small">Dia {{ p.current_day }}/{{ p.total_days }} | Início: {{ p.daily_limit }} emails/dia | Crescimento: {{ p.growth_rate }}x</div>
+        </div>
+        <div class="d-flex gap-1">
+          {% if p.status == 'active' %}
+            <span class="badge bg-success">Ativo</span>
+          {% elif p.status == 'paused' %}
+            <span class="badge bg-warning text-dark">Pausado</span>
+          {% else %}
+            <span class="badge bg-secondary">{{ p.status }}</span>
+          {% endif %}
+        </div>
+      </div>
+
+      <!-- Progress bar -->
+      {% set progress = (p.current_day / p.total_days * 100) if p.total_days > 0 else 0 %}
+      <div class="progress mb-3" style="height:8px">
+        <div class="progress-bar bg-success" style="width:{{ progress }}%"></div>
+      </div>
+
+      <!-- Schedule preview -->
+      <div class="small text-muted mb-2">Próximos limites diários:</div>
+      <div class="d-flex flex-wrap gap-1 mb-3">
+        {% for day in range(p.current_day, [p.current_day + 5, p.total_days] | min) %}
+          {% set limit = (p.daily_limit * (p.growth_rate ** day)) | int %}
+          <span class="badge bg-light text-dark border">Dia {{ day + 1 }}: {{ limit }}</span>
+        {% endfor %}
+      </div>
+
+      <div class="d-flex gap-2">
+        <form method="POST" action="{{ url_for('warmup_pausar', plan_id=p.id) }}" class="d-inline">
+          <button class="btn btn-sm btn-outline-{{ 'warning' if p.status == 'active' else 'success' }}">
+            <i class="bi bi-{{ 'pause' if p.status == 'active' else 'play' }} me-1"></i>{{ 'Pausar' if p.status == 'active' else 'Retomar' }}
+          </button>
+        </form>
+        <form method="POST" action="{{ url_for('warmup_deletar', plan_id=p.id) }}" class="d-inline"
+              onsubmit="return confirm('Remover este plano?')">
+          <button class="btn btn-sm btn-outline-danger"><i class="bi bi-trash me-1"></i>Remover</button>
+        </form>
+      </div>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+
+<!-- Info card -->
+<div class="card p-3 mt-4" style="background:#eef2ff;border:1px solid #c7d2fe">
+  <h6 class="fw-bold text-primary"><i class="bi bi-info-circle me-2"></i>Como funciona o warm-up?</h6>
+  <ul class="small mb-0 text-muted">
+    <li>Domínios novos que enviam muitos emails de uma vez são marcados como spam.</li>
+    <li>O warm-up aumenta gradualmente o volume diário (ex: 10 > 15 > 22 > 33 > 50...).</li>
+    <li>O multiplicador define o crescimento (1.5x = 50% a mais por dia).</li>
+    <li>Use em campanhas segmentadas: envie para os contatos mais engajados primeiro.</li>
+    <li>Duração recomendada: 14-21 dias antes de enviar campanhas em massa.</li>
+  </ul>
+</div>
+
+<!-- Modal criar plano -->
+<div class="modal fade" id="modalWarmup" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <form method="POST" action="{{ url_for('warmup_criar') }}">
+        <div class="modal-header"><h5 class="modal-title"><i class="bi bi-thermometer-half me-2"></i>Novo Plano de Warm-up</h5><button class="btn-close" data-bs-dismiss="modal"></button></div>
+        <div class="modal-body">
+          <div class="mb-3">
+            <label class="form-label small fw-semibold">Email remetente</label>
+            <select name="sender_email" class="form-select" required>
+              <option value="">Selecione...</option>
+              {% for a in accounts %}<option value="{{ a.email }}">{{ a.email }}</option>{% endfor %}
+            </select>
+          </div>
+          <div class="row g-2 mb-3">
+            <div class="col-4">
+              <label class="form-label small fw-semibold">Emails/dia (início)</label>
+              <input type="number" name="daily_limit" class="form-control" value="10" min="1" max="100">
+            </div>
+            <div class="col-4">
+              <label class="form-label small fw-semibold">Total de dias</label>
+              <input type="number" name="total_days" class="form-control" value="14" min="7" max="60">
+            </div>
+            <div class="col-4">
+              <label class="form-label small fw-semibold">Multiplicador</label>
+              <input type="number" name="growth_rate" class="form-control" value="1.5" min="1.1" max="3" step="0.1">
+            </div>
+          </div>
+          <div class="alert alert-info small mb-0">
+            <strong>Previsão:</strong> com 10 emails/dia e multiplicador 1.5x, no dia 14 você estará enviando ~1.946 emails/dia.
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+          <button class="btn btn-primary" type="submit"><i class="bi bi-check-lg me-1"></i>Criar Plano</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}
