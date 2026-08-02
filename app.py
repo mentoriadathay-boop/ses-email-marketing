@@ -3580,6 +3580,72 @@ def templates_visuais():
     conn.close()
     return render_template('templates_visuais.html', kits=kits)
 
+# ── Chat IA Landing Page ─────────────────────────────────────────────────────
+
+@app.route('/ia/chat-landing', methods=['POST'])
+def ia_chat_landing():
+    if not ANTHROPIC_OK:
+        return jsonify({'erro': 'Anthropic SDK não instalado.'}), 500
+    api_key = os.environ.get('ANTHROPIC_API_KEY', '')
+    if not api_key:
+        return jsonify({'erro': 'ANTHROPIC_API_KEY não configurada.'}), 500
+
+    dados = request.get_json() or {}
+    mensagem = (dados.get('mensagem') or '').strip()
+    historico = dados.get('historico') or []
+    if not mensagem:
+        return jsonify({'erro': 'Mensagem vazia.'}), 400
+
+    system_prompt = """Você é o assistente virtual do ConvertMail, plataforma completa de email marketing com IA da TFA Soluções Digitais.
+
+Responda de forma simpática, objetiva e persuasiva (máximo 3-4 frases curtas). Use português brasileiro.
+
+O que o ConvertMail oferece:
+- Geração de emails com IA (Claude) — cria emails profissionais em segundos
+- Kit de Marca — salva cores, fontes, logo e tom de voz para manter identidade visual
+- Gerenciador de Email (IMAP) — leia e responda emails direto na plataforma
+- Campanhas com agendamento — envie imediato ou agende para data/hora ideal
+- Cadências automáticas (sequências) — follow-ups automáticos com intervalos personalizados
+- Templates visuais prontos — layouts profissionais editáveis
+- Gestão de contatos com scoring — pontuação automática de leads (quente/morno/frio)
+- Tags e segmentação — organize contatos por grupos
+- Teste A/B — teste variações de assunto para melhorar aberturas
+- Envio condicional — dispare emails só se o contato abriu/clicou o anterior
+- Melhor horário por contato — IA aprende quando cada pessoa abre emails
+- Enriquecimento de leads com IA — completa dados automaticamente
+- Heatmap de cliques — veja onde as pessoas clicam nos seus emails
+- Calendário de campanhas — visualize tudo que está agendado
+- Múltiplas contas de email — gerencie vários remetentes
+- Blacklist e descadastro automático — conformidade com LGPD
+- Captura de leads (Firecrawl) — extraia contatos de sites automaticamente
+- Exportação CSV — importe e exporte sua base de contatos
+- Analytics completos — aberturas, cliques, bounces, timeline por contato
+
+Preço: plano único a partir de R$97/mês, tudo incluso, sem limites de envio.
+
+Se perguntarem algo fora do escopo, redirecione educadamente para o ConvertMail.
+Sempre termine convidando a pessoa a se cadastrar ou testar gratuitamente."""
+
+    messages = []
+    for h in historico[-10:]:
+        role = 'user' if h.get('role') == 'user' else 'assistant'
+        messages.append({'role': role, 'content': h.get('content', '')})
+    messages.append({'role': 'user', 'content': mensagem})
+
+    try:
+        client = _anthropic.Anthropic(api_key=api_key)
+        resp = client.messages.create(
+            model='claude-haiku-4-5-20251001',
+            max_tokens=300,
+            system=system_prompt,
+            messages=messages
+        )
+        resposta = resp.content[0].text
+        return jsonify({'resposta': resposta})
+    except Exception as e:
+        app.logger.exception('Erro no chat landing IA')
+        return jsonify({'erro': f'Erro ao processar: {e}'}), 500
+
 _db_ready = False
 _db_error = ''
 _scheduler = None
