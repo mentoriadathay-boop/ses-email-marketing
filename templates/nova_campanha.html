@@ -428,6 +428,15 @@
             <span id="btn-disparar-text">Disparar Campanha</span>
           </button>
           <hr class="my-3">
+          <div class="d-flex gap-2 mb-2">
+            <button type="button" class="btn btn-outline-info flex-fill py-2" onclick="previewEmail()">
+              <i class="bi bi-eye me-1"></i>Preview
+            </button>
+            <button type="button" class="btn btn-outline-warning flex-fill py-2" onclick="checkSpam()">
+              <i class="bi bi-shield-check me-1"></i>Spam Score
+            </button>
+          </div>
+          <div id="spamResult" class="mb-2"></div>
           <button type="button" class="btn btn-outline-secondary w-100 py-2" onclick="salvarRascunho()">
             <i class="bi bi-save me-2"></i>Salvar Rascunho
           </button>
@@ -930,6 +939,32 @@ function insertNomeToHtml(textareaId) {
   const pos = ta.selectionStart || ta.value.length;
   ta.value = ta.value.slice(0, pos) + '{nome}' + ta.value.slice(pos);
   ta.focus();
+}
+
+function previewEmail() {
+  const html = getEditorHTML();
+  if (!html || html.length < 10) { alert('Crie o conteúdo do email primeiro.'); return; }
+  const form = document.createElement('form');
+  form.method = 'POST'; form.action = '/preview-email'; form.target = '_blank';
+  const input = document.createElement('input');
+  input.type = 'hidden'; input.name = 'html'; input.value = html;
+  form.appendChild(input); document.body.appendChild(form); form.submit(); form.remove();
+}
+
+function checkSpam() {
+  const html = getEditorHTML();
+  const subject = document.getElementById('subject').value;
+  if (!html || html.length < 10) { alert('Crie o conteúdo do email primeiro.'); return; }
+  const el = document.getElementById('spamResult');
+  el.innerHTML = '<div class="text-center small"><div class="spinner-border spinner-border-sm"></div> Analisando...</div>';
+  fetch('/ia/verificar-spam', {method:'POST', headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({html:html, subject:subject})}).then(r=>r.json()).then(d=>{
+    const color = d.score >= 80 ? 'success' : d.score >= 60 ? 'warning' : 'danger';
+    let h = `<div class="alert alert-${color} py-2 small mb-0"><strong>${d.score}/100</strong> — ${d.nivel}`;
+    if (d.problemas.length > 0) h += '<ul class="mb-0 mt-1">' + d.problemas.map(p=>`<li>${p.msg}</li>`).join('') + '</ul>';
+    h += '</div>';
+    el.innerHTML = h;
+  });
 }
 </script>
 {% endblock %}

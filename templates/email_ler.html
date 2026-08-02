@@ -33,6 +33,9 @@
         <a href="{{ url_for('email_compor', forward=msg.uid, folder=folder) }}" class="btn btn-outline-secondary btn-sm">
           <i class="bi bi-forward me-1"></i>Encaminhar
         </a>
+        <button class="btn btn-outline-info btn-sm" onclick="classificarResposta()">
+          <i class="bi bi-robot me-1"></i>Classificar com IA
+        </button>
         <button class="btn btn-outline-danger btn-sm" onclick="deletarEmail()">
           <i class="bi bi-trash me-1"></i>Lixeira
         </button>
@@ -56,6 +59,9 @@
     </div>
     {% endif %}
 
+    <!-- Classificação IA -->
+    <div id="classResult" class="mb-3 d-none"></div>
+
     <hr>
 
     {% if msg.html_body %}
@@ -74,6 +80,30 @@ function autoResizeFrame(frame) {
   try {
     frame.style.height = frame.contentWindow.document.body.scrollHeight + 40 + 'px';
   } catch(e) {}
+}
+
+function classificarResposta() {
+  const el = document.getElementById('classResult');
+  el.className = 'mb-3';
+  el.innerHTML = '<div class="alert alert-info py-2 small"><div class="spinner-border spinner-border-sm me-2"></div>Analisando com IA...</div>';
+  const frame = document.getElementById('emailFrame');
+  let corpo = '';
+  try { corpo = frame ? frame.contentDocument.body.innerText : ''; } catch(e) {}
+  if (!corpo) corpo = document.querySelector('[style*="white-space:pre-wrap"]')?.textContent || '';
+  fetch('/ia/classificar-resposta', {method:'POST', headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({corpo:corpo})}).then(r=>r.json()).then(d=>{
+    if (d.erro) { el.innerHTML = `<div class="alert alert-danger py-2 small">${d.erro}</div>`; return; }
+    const colors = {interessado:'success',duvida:'info',nao_interessado:'warning',pedido_remocao:'danger',auto_resposta:'secondary',outro:'secondary'};
+    const labels = {interessado:'Interessado',duvida:'Dúvida',nao_interessado:'Não Interessado',pedido_remocao:'Pedido de Remoção',auto_resposta:'Auto-resposta',outro:'Outro'};
+    el.innerHTML = `<div class="alert alert-${colors[d.intencao]||'secondary'} py-2 small">
+      <div class="d-flex align-items-center gap-2 mb-1">
+        <span class="badge bg-${colors[d.intencao]||'secondary'}">${labels[d.intencao]||d.intencao}</span>
+        <span class="badge bg-light text-dark">Urgência: ${d.urgencia}</span>
+      </div>
+      <div class="mb-1"><strong>Resumo:</strong> ${d.resumo}</div>
+      <div><strong>Sugestão de resposta:</strong> ${d.sugestao_resposta}</div>
+    </div>`;
+  }).catch(()=>{ el.innerHTML = '<div class="alert alert-danger py-2 small">Erro de conexão.</div>'; });
 }
 
 function deletarEmail() {

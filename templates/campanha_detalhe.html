@@ -10,10 +10,17 @@
       <small class="text-muted">{{ campaign.sender_email }} &bull; {{ campaign.created_at }}</small>
     </div>
   </div>
-  <a href="{{ url_for('campanha_reutilizar', campaign_id=campaign.id) }}"
-     class="btn btn-outline-primary">
-    <i class="bi bi-arrow-repeat me-1"></i> Reutilizar Campanha
-  </a>
+  <div class="d-flex gap-2">
+    {% if campaign.status == 'done' %}
+    <button class="btn btn-outline-warning" data-bs-toggle="modal" data-bs-target="#modalReenviar">
+      <i class="bi bi-arrow-clockwise me-1"></i> Reenviar (Não Abriram)
+    </button>
+    {% endif %}
+    <a href="{{ url_for('campanha_reutilizar', campaign_id=campaign.id) }}"
+       class="btn btn-outline-primary">
+      <i class="bi bi-arrow-repeat me-1"></i> Reutilizar Campanha
+    </a>
+  </div>
 </div>
 
 {% if campaign.status == 'scheduled' and campaign.scheduled_at %}
@@ -247,4 +254,39 @@ function showToast(msg, type) {
 
 if (isRunning) setInterval(atualizarStatus, 1500);
 </script>
+
+<!-- Modal reenviar para não-abridores -->
+{% if campaign.status == 'done' %}
+<div class="modal fade" id="modalReenviar" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <form method="POST" action="{{ url_for('reenviar_nao_abridores', campaign_id=campaign.id) }}">
+        <div class="modal-header">
+          <h5 class="modal-title"><i class="bi bi-arrow-clockwise me-2"></i>Reenviar para Não-Abridores</h5>
+          <button class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <p class="text-muted small">Reenvia o mesmo email para quem <strong>não abriu</strong>, com um assunto diferente para aumentar as chances de abertura.</p>
+          <div class="alert alert-info small py-2">
+            <i class="bi bi-info-circle me-1"></i>
+            Enviados: {{ campaign.sent }} | Aberturas: {{ camp_opens }} |
+            Estimativa de não-abridores: ~{{ campaign.sent - camp_opens }}
+          </div>
+          <div class="mb-3">
+            <label class="form-label fw-semibold small">Novo assunto</label>
+            <input type="text" name="novo_assunto" class="form-control" required
+                   placeholder="Ex: Você viu? {{ campaign.subject }}"
+                   value="Re: {{ campaign.subject }}">
+            <div class="form-text">Use um assunto diferente para melhorar a taxa de abertura.</div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+          <button class="btn btn-warning" type="submit"><i class="bi bi-send me-1"></i>Reenviar</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endif %}
 {% endblock %}

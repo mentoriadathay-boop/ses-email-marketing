@@ -303,11 +303,50 @@ def init_db():
         "ALTER TABLE contacts ADD COLUMN nicho TEXT",
         "ALTER TABLE mailing_contacts ADD COLUMN nicho TEXT DEFAULT ''",
         "ALTER TABLE email_opens ADD COLUMN campaign_id INTEGER",
+        "ALTER TABLE contact_purchases ADD COLUMN amount NUMERIC(12,2) DEFAULT 0",
+        "ALTER TABLE contact_purchases ADD COLUMN campaign_id INTEGER",
+        "ALTER TABLE campaigns ADD COLUMN resent_from INTEGER",
+        "ALTER TABLE campaigns ADD COLUMN total_opened INTEGER DEFAULT 0",
+        "ALTER TABLE campaigns ADD COLUMN total_clicked INTEGER DEFAULT 0",
     ]:
         try:
             conn.execute(f"DO $$ BEGIN {col_sql}; EXCEPTION WHEN duplicate_column THEN NULL; END $$")
         except Exception:
-            conn.rollback()  # evita InFailedSqlTransaction nas queries seguintes
+            conn.rollback()
+
+    conn.execute('''CREATE TABLE IF NOT EXISTS notifications (
+        id SERIAL PRIMARY KEY,
+        type TEXT NOT NULL,
+        title TEXT NOT NULL,
+        body TEXT,
+        contact_email TEXT,
+        campaign_id INTEGER,
+        read BOOLEAN DEFAULT FALSE,
+        created_at TIMESTAMP DEFAULT NOW()
+    )''')
+
+    conn.execute('''CREATE TABLE IF NOT EXISTS warmup_plans (
+        id SERIAL PRIMARY KEY,
+        sender_email TEXT NOT NULL,
+        daily_limit INTEGER DEFAULT 10,
+        current_day INTEGER DEFAULT 0,
+        total_days INTEGER DEFAULT 14,
+        growth_rate NUMERIC(4,2) DEFAULT 1.5,
+        status TEXT DEFAULT 'active',
+        created_at TIMESTAMP DEFAULT NOW()
+    )''')
+
+    conn.execute('''CREATE TABLE IF NOT EXISTS capture_forms (
+        id SERIAL PRIMARY KEY,
+        name TEXT NOT NULL,
+        tag TEXT DEFAULT '',
+        sequence_id INTEGER,
+        heading TEXT DEFAULT 'Inscreva-se',
+        description TEXT DEFAULT 'Receba novidades no seu email.',
+        button_text TEXT DEFAULT 'Cadastrar',
+        primary_color TEXT DEFAULT '#4361ee',
+        created_at TIMESTAMP DEFAULT NOW()
+    )''')
 
     conn.commit()
 
@@ -2064,6 +2103,11 @@ def track_open():
                 log_activity(email, 'email_opened', f'Cadência {seq_id}, passo {step_num}', conn)
             else:
                 log_activity(email, 'email_opened', f'Campanha {camp_id}', conn)
+            score_row = conn.execute('SELECT score FROM contact_scores WHERE email=%s', (email,)).fetchone()
+            if score_row and score_row['score'] >= 51:
+                criar_notificacao('abertura_quente', f'{email} abriu seu email',
+                                  f'Lead quente (score {score_row["score"]}) abriu {"campanha " + str(camp_id) if camp_id else "cadência " + str(seq_id)}',
+                                  contact_email=email, campaign_id=camp_id)
             conn.commit()
             conn.close()
             print(f"[TRACK] Abertura registrada: {email} campaign={camp_id} seq={seq_id}", flush=True)
@@ -2083,6 +2127,8 @@ def track_click():
             conn = get_db()
             update_score(email, 10, conn)
             log_activity(email, 'link_clicked', f'Cadência {seq_id}, passo {step_num}', conn)
+            criar_notificacao('clique', f'{email} clicou no seu email',
+                              f'Clicou em: {dest_url[:80]}', contact_email=email)
             conn.commit()
             conn.close()
         except Exception:
@@ -3722,6 +3768,450 @@ Regras:
     except Exception as e:
         app.logger.exception('Erro no chat assistente IA')
         return jsonify({'erro': f'Erro ao processar: {e}'}), 500
+
+# ── 1. Re-envio para não-abridores ────────────────────────────────────────────
+
+@app.route('/campanha/<int:campaign_id>/reenviar-nao-abridores', methods=['POST'])
+def reenviar_nao_abridores(campaign_id):
+    conn = get_db()
+    campaign = conn.execute('SELECT * FROM campaigns WHERE id=%s', (campaign_id,)).fetchone()
+    if not campaign:
+        conn.close()
+        flash('Campanha não encontrada.', 'danger')
+        return redirect(url_for('index'))
+    novo_assunto = request.form.get('novo_assunto', '').strip()
+    if not novo_assunto:
+        conn.close()
+        flash('Informe um novo assunto.', 'danger')
+        return redirect(url_for('campanha_detalhe', campaign_id=campaign_id))
+
+    openers = {r['contact_email'] for r in conn.execute(
+        'SELECT DISTINCT contact_email FROM email_opens WHERE campaign_id=%s', (campaign_id,)).fetchall()}
+    sent_contacts = conn.execute(
+        "SELECT contact_email, contact_name FROM campaign_logs WHERE campaign_id=%s AND status='sent'",
+        (campaign_id,)).fetchall()
+    non_openers = [{'email': r['contact_email'], 'name': r['contact_name'] or ''}
+                   for r in sent_contacts if r['contact_email'] not in openers]
+
+    if not non_openers:
+        conn.close()
+        flash('Todos os contatos já abriram — ninguém para reenviar!', 'info')
+        return redirect(url_for('campanha_detalhe', campaign_id=campaign_id))
+
+    cur = conn.execute(
+        "INSERT INTO campaigns (name,subject,body,sender_email,total_contacts,status,resent_from) "
+        "VALUES (%s,%s,%s,%s,%s,'pending',%s) RETURNING id",
+        (f"Re: {campaign['name']} (não-abridores)", novo_assunto, campaign['body'],
+         campaign['sender_email'], len(non_openers), campaign_id))
+    new_id = cur.fetchone()['id']
+    conn.commit()
+    conn.close()
+
+    t = threading.Thread(target=run_campaign,
+                         args=(new_id, non_openers, campaign['sender_email'], novo_assunto, campaign['body']),
+                         daemon=True)
+    t.start()
+    flash(f'Reenvio iniciado para {len(non_openers)} contato(s) que não abriram!', 'success')
+    return redirect(url_for('campanha_detalhe', campaign_id=new_id))
+
+# ── 2. Classificação de respostas com IA ─────────────────────────────────────
+
+@app.route('/ia/classificar-resposta', methods=['POST'])
+def ia_classificar_resposta():
+    if not ANTHROPIC_OK:
+        return jsonify({'erro': 'Anthropic SDK não instalado.'}), 500
+    api_key = os.environ.get('ANTHROPIC_API_KEY', '')
+    if not api_key:
+        return jsonify({'erro': 'ANTHROPIC_API_KEY não configurada.'}), 500
+    dados = request.get_json() or {}
+    corpo_email = (dados.get('corpo') or '').strip()
+    if not corpo_email:
+        return jsonify({'erro': 'Corpo do email vazio.'}), 400
+
+    system_prompt = """Você é um classificador de respostas de email marketing.
+Analise a resposta do lead e retorne um JSON com:
+- "intencao": uma de ["interessado", "duvida", "nao_interessado", "pedido_remocao", "auto_resposta", "outro"]
+- "urgencia": "alta", "media" ou "baixa"
+- "resumo": resumo de 1 frase da resposta
+- "sugestao_resposta": sugestão de resposta curta e profissional (2-3 frases)
+
+Retorne APENAS o JSON, sem markdown."""
+
+    try:
+        client = _anthropic.Anthropic(api_key=api_key)
+        resp = client.messages.create(
+            model='claude-haiku-4-5-20251001', max_tokens=400,
+            system=system_prompt,
+            messages=[{'role': 'user', 'content': f'Classifique esta resposta de email:\n\n{corpo_email[:2000]}'}]
+        )
+        import json
+        resultado = json.loads(resp.content[0].text)
+        return jsonify(resultado)
+    except Exception as e:
+        return jsonify({'erro': str(e)}), 500
+
+# ── 3. Formulários de captura embutíveis ─────────────────────────────────────
+
+@app.route('/formularios')
+def formularios():
+    conn = get_db()
+    forms = conn.execute('SELECT * FROM capture_forms ORDER BY created_at DESC').fetchall()
+    sequences = conn.execute("SELECT id, name FROM sequences ORDER BY name").fetchall()
+    conn.close()
+    return render_template('formularios.html', forms=forms, sequences=sequences)
+
+@app.route('/formularios/salvar', methods=['POST'])
+def formulario_salvar():
+    name = request.form.get('name', '').strip()
+    if not name:
+        flash('Nome obrigatório.', 'danger')
+        return redirect(url_for('formularios'))
+    conn = get_db()
+    form_id = request.form.get('form_id')
+    data = (name, request.form.get('tag', '').strip(),
+            request.form.get('sequence_id') or None,
+            request.form.get('heading', 'Inscreva-se').strip(),
+            request.form.get('description', '').strip(),
+            request.form.get('button_text', 'Cadastrar').strip(),
+            request.form.get('primary_color', '#4361ee').strip())
+    if form_id:
+        conn.execute('UPDATE capture_forms SET name=%s,tag=%s,sequence_id=%s,heading=%s,description=%s,button_text=%s,primary_color=%s WHERE id=%s',
+                     data + (form_id,))
+    else:
+        conn.execute('INSERT INTO capture_forms (name,tag,sequence_id,heading,description,button_text,primary_color) VALUES (%s,%s,%s,%s,%s,%s,%s)', data)
+    conn.commit()
+    conn.close()
+    flash('Formulário salvo!', 'success')
+    return redirect(url_for('formularios'))
+
+@app.route('/formularios/<int:form_id>/deletar', methods=['POST'])
+def formulario_deletar(form_id):
+    conn = get_db()
+    conn.execute('DELETE FROM capture_forms WHERE id=%s', (form_id,))
+    conn.commit()
+    conn.close()
+    flash('Formulário removido.', 'success')
+    return redirect(url_for('formularios'))
+
+@app.route('/api/captura', methods=['POST', 'OPTIONS'])
+def api_captura():
+    if request.method == 'OPTIONS':
+        resp = Response('', 204)
+        resp.headers['Access-Control-Allow-Origin'] = '*'
+        resp.headers['Access-Control-Allow-Methods'] = 'POST, OPTIONS'
+        resp.headers['Access-Control-Allow-Headers'] = 'Content-Type'
+        return resp
+    dados = request.get_json() or {}
+    email = (dados.get('email') or '').strip().lower()
+    name = (dados.get('name') or '').strip()
+    form_id = dados.get('form_id')
+    if not email or '@' not in email:
+        r = jsonify({'erro': 'Email inválido.'})
+        r.headers['Access-Control-Allow-Origin'] = '*'
+        return r, 400
+    conn = get_db()
+    tag = ''
+    seq_id = None
+    if form_id:
+        form = conn.execute('SELECT * FROM capture_forms WHERE id=%s', (form_id,)).fetchone()
+        if form:
+            tag = form['tag'] or ''
+            seq_id = form['sequence_id']
+    upsert_contact(email, name, tag, conn)
+    if seq_id:
+        enroll_contacts_in_sequence(int(seq_id), [{'email': email, 'name': name, 'tags': tag}], conn)
+    conn.commit()
+    conn.close()
+    r = jsonify({'ok': True, 'message': 'Cadastro realizado com sucesso!'})
+    r.headers['Access-Control-Allow-Origin'] = '*'
+    return r
+
+# ── 4. Painel de Analytics avançado ──────────────────────────────────────────
+
+@app.route('/analytics')
+def analytics():
+    conn = get_db()
+    total_sent = conn.execute('SELECT COALESCE(SUM(sent),0) as n FROM campaigns').fetchone()['n']
+    total_opened = conn.execute('SELECT COUNT(DISTINCT id) as n FROM email_opens').fetchone()['n']
+    total_contacts = conn.execute('SELECT COUNT(*) as n FROM contacts').fetchone()['n']
+    total_campaigns = conn.execute('SELECT COUNT(*) as n FROM campaigns').fetchone()['n']
+    open_rate = round(total_opened / total_sent * 100, 1) if total_sent > 0 else 0
+
+    by_hour = conn.execute(
+        'SELECT hour_of_day as h, COUNT(*) as n FROM send_analytics WHERE hour_of_day IS NOT NULL '
+        'GROUP BY hour_of_day ORDER BY hour_of_day').fetchall()
+    by_dow = conn.execute(
+        'SELECT day_of_week as d, COUNT(*) as n FROM send_analytics WHERE day_of_week IS NOT NULL '
+        'GROUP BY day_of_week ORDER BY day_of_week').fetchall()
+
+    top_campaigns = conn.execute(
+        "SELECT id, name, sent, "
+        "(SELECT COUNT(DISTINCT contact_email) FROM email_opens WHERE campaign_id=c.id) as opens "
+        "FROM campaigns c WHERE sent > 0 ORDER BY sent DESC LIMIT 10").fetchall()
+
+    monthly_sends = conn.execute(
+        "SELECT TO_CHAR(sent_at, 'YYYY-MM') as month, COUNT(*) as n "
+        "FROM send_analytics WHERE sent_at IS NOT NULL "
+        "GROUP BY TO_CHAR(sent_at, 'YYYY-MM') ORDER BY month DESC LIMIT 12").fetchall()
+    monthly_sends = list(reversed(monthly_sends))
+
+    score_dist = conn.execute(
+        "SELECT CASE WHEN score >= 100 THEN 'Muito Quente' WHEN score >= 51 THEN 'Quente' "
+        "WHEN score >= 21 THEN 'Morno' ELSE 'Frio' END as faixa, COUNT(*) as n "
+        "FROM contacts GROUP BY faixa").fetchall()
+
+    conn.close()
+    return render_template('analytics.html',
+                           total_sent=total_sent, total_opened=total_opened,
+                           total_contacts=total_contacts, total_campaigns=total_campaigns,
+                           open_rate=open_rate, by_hour=by_hour, by_dow=by_dow,
+                           top_campaigns=top_campaigns, monthly_sends=monthly_sends,
+                           score_dist=score_dist)
+
+# ── 5. Rastreamento de receita (contact_purchases) ──────────────────────────
+
+@app.route('/contatos/<path:email>/compra', methods=['POST'])
+def registrar_compra(email):
+    product = request.form.get('product', '').strip()
+    amount = request.form.get('amount', '0').strip()
+    campaign_id = request.form.get('campaign_id') or None
+    if not product:
+        flash('Informe o produto.', 'danger')
+        return redirect(url_for('contato_perfil', email=email))
+    try:
+        amount_val = float(amount.replace(',', '.'))
+    except ValueError:
+        amount_val = 0
+    conn = get_db()
+    conn.execute(
+        'INSERT INTO contact_purchases (contact_email,product,amount,campaign_id,purchased_at) VALUES (%s,%s,%s,%s,NOW())',
+        (email, product, amount_val, campaign_id))
+    update_score(email, 20, conn)
+    log_activity(email, 'purchase', f'{product} — R${amount_val:.2f}', conn)
+    conn.commit()
+    conn.close()
+    flash('Compra registrada!', 'success')
+    return redirect(url_for('contato_perfil', email=email))
+
+@app.route('/api/receita')
+def api_receita():
+    conn = get_db()
+    total = conn.execute('SELECT COALESCE(SUM(amount),0) as n FROM contact_purchases').fetchone()['n']
+    by_month = conn.execute(
+        "SELECT TO_CHAR(purchased_at, 'YYYY-MM') as month, SUM(amount) as total "
+        "FROM contact_purchases WHERE purchased_at IS NOT NULL "
+        "GROUP BY TO_CHAR(purchased_at, 'YYYY-MM') ORDER BY month DESC LIMIT 12").fetchall()
+    top_contacts = conn.execute(
+        "SELECT contact_email, SUM(amount) as total, COUNT(*) as compras "
+        "FROM contact_purchases GROUP BY contact_email ORDER BY total DESC LIMIT 10").fetchall()
+    conn.close()
+    return jsonify({'total': float(total), 'by_month': [dict(r) for r in by_month],
+                    'top_contacts': [dict(r) for r in top_contacts]})
+
+# ── 6. Verificador de spam ───────────────────────────────────────────────────
+
+@app.route('/ia/verificar-spam', methods=['POST'])
+def verificar_spam():
+    dados = request.get_json() or {}
+    html = dados.get('html', '')
+    subject = dados.get('subject', '')
+    problemas = []
+    score = 100
+
+    spam_words = ['grátis', 'gratuito', 'urgente', 'clique aqui', 'oferta imperdível',
+                  'ganhe dinheiro', 'renda extra', 'sem custo', 'promoção', 'desconto exclusivo',
+                  'última chance', 'tempo limitado', 'compre agora', 'free', 'click here',
+                  'act now', 'limited time', 'buy now', 'winner', 'congratulations']
+    text_lower = (html + ' ' + subject).lower()
+    found_spam = [w for w in spam_words if w in text_lower]
+    if found_spam:
+        score -= len(found_spam) * 8
+        problemas.append({'tipo': 'palavras', 'severidade': 'alta',
+                          'msg': f'Palavras gatilho de spam encontradas: {", ".join(found_spam)}'})
+
+    if subject.upper() == subject and len(subject) > 5:
+        score -= 15
+        problemas.append({'tipo': 'assunto', 'severidade': 'alta',
+                          'msg': 'Assunto todo em MAIÚSCULAS — filtros de spam penalizam isso.'})
+    if subject.count('!') > 1:
+        score -= 10
+        problemas.append({'tipo': 'assunto', 'severidade': 'media',
+                          'msg': 'Múltiplas exclamações no assunto — parecem spam.'})
+
+    img_count = html.lower().count('<img')
+    text_len = len(re.sub(r'<[^>]+>', '', html))
+    if img_count > 0 and text_len < 100:
+        score -= 20
+        problemas.append({'tipo': 'conteudo', 'severidade': 'alta',
+                          'msg': 'Pouco texto e muitas imagens — filtros penalizam emails só com imagens.'})
+    if text_len < 50:
+        score -= 10
+        problemas.append({'tipo': 'conteudo', 'severidade': 'media',
+                          'msg': 'Conteúdo muito curto — emails com pouco texto parecem suspeitos.'})
+
+    link_count = html.lower().count('<a ')
+    if link_count > 10:
+        score -= 10
+        problemas.append({'tipo': 'links', 'severidade': 'media',
+                          'msg': f'{link_count} links encontrados — muitos links parecem spam.'})
+
+    if 'unsubscribe' not in html.lower() and 'descadastrar' not in html.lower():
+        score -= 15
+        problemas.append({'tipo': 'conformidade', 'severidade': 'alta',
+                          'msg': 'Sem link de descadastro — obrigatório por lei (LGPD/CAN-SPAM).'})
+
+    score = max(0, score)
+    nivel = 'excelente' if score >= 80 else 'bom' if score >= 60 else 'regular' if score >= 40 else 'ruim'
+    return jsonify({'score': score, 'nivel': nivel, 'problemas': problemas})
+
+# ── 7. Preview mobile/desktop ────────────────────────────────────────────────
+
+@app.route('/preview-email', methods=['POST'])
+def preview_email():
+    html = request.form.get('html', '')
+    return render_template('preview_email.html', email_html=html)
+
+# ── 8. Assistente SPF/DKIM/DMARC ────────────────────────────────────────────
+
+@app.route('/verificar-dominio', methods=['POST'])
+def verificar_dominio():
+    import subprocess
+    dados = request.get_json() or {}
+    dominio = (dados.get('dominio') or '').strip().lower()
+    if not dominio or '.' not in dominio:
+        return jsonify({'erro': 'Domínio inválido.'}), 400
+
+    resultados = {}
+    try:
+        r = subprocess.run(['dig', '+short', 'TXT', dominio], capture_output=True, text=True, timeout=10)
+        txts = r.stdout.strip()
+        spf_found = 'v=spf1' in txts
+        resultados['spf'] = {
+            'ok': spf_found,
+            'registro': txts if spf_found else None,
+            'instrucao': None if spf_found else f'Adicione um registro TXT no DNS de {dominio}: v=spf1 include:sendinblue.com ~all'
+        }
+    except Exception:
+        resultados['spf'] = {'ok': False, 'registro': None, 'instrucao': 'Não foi possível verificar SPF.'}
+
+    try:
+        r = subprocess.run(['dig', '+short', 'TXT', f'mail._domainkey.{dominio}'], capture_output=True, text=True, timeout=10)
+        dkim_found = 'DKIM1' in r.stdout or 'v=DKIM1' in r.stdout
+        if not dkim_found:
+            r2 = subprocess.run(['dig', '+short', 'TXT', f'brevo._domainkey.{dominio}'], capture_output=True, text=True, timeout=10)
+            dkim_found = 'DKIM1' in r2.stdout or 'v=DKIM1' in r2.stdout
+        resultados['dkim'] = {
+            'ok': dkim_found,
+            'instrucao': None if dkim_found else f'Configure o DKIM no painel da Brevo e adicione o registro CNAME/TXT no DNS de {dominio}.'
+        }
+    except Exception:
+        resultados['dkim'] = {'ok': False, 'instrucao': 'Não foi possível verificar DKIM.'}
+
+    try:
+        r = subprocess.run(['dig', '+short', 'TXT', f'_dmarc.{dominio}'], capture_output=True, text=True, timeout=10)
+        dmarc_found = 'v=DMARC1' in r.stdout
+        resultados['dmarc'] = {
+            'ok': dmarc_found,
+            'registro': r.stdout.strip() if dmarc_found else None,
+            'instrucao': None if dmarc_found else f'Adicione um registro TXT em _dmarc.{dominio}: v=DMARC1; p=quarantine; rua=mailto:dmarc@{dominio}'
+        }
+    except Exception:
+        resultados['dmarc'] = {'ok': False, 'instrucao': 'Não foi possível verificar DMARC.'}
+
+    score = sum(1 for v in resultados.values() if v['ok'])
+    return jsonify({'dominio': dominio, 'resultados': resultados, 'score': f'{score}/3'})
+
+# ── 9. Warm-up de domínio ────────────────────────────────────────────────────
+
+@app.route('/warmup')
+def warmup():
+    conn = get_db()
+    plans = conn.execute('SELECT * FROM warmup_plans ORDER BY created_at DESC').fetchall()
+    accounts = conn.execute('SELECT email FROM email_accounts WHERE active=TRUE ORDER BY email').fetchall()
+    conn.close()
+    return render_template('warmup.html', plans=plans, accounts=accounts)
+
+@app.route('/warmup/criar', methods=['POST'])
+def warmup_criar():
+    sender = request.form.get('sender_email', '').strip()
+    daily_start = int(request.form.get('daily_limit', '10'))
+    total_days = int(request.form.get('total_days', '14'))
+    growth = float(request.form.get('growth_rate', '1.5'))
+    if not sender:
+        flash('Selecione um email remetente.', 'danger')
+        return redirect(url_for('warmup'))
+    conn = get_db()
+    conn.execute(
+        'INSERT INTO warmup_plans (sender_email,daily_limit,total_days,growth_rate) VALUES (%s,%s,%s,%s)',
+        (sender, daily_start, total_days, growth))
+    conn.commit()
+    conn.close()
+    flash(f'Plano de warm-up criado para {sender}!', 'success')
+    return redirect(url_for('warmup'))
+
+@app.route('/warmup/<int:plan_id>/pausar', methods=['POST'])
+def warmup_pausar(plan_id):
+    conn = get_db()
+    plan = conn.execute('SELECT status FROM warmup_plans WHERE id=%s', (plan_id,)).fetchone()
+    new_status = 'paused' if plan and plan['status'] == 'active' else 'active'
+    conn.execute('UPDATE warmup_plans SET status=%s WHERE id=%s', (new_status, plan_id))
+    conn.commit()
+    conn.close()
+    flash(f'Warm-up {"pausado" if new_status == "paused" else "retomado"}!', 'info')
+    return redirect(url_for('warmup'))
+
+@app.route('/warmup/<int:plan_id>/deletar', methods=['POST'])
+def warmup_deletar(plan_id):
+    conn = get_db()
+    conn.execute('DELETE FROM warmup_plans WHERE id=%s', (plan_id,))
+    conn.commit()
+    conn.close()
+    flash('Plano de warm-up removido.', 'success')
+    return redirect(url_for('warmup'))
+
+@app.route('/api/warmup/<int:plan_id>')
+def api_warmup(plan_id):
+    conn = get_db()
+    plan = conn.execute('SELECT * FROM warmup_plans WHERE id=%s', (plan_id,)).fetchone()
+    conn.close()
+    if not plan:
+        return jsonify({'erro': 'Plano não encontrado.'}), 404
+    schedule = []
+    daily = plan['daily_limit']
+    for day in range(plan['total_days']):
+        limit = int(daily * (plan['growth_rate'] ** day))
+        schedule.append({'dia': day + 1, 'limite': limit, 'concluido': day < plan['current_day']})
+    return jsonify({'plan': dict(plan), 'schedule': schedule})
+
+# ── 10. Notificações em tempo real ───────────────────────────────────────────
+
+@app.route('/api/notificacoes')
+def api_notificacoes():
+    conn = get_db()
+    notifs = conn.execute(
+        'SELECT * FROM notifications ORDER BY created_at DESC LIMIT 20').fetchall()
+    unread = conn.execute('SELECT COUNT(*) as n FROM notifications WHERE read=FALSE').fetchone()['n']
+    conn.close()
+    return jsonify({'notificacoes': [dict(n) for n in notifs], 'nao_lidas': unread})
+
+@app.route('/api/notificacoes/ler', methods=['POST'])
+def notificacoes_marcar_lidas():
+    conn = get_db()
+    conn.execute('UPDATE notifications SET read=TRUE WHERE read=FALSE')
+    conn.commit()
+    conn.close()
+    return jsonify({'ok': True})
+
+def criar_notificacao(tipo, titulo, body='', contact_email=None, campaign_id=None):
+    try:
+        conn = get_db()
+        conn.execute(
+            'INSERT INTO notifications (type,title,body,contact_email,campaign_id) VALUES (%s,%s,%s,%s,%s)',
+            (tipo, titulo, body, contact_email, campaign_id))
+        conn.commit()
+        conn.close()
+    except Exception:
+        pass
 
 _db_ready = False
 _db_error = ''
