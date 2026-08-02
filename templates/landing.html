@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>ConvertMail — E-mail Marketing com IA | TFA</title>
+  <title>ConvertMail &mdash; Email Marketing com IA, CRM e Prospec&ccedil;&atilde;o | TFA</title>
   <link rel="icon" type="image/png" href="/static/favicon.png">
   <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700;9..144,800&display=swap" rel="stylesheet">
@@ -159,7 +159,7 @@
     .hero p {
       font-size: clamp(1rem, 2vw, 1.15rem);
       color: var(--texto-suave);
-      max-width: 620px;
+      max-width: 660px;
       margin: 0 auto 32px;
       line-height: 1.7;
     }
@@ -172,6 +172,33 @@
     .hero-cta-group .price-note {
       font-size: 0.85rem;
       color: var(--texto-suave);
+    }
+
+    /* STATS BAR */
+    .stats-bar {
+      background: var(--branco);
+      border-top: 1px solid rgba(0,0,0,0.04);
+      border-bottom: 1px solid rgba(0,0,0,0.04);
+      padding: 40px 0;
+    }
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 24px;
+      text-align: center;
+    }
+    .stat-item .stat-number {
+      font-family: 'Fraunces', serif;
+      font-size: 2.2rem;
+      font-weight: 800;
+      color: var(--verde);
+      line-height: 1;
+      margin-bottom: 6px;
+    }
+    .stat-item .stat-label {
+      font-size: 0.85rem;
+      color: var(--texto-suave);
+      font-weight: 500;
     }
 
     /* SECTION SHARED */
@@ -272,12 +299,39 @@
     }
     .recurso-card h3 { font-size: 1.15rem; font-weight: 700; margin-bottom: 10px; }
     .recurso-card p { font-size: 0.9rem; color: var(--texto-suave); line-height: 1.6; }
+    .recurso-card ul { list-style: none; margin-top: 12px; }
+    .recurso-card ul li {
+      font-size: 0.85rem;
+      color: var(--texto-suave);
+      padding: 4px 0;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .recurso-card ul li::before {
+      content: '\2713';
+      color: var(--verde);
+      font-weight: 700;
+      font-size: 0.8rem;
+    }
     .tag-ia {
       display: inline-flex;
       align-items: center;
       gap: 4px;
       background: var(--verde-suave);
       color: var(--verde-escuro);
+      padding: 3px 10px;
+      border-radius: 100px;
+      font-size: 0.72rem;
+      font-weight: 700;
+      margin-bottom: 12px;
+      letter-spacing: 0.04em;
+    }
+    .tag-novo {
+      display: inline-flex;
+      align-items: center;
+      background: var(--vermelho-suave);
+      color: var(--vermelho);
       padding: 3px 10px;
       border-radius: 100px;
       font-size: 0.72rem;
@@ -328,8 +382,8 @@
     .como-funciona { background: var(--verde-suave); }
     .steps-grid {
       display: grid;
-      grid-template-columns: repeat(3, 1fr);
-      gap: 32px;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 24px;
     }
     .step { text-align: center; }
     .step-number {
@@ -345,13 +399,39 @@
       font-size: 1.2rem;
       margin-bottom: 20px;
     }
-    .step h3 { font-size: 1.1rem; font-weight: 700; margin-bottom: 10px; }
-    .step p { font-size: 0.9rem; color: var(--texto-suave); line-height: 1.6; }
+    .step h3 { font-size: 1.05rem; font-weight: 700; margin-bottom: 10px; }
+    .step p { font-size: 0.88rem; color: var(--texto-suave); line-height: 1.6; }
+
+    /* TUDO INCLUSO */
+    .tudo-incluso { background: var(--bege); }
+    .incluso-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 16px;
+    }
+    .incluso-item {
+      background: var(--branco);
+      border-radius: 12px;
+      padding: 24px 20px;
+      text-align: center;
+      border: 1px solid rgba(0,0,0,0.04);
+    }
+    .incluso-item .incluso-icon {
+      font-size: 1.8rem;
+      margin-bottom: 12px;
+    }
+    .incluso-item h4 {
+      font-family: 'Inter', sans-serif;
+      font-size: 0.85rem;
+      font-weight: 600;
+      margin-bottom: 6px;
+    }
+    .incluso-item p { font-size: 0.78rem; color: var(--texto-suave); line-height: 1.5; }
 
     /* PRICING */
     .pricing { background: var(--branco); }
     .pricing-card {
-      max-width: 480px;
+      max-width: 520px;
       margin: 0 auto;
       background: var(--bege);
       border-radius: 20px;
@@ -390,9 +470,9 @@
       display: flex;
       align-items: center;
       gap: 12px;
-      padding: 10px 0;
+      padding: 8px 0;
       border-bottom: 1px solid rgba(0,0,0,0.05);
-      font-size: 0.9rem;
+      font-size: 0.88rem;
     }
     .pricing-features li:last-child { border-bottom: none; }
     .pricing-features .check {
@@ -463,7 +543,7 @@
       transition: max-height 0.35s ease, padding 0.35s;
     }
     .faq-item.open .faq-answer {
-      max-height: 200px;
+      max-height: 300px;
       padding: 0 0 20px 0;
     }
     .faq-answer p { font-size: 0.9rem; color: var(--texto-suave); line-height: 1.7; }
@@ -478,7 +558,7 @@
     .cta-final h2 { color: var(--branco); margin-bottom: 16px; }
     .cta-final p {
       color: rgba(255,255,255,0.7);
-      max-width: 500px;
+      max-width: 560px;
       margin: 0 auto 32px;
       font-size: 1.05rem;
       line-height: 1.7;
@@ -566,7 +646,9 @@
       .recursos-grid { grid-template-columns: 1fr; }
       .recurso-card.destaque { grid-template-columns: 1fr; }
       .dif-grid { grid-template-columns: repeat(2, 1fr); }
-      .steps-grid { grid-template-columns: 1fr; gap: 24px; }
+      .steps-grid { grid-template-columns: repeat(2, 1fr); gap: 24px; }
+      .stats-grid { grid-template-columns: repeat(2, 1fr); }
+      .incluso-grid { grid-template-columns: repeat(2, 1fr); }
     }
     @media (max-width: 640px) {
       .nav-links { display: none; }
@@ -574,6 +656,9 @@
       .hero { padding: 120px 0 60px; }
       .audience-grid { grid-template-columns: 1fr; }
       .dif-grid { grid-template-columns: 1fr; }
+      .steps-grid { grid-template-columns: 1fr; }
+      .stats-grid { grid-template-columns: repeat(2, 1fr); gap: 16px; }
+      .incluso-grid { grid-template-columns: 1fr; }
       section { padding: 60px 0; }
       .pricing-header, .pricing-body { padding-left: 24px; padding-right: 24px; }
       .footer-inner { flex-direction: column; gap: 16px; text-align: center; }
@@ -592,12 +677,11 @@
     <ul class="nav-links">
       <li><a href="#recursos">Recursos</a></li>
       <li><a href="#para-quem">Para Quem</a></li>
-
       <li><a href="#diferenciais">Diferenciais</a></li>
       <li><a href="#precos">Pre&ccedil;os</a></li>
       <li><a href="#faq">FAQ</a></li>
       <li><a href="{{ url_for('index') }}" class="btn-entrar">Entrar no App</a></li>
-      <li><a href="#recursos" class="btn-cta">Conhecer Recursos</a></li>
+      <li><a href="#precos" class="btn-cta">Assinar Agora</a></li>
     </ul>
     <button class="nav-mobile" onclick="document.querySelector('.nav-links').style.display=document.querySelector('.nav-links').style.display==='flex'?'none':'flex'" aria-label="Menu">&#9776;</button>
   </div>
@@ -606,15 +690,40 @@
 <!-- HERO -->
 <section class="hero">
   <div class="container">
-    <div class="hero-badge">Emails criados e lapidados por IA</div>
-    <h1>Potencialize as suas vendas<br>com <em>ConvertMail</em></h1>
-    <p>Uma solu&ccedil;&atilde;o que une e-mail marketing com IA, prospec&ccedil;&atilde;o de clientes, CRM e estrat&eacute;gias segmentadas para transformar contatos em vendas reais.</p>
+    <div class="hero-badge">&#9889; Email Marketing + IA + CRM + Prospec&ccedil;&atilde;o &mdash; Tudo em 1</div>
+    <h1>Pare de perder vendas<br>com emails que ningu&eacute;m abre</h1>
+    <p>O ConvertMail une intelig&ecirc;ncia artificial, CRM com lead scoring, sequ&ecirc;ncias automatizadas, prospec&ccedil;&atilde;o de leads e gerenciador de email em uma &uacute;nica plataforma &mdash; para voc&ecirc; converter mais, com menos esfor&ccedil;o.</p>
     <div class="hero-cta-group">
-      <a href="#recursos" class="btn-cta" style="padding:14px 40px;font-size:1.05rem">Conhecer Recursos &rarr;</a>
+      <a href="#precos" class="btn-cta" style="padding:14px 40px;font-size:1.05rem">Come&ccedil;ar por R$ 39/m&ecirc;s &rarr;</a>
       <a href="{{ url_for('index') }}" class="btn-entrar" style="padding:12px 32px;font-size:0.95rem">J&aacute; tenho conta &mdash; Entrar</a>
+      <span class="price-note">Sem fidelidade &bull; Cancele quando quiser &bull; Todos os recursos inclu&iacute;dos</span>
     </div>
   </div>
 </section>
+
+<!-- STATS BAR -->
+<div class="stats-bar">
+  <div class="container">
+    <div class="stats-grid">
+      <div class="stat-item">
+        <div class="stat-number">20+</div>
+        <div class="stat-label">Ferramentas integradas</div>
+      </div>
+      <div class="stat-item">
+        <div class="stat-number">5x</div>
+        <div class="stat-label">Mais r&aacute;pido com IA</div>
+      </div>
+      <div class="stat-item">
+        <div class="stat-number">100%</div>
+        <div class="stat-label">Autom&aacute;tico</div>
+      </div>
+      <div class="stat-item">
+        <div class="stat-number">0</div>
+        <div class="stat-label">Limite de envios</div>
+      </div>
+    </div>
+  </div>
+</div>
 
 <!-- RECURSOS -->
 <section class="recursos" id="recursos">
@@ -622,44 +731,127 @@
     <div class="section-header">
       <div class="section-label">Recursos</div>
       <h2 class="section-title">Tudo que voc&ecirc; precisa em um s&oacute; lugar</h2>
-      <p class="section-sub center">Ferramentas poderosas que trabalham juntas para maximizar suas convers&otilde;es.</p>
+      <p class="section-sub center">Substitua 5 ferramentas por uma. Email marketing, CRM, inbox, prospec&ccedil;&atilde;o e IA trabalhando juntos.</p>
     </div>
     <div class="recursos-grid">
+
+      <!-- DESTAQUE: IA -->
       <div class="recurso-card destaque">
         <div>
           <div class="tag-ia">INTELIG&Ecirc;NCIA ARTIFICIAL</div>
           <h3>Emails criados e lapidados por IA</h3>
-          <p>A IA analisa o nicho do seu p&uacute;blico e gera emails com linguagem, exemplos, dores e benef&iacute;cios espec&iacute;ficos. Voc&ecirc; define o tema, a IA entrega o conte&uacute;do pronto para enviar ou editar.</p>
+          <p>A IA analisa seu p&uacute;blico e gera emails com linguagem, dores e benef&iacute;cios espec&iacute;ficos para cada nicho. Voc&ecirc; define o tema, a IA entrega pronto para enviar.</p>
+          <ul>
+            <li>Gera&ccedil;&atilde;o completa de email HTML profissional</li>
+            <li>Melhoria de texto mantendo layout e imagens</li>
+            <li>Aplica&ccedil;&atilde;o de templates visuais com IA</li>
+            <li>Formata&ccedil;&atilde;o autom&aacute;tica de conte&uacute;do bruto</li>
+            <li>Ajuste visual sem alterar texto</li>
+          </ul>
         </div>
         <div style="background:var(--branco);border-radius:12px;padding:24px;border:1px solid rgba(0,0,0,0.06)">
           <div style="font-size:0.72rem;color:var(--verde);font-weight:700;margin-bottom:8px;letter-spacing:0.06em">EXEMPLO DE GERA&Ccedil;&Atilde;O</div>
           <div style="font-size:0.82rem;color:var(--texto-suave);line-height:1.6">
             <strong style="color:var(--texto)">Nicho:</strong> Nutri&ccedil;&atilde;o<br>
-            <strong style="color:var(--texto)">Tema:</strong> Reten&ccedil;&atilde;o de pacientes<br><br>
-            <em>&ldquo;Ol&aacute; {nome}, sabemos que manter pacientes engajados entre consultas &eacute; um dos maiores desafios da nutri&ccedil;&atilde;o cl&iacute;nica&hellip;&rdquo;</em>
+            <strong style="color:var(--texto)">Tema:</strong> Reten&ccedil;&atilde;o de pacientes<br>
+            <strong style="color:var(--texto)">Tom:</strong> Profissional e amig&aacute;vel<br><br>
+            <em>&ldquo;Ol&aacute; {nome}, sabemos que manter pacientes engajados entre consultas &eacute; um dos maiores desafios da nutri&ccedil;&atilde;o cl&iacute;nica. Por isso, separei 3 estrat&eacute;gias comprovadas que voc&ecirc; pode aplicar j&aacute; nesta semana&hellip;&rdquo;</em>
           </div>
         </div>
       </div>
+
+      <!-- CRM -->
       <div class="recurso-card">
         <div class="recurso-icon" style="background:var(--verde-suave);color:var(--verde)">&#128202;</div>
-        <h3>CRM com Lead Scoring</h3>
-        <p>Cada contato recebe pontua&ccedil;&atilde;o baseada em aberturas, cliques e intera&ccedil;&otilde;es. Identifique quem est&aacute; pronto para comprar.</p>
+        <h3>CRM com Lead Scoring Autom&aacute;tico</h3>
+        <p>Cada contato recebe pontua&ccedil;&atilde;o baseada em aberturas, cliques e intera&ccedil;&otilde;es. Classifica&ccedil;&atilde;o por temperatura: <strong>Frio &rarr; Morno &rarr; Quente &rarr; Muito Quente</strong>. Saiba exatamente quem est&aacute; pronto para comprar.</p>
+        <ul>
+          <li>Timeline de atividades por contato</li>
+          <li>Tags, nicho e interesse de produto</li>
+          <li>Melhor hor&aacute;rio de envio por contato</li>
+          <li>Importa&ccedil;&atilde;o inteligente via CSV (upsert)</li>
+        </ul>
       </div>
+
+      <!-- CADENCIAS -->
       <div class="recurso-card">
         <div class="recurso-icon" style="background:var(--vermelho-suave);color:var(--vermelho)">&#128260;</div>
-        <h3>Cad&ecirc;ncias Autom&aacute;ticas</h3>
-        <p>Sequ&ecirc;ncias de follow-up com intervalos personalizados. O sistema dispara nos melhores hor&aacute;rios automaticamente.</p>
+        <h3>Sequ&ecirc;ncias com Teste A/B</h3>
+        <p>Follow-ups autom&aacute;ticos com intervalos personalizados, envio condicional inteligente e teste A/B por etapa para maximizar convers&otilde;es.</p>
+        <ul>
+          <li>Envio condicional: s&oacute; se abriu / s&oacute; se n&atilde;o abriu</li>
+          <li>Teste A/B com split configur&aacute;vel</li>
+          <li>Hor&aacute;rio ideal por contato</li>
+          <li>Diagn&oacute;stico de atrasos e m&eacute;tricas por etapa</li>
+        </ul>
       </div>
+
+      <!-- PROSPECCAO -->
       <div class="recurso-card">
         <div class="recurso-icon" style="background:rgba(201,168,106,0.15);color:var(--dourado)">&#127758;</div>
-        <h3>Prospec&ccedil;&atilde;o Inteligente</h3>
-        <p>Extraia leads de qualquer site com Firecrawl. Construa listas segmentadas automaticamente a partir de p&aacute;ginas web.</p>
+        <h3>Prospec&ccedil;&atilde;o com Enriquecimento IA</h3>
+        <p>Extraia leads de qualquer site da internet. A IA analisa a p&aacute;gina e enriquece cada contato com nome, telefone, empresa e cargo automaticamente.</p>
+        <ul>
+          <li>Crawling multi-p&aacute;gina (at&eacute; 50 p&aacute;ginas)</li>
+          <li>Integra&ccedil;&atilde;o Firecrawl para sites com JavaScript</li>
+          <li>Cria&ccedil;&atilde;o de mailing list com 1 clique</li>
+          <li>Respeita robots.txt</li>
+        </ul>
       </div>
+
+      <!-- CAMPANHAS -->
       <div class="recurso-card">
         <div class="recurso-icon" style="background:var(--verde-suave);color:var(--verde)">&#127919;</div>
-        <h3>Campanhas por Nicho</h3>
-        <p>Visualize seus contatos por segmento, clique no nicho e dispare campanhas com conte&uacute;do personalizado por IA.</p>
+        <h3>Campanhas Inteligentes por Nicho</h3>
+        <p>A IA gera uma vers&atilde;o &uacute;nica do email para cada nicho da sua base. Uma campanha, m&uacute;ltiplos emails personalizados &mdash; autom&aacute;tico.</p>
+        <ul>
+          <li>Agendamento para data e hora ideais</li>
+          <li>Clonagem de campanhas anteriores</li>
+          <li>Progresso em tempo real</li>
+          <li>Exporta&ccedil;&atilde;o de resultados (CSV)</li>
+        </ul>
       </div>
+
+      <!-- GERENCIADOR DE EMAIL -->
+      <div class="recurso-card">
+        <div class="tag-novo">EXCLUSIVO</div>
+        <div class="recurso-icon" style="background:var(--vermelho-suave);color:var(--vermelho)">&#128233;</div>
+        <h3>Gerenciador de Email Completo</h3>
+        <p>Caixa de entrada, enviados, lixeira e spam &mdash; tudo dentro do ConvertMail. Leia, responda, encaminhe e componha emails sem sair da plataforma.</p>
+        <ul>
+          <li>Compor com anexos, CC e BCC</li>
+          <li>Busca por remetente, assunto ou destinat&aacute;rio</li>
+          <li>Marcar lido/n&atilde;o lido em massa</li>
+          <li>M&uacute;ltiplas contas de email (IMAP/SMTP)</li>
+        </ul>
+      </div>
+
+      <!-- KIT DE MARCA -->
+      <div class="recurso-card">
+        <div class="recurso-icon" style="background:rgba(201,168,106,0.15);color:var(--dourado)">&#127912;</div>
+        <h3>Kit de Marca + Templates Visuais</h3>
+        <p>Configure cores, fontes, tom de voz, redes sociais e assinatura da sua empresa. A IA aplica automaticamente em cada email gerado.</p>
+        <ul>
+          <li>Galeria de templates prontos</li>
+          <li>Logo, slogan e paleta de 5 cores</li>
+          <li>Assinatura com nome, cargo e telefone</li>
+          <li>Redes sociais como &iacute;cones clic&aacute;veis</li>
+        </ul>
+      </div>
+
+      <!-- ANALYTICS -->
+      <div class="recurso-card">
+        <div class="recurso-icon" style="background:var(--verde-suave);color:var(--verde-escuro)">&#128200;</div>
+        <h3>Analytics e Tracking em Tempo Real</h3>
+        <p>Acompanhe cada envio, abertura e clique com pixel de rastreamento. Dashboard com gr&aacute;ficos, heatmap de engajamento e m&eacute;tricas por sequ&ecirc;ncia.</p>
+        <ul>
+          <li>Heatmap de engajamento (hora x dia)</li>
+          <li>Comparativo entre sequ&ecirc;ncias</li>
+          <li>Calend&aacute;rio de campanhas agendadas</li>
+          <li>Envios por dia (30 dias)</li>
+        </ul>
+      </div>
+
     </div>
   </div>
 </section>
@@ -681,12 +873,12 @@
       <div class="audience-card">
         <div class="audience-icon" style="background:var(--vermelho-suave);color:var(--vermelho)">&#128188;</div>
         <h4>Profissionais Liberais</h4>
-        <p>Dentistas, advogados, nutricionistas &mdash; mantenha contato ativo com pacientes e clientes via email profissional.</p>
+        <p>Dentistas, advogados, nutricionistas &mdash; mantenha contato ativo com pacientes e clientes via email profissional com IA.</p>
       </div>
       <div class="audience-card">
         <div class="audience-icon" style="background:rgba(201,168,106,0.15);color:var(--dourado)">&#128200;</div>
         <h4>Profissionais de Vendas</h4>
-        <p>Gerencie leads com scoring, cad&ecirc;ncias autom&aacute;ticas e acompanhe o funil do primeiro contato ao fechamento.</p>
+        <p>Gerencie leads com scoring, cad&ecirc;ncias autom&aacute;ticas com teste A/B e acompanhe do primeiro contato ao fechamento.</p>
       </div>
       <div class="audience-card">
         <div class="audience-icon" style="background:var(--verde-suave);color:var(--verde-escuro)">&#127891;</div>
@@ -703,69 +895,91 @@
     <div class="section-header">
       <div class="section-label">Diferenciais</div>
       <h2 class="section-title">Por que escolher o ConvertMail?</h2>
+      <p class="section-sub center">Funcionalidades que ferramentas de R$ 200+/m&ecirc;s n&atilde;o oferecem.</p>
     </div>
     <div class="dif-grid">
       <div class="dif-item">
         <div class="dif-check">&#10003;</div>
         <div>
-          <h4>API de qualquer provedor de email</h4>
-          <p>Conecte Amazon SES, Brevo, ou qualquer servi&ccedil;o SMTP de sua prefer&ecirc;ncia.</p>
+          <h4>IA que escreve emails por nicho</h4>
+          <p>Gera conte&uacute;do espec&iacute;fico para cada segmento com linguagem, dores e exemplos personalizados.</p>
         </div>
       </div>
       <div class="dif-item">
         <div class="dif-check">&#10003;</div>
         <div>
-          <h4>Templates de email e Kit de Marca</h4>
-          <p>Crie templates visuais e kits de marca por projeto com cores, tom de voz e identidade pr&oacute;pria.</p>
+          <h4>Teste A/B nas sequ&ecirc;ncias</h4>
+          <p>Teste dois assuntos e corpos por etapa com split configur&aacute;vel para descobrir o que converte mais.</p>
         </div>
       </div>
       <div class="dif-item">
         <div class="dif-check">&#10003;</div>
         <div>
-          <h4>Conex&atilde;o do seu email na ferramenta</h4>
-          <p>Use seu pr&oacute;prio dom&iacute;nio e remetente verificado para enviar com credibilidade.</p>
+          <h4>Envio condicional inteligente</h4>
+          <p>Envie o pr&oacute;ximo passo s&oacute; se o contato abriu (ou n&atilde;o abriu) o email anterior.</p>
         </div>
       </div>
       <div class="dif-item">
         <div class="dif-check">&#10003;</div>
         <div>
-          <h4>Agendamento de emails</h4>
-          <p>Programe campanhas para o dia e hora ideais. O sistema dispara automaticamente.</p>
+          <h4>Melhor hor&aacute;rio por contato</h4>
+          <p>O sistema calcula o hor&aacute;rio ideal de envio para cada pessoa baseado no hist&oacute;rico de aberturas.</p>
         </div>
       </div>
       <div class="dif-item">
         <div class="dif-check">&#10003;</div>
         <div>
-          <h4>Duplica&ccedil;&atilde;o de campanhas</h4>
-          <p>Reutilize campanhas anteriores com um clique. Salve rascunhos para usar depois.</p>
+          <h4>Enriquecimento de leads com IA</h4>
+          <p>Extraia emails de sites e a IA completa com nome, telefone, empresa e cargo automaticamente.</p>
         </div>
       </div>
       <div class="dif-item">
         <div class="dif-check">&#10003;</div>
         <div>
-          <h4>Dashboard de resultados</h4>
-          <p>Acompanhe envios, aberturas, cliques e erros em tempo real com gr&aacute;ficos detalhados.</p>
+          <h4>Gerenciador de email integrado</h4>
+          <p>Inbox, enviados, lixeira e spam dentro do ConvertMail. Leia, responda e componha sem sair.</p>
         </div>
       </div>
       <div class="dif-item">
         <div class="dif-check">&#10003;</div>
         <div>
-          <h4>Captura de leads em sites</h4>
-          <p>Extraia contatos de qualquer p&aacute;gina web e construa listas segmentadas automaticamente.</p>
+          <h4>Kit de Marca aplicado por IA</h4>
+          <p>Cores, fontes, tom de voz e assinatura aplicados automaticamente em cada email gerado.</p>
         </div>
       </div>
       <div class="dif-item">
         <div class="dif-check">&#10003;</div>
         <div>
-          <h4>Emails personalizados por nicho</h4>
-          <p>A IA adapta linguagem, exemplos e dores para cada segmento do seu p&uacute;blico.</p>
+          <h4>Heatmap de engajamento</h4>
+          <p>Descubra os melhores dias e hor&aacute;rios para enviar com o mapa de calor de aberturas.</p>
         </div>
       </div>
       <div class="dif-item">
         <div class="dif-check">&#10003;</div>
         <div>
-          <h4>Chat IA na plataforma</h4>
-          <p>Tire d&uacute;vidas em tempo real com o assistente de IA integrado diretamente na ferramenta.</p>
+          <h4>Blacklist e descadastro autom&aacute;tico</h4>
+          <p>P&aacute;gina de descadastro p&uacute;blica. Contatos removidos param sequ&ecirc;ncias automaticamente.</p>
+        </div>
+      </div>
+      <div class="dif-item">
+        <div class="dif-check">&#10003;</div>
+        <div>
+          <h4>Calend&aacute;rio de campanhas</h4>
+          <p>Visualize campanhas agendadas e envios de sequ&ecirc;ncia em um calend&aacute;rio mensal.</p>
+        </div>
+      </div>
+      <div class="dif-item">
+        <div class="dif-check">&#10003;</div>
+        <div>
+          <h4>M&uacute;ltiplas contas de email</h4>
+          <p>Conecte v&aacute;rias contas IMAP/SMTP com teste de conex&atilde;o integrado.</p>
+        </div>
+      </div>
+      <div class="dif-item">
+        <div class="dif-check">&#10003;</div>
+        <div>
+          <h4>Exporta&ccedil;&atilde;o completa (CSV)</h4>
+          <p>Exporte contatos, campanhas, resultados e sequ&ecirc;ncias a qualquer momento.</p>
         </div>
       </div>
     </div>
@@ -777,23 +991,81 @@
   <div class="container">
     <div class="section-header">
       <div class="section-label">Como funciona</div>
-      <h2 class="section-title">Tr&ecirc;s passos para come&ccedil;ar a vender</h2>
+      <h2 class="section-title">Quatro passos para come&ccedil;ar a vender</h2>
     </div>
     <div class="steps-grid">
       <div class="step">
         <div class="step-number">1</div>
-        <h3>Importe seus contatos</h3>
-        <p>Suba seu CSV, prospecte em sites, ou adicione manualmente. Defina o nicho de cada contato.</p>
+        <h3>Importe ou prospecte</h3>
+        <p>Suba seu CSV, prospecte leads em sites com IA, ou adicione manualmente. Defina nicho e tags.</p>
       </div>
       <div class="step">
         <div class="step-number">2</div>
-        <h3>Configure com IA</h3>
-        <p>Escolha o nicho, defina o tema da campanha e a IA gera o email completo alinhado ao seu p&uacute;blico.</p>
+        <h3>Configure sua marca</h3>
+        <p>Crie seu Kit de Marca com cores, fontes, tom de voz e assinatura. A IA usa em cada email.</p>
       </div>
       <div class="step">
         <div class="step-number">3</div>
-        <h3>Dispare e acompanhe</h3>
-        <p>Envie ou agende. Acompanhe aberturas, cliques e convers&otilde;es em tempo real pelo dashboard.</p>
+        <h3>Gere com IA e dispare</h3>
+        <p>Escolha o tema, a IA gera o email completo. Envie imediato, agende, ou crie sequ&ecirc;ncias autom&aacute;ticas.</p>
+      </div>
+      <div class="step">
+        <div class="step-number">4</div>
+        <h3>Acompanhe e otimize</h3>
+        <p>Dashboard com aberturas, cliques, lead scoring e heatmap. Identifique os leads quentes e feche mais vendas.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- TUDO INCLUSO -->
+<section class="tudo-incluso">
+  <div class="container">
+    <div class="section-header">
+      <div class="section-label">Plataforma completa</div>
+      <h2 class="section-title">Substitua 5 ferramentas por uma</h2>
+      <p class="section-sub center">Tudo que voc&ecirc; usa separado hoje, integrado em um &uacute;nico lugar.</p>
+    </div>
+    <div class="incluso-grid">
+      <div class="incluso-item">
+        <div class="incluso-icon">&#128231;</div>
+        <h4>Email Marketing</h4>
+        <p>Campanhas, templates, agendamento e envio ilimitado</p>
+      </div>
+      <div class="incluso-item">
+        <div class="incluso-icon">&#129302;</div>
+        <h4>Intelig&ecirc;ncia Artificial</h4>
+        <p>Gera&ccedil;&atilde;o, melhoria e formata&ccedil;&atilde;o de emails com IA</p>
+      </div>
+      <div class="incluso-item">
+        <div class="incluso-icon">&#128101;</div>
+        <h4>CRM Completo</h4>
+        <p>Contatos, scoring, tags, timeline e melhor hor&aacute;rio</p>
+      </div>
+      <div class="incluso-item">
+        <div class="incluso-icon">&#128260;</div>
+        <h4>Automa&ccedil;&otilde;es</h4>
+        <p>Sequ&ecirc;ncias com A/B, envio condicional e agendamento</p>
+      </div>
+      <div class="incluso-item">
+        <div class="incluso-icon">&#128269;</div>
+        <h4>Prospec&ccedil;&atilde;o</h4>
+        <p>Captura de leads em sites com enriquecimento por IA</p>
+      </div>
+      <div class="incluso-item">
+        <div class="incluso-icon">&#128233;</div>
+        <h4>Inbox Integrado</h4>
+        <p>Leia, responda e gerencie emails sem sair do app</p>
+      </div>
+      <div class="incluso-item">
+        <div class="incluso-icon">&#127912;</div>
+        <h4>Kit de Marca</h4>
+        <p>Cores, fontes, tom de voz e assinatura personalizada</p>
+      </div>
+      <div class="incluso-item">
+        <div class="incluso-icon">&#128200;</div>
+        <h4>Analytics</h4>
+        <p>Dashboard, heatmap, tracking e calend&aacute;rio de envios</p>
       </div>
     </div>
   </div>
@@ -805,27 +1077,32 @@
     <div class="section-header">
       <div class="section-label">Plano</div>
       <h2 class="section-title">Pre&ccedil;o &uacute;nico, tudo incluso</h2>
-      <p class="section-sub center">Sem planos confusos. Um valor, todos os recursos.</p>
+      <p class="section-sub center">Sem planos confusos. Um valor, todas as ferramentas. Sem limite de envios.</p>
     </div>
     <div class="pricing-card">
       <div class="pricing-header">
-        <div class="pricing-badge">&#9733; MELHOR CUSTO-BENEF&Iacute;CIO</div>
+        <div class="pricing-badge">&#9733; MELHOR CUSTO-BENEF&Iacute;CIO DO MERCADO</div>
         <div class="plan-name">CONVERTMAIL PRO</div>
         <div class="price">R$ 39</div>
         <div class="price-period">/m&ecirc;s</div>
       </div>
       <div class="pricing-body">
         <ul class="pricing-features">
-          <li><span class="check">&#10003;</span> Campanhas ilimitadas</li>
+          <li><span class="check">&#10003;</span> Campanhas e envios ilimitados</li>
           <li><span class="check">&#10003;</span> IA para gera&ccedil;&atilde;o de conte&uacute;do por nicho</li>
-          <li><span class="check">&#10003;</span> CRM completo com lead scoring</li>
-          <li><span class="check">&#10003;</span> Cad&ecirc;ncias autom&aacute;ticas de follow-up</li>
-          <li><span class="check">&#10003;</span> Prospec&ccedil;&atilde;o de leads com Firecrawl</li>
-          <li><span class="check">&#10003;</span> Templates de email e Kit de Marca</li>
-          <li><span class="check">&#10003;</span> Dashboard com m&eacute;tricas em tempo real</li>
-          <li><span class="check">&#10003;</span> API com Amazon SES, Brevo e SMTP</li>
+          <li><span class="check">&#10003;</span> CRM completo com lead scoring autom&aacute;tico</li>
+          <li><span class="check">&#10003;</span> Sequ&ecirc;ncias com teste A/B e envio condicional</li>
+          <li><span class="check">&#10003;</span> Prospec&ccedil;&atilde;o de leads com enriquecimento IA</li>
+          <li><span class="check">&#10003;</span> Gerenciador de email integrado (Inbox)</li>
+          <li><span class="check">&#10003;</span> Kit de Marca + Templates visuais</li>
+          <li><span class="check">&#10003;</span> Dashboard, heatmap e analytics</li>
+          <li><span class="check">&#10003;</span> Calend&aacute;rio de campanhas e sequ&ecirc;ncias</li>
+          <li><span class="check">&#10003;</span> Melhor hor&aacute;rio de envio por contato</li>
+          <li><span class="check">&#10003;</span> M&uacute;ltiplas contas de email (IMAP/SMTP)</li>
+          <li><span class="check">&#10003;</span> Blacklist e descadastro autom&aacute;tico</li>
+          <li><span class="check">&#10003;</span> Exporta&ccedil;&atilde;o de dados (CSV)</li>
           <li><span class="check">&#10003;</span> Chat IA para suporte na plataforma</li>
-          <li><span class="check">&#10003;</span> Agendamento e duplica&ccedil;&atilde;o de campanhas</li>
+          <li><span class="check">&#10003;</span> API com Amazon SES, Brevo e SMTP</li>
         </ul>
         <div class="pricing-footer">
           <a href="{{ url_for('index') }}" class="btn-cta">Come&ccedil;ar Agora &rarr;</a>
@@ -859,7 +1136,7 @@
           <span class="faq-arrow">&#9660;</span>
         </button>
         <div class="faq-answer">
-          <p>O ConvertMail n&atilde;o limita envios. A quantidade depende da quota do seu provedor de email (SES, Brevo, etc). Na Amazon SES, por exemplo, voc&ecirc; pode enviar milhares por dia.</p>
+          <p>O ConvertMail n&atilde;o limita envios. A quantidade depende da quota do seu provedor de email (SES, Brevo, etc). Na Amazon SES, por exemplo, voc&ecirc; pode enviar milhares por dia a custos muito baixos.</p>
         </div>
       </div>
       <div class="faq-item">
@@ -868,7 +1145,25 @@
           <span class="faq-arrow">&#9660;</span>
         </button>
         <div class="faq-answer">
-          <p>Sim. Voc&ecirc; define o nicho, tema e objetivo, e a IA gera o email completo em HTML com conte&uacute;do personalizado. Voc&ecirc; pode editar antes de enviar ou usar como est&aacute;.</p>
+          <p>Sim. Voc&ecirc; define o nicho, tema, objetivo e tom de voz, e a IA gera o email completo em HTML com conte&uacute;do personalizado, j&aacute; aplicando as cores e fontes do seu Kit de Marca. Voc&ecirc; pode editar antes de enviar ou usar como est&aacute;.</p>
+        </div>
+      </div>
+      <div class="faq-item">
+        <button class="faq-question" onclick="this.parentElement.classList.toggle('open')">
+          O que &eacute; o envio condicional nas sequ&ecirc;ncias?
+          <span class="faq-arrow">&#9660;</span>
+        </button>
+        <div class="faq-answer">
+          <p>&Eacute; a capacidade de enviar o pr&oacute;ximo email da sequ&ecirc;ncia apenas se o contato abriu (ou n&atilde;o abriu) o email anterior. Combinado com teste A/B, voc&ecirc; otimiza cada etapa do funil automaticamente.</p>
+        </div>
+      </div>
+      <div class="faq-item">
+        <button class="faq-question" onclick="this.parentElement.classList.toggle('open')">
+          Como funciona a prospec&ccedil;&atilde;o de leads?
+          <span class="faq-arrow">&#9660;</span>
+        </button>
+        <div class="faq-answer">
+          <p>Voc&ecirc; insere a URL de um site e o sistema extrai todos os emails encontrados, podendo navegar at&eacute; 50 p&aacute;ginas. A IA ent&atilde;o enriquece os contatos, adicionando nome, telefone, empresa e cargo automaticamente.</p>
         </div>
       </div>
       <div class="faq-item">
@@ -877,7 +1172,16 @@
           <span class="faq-arrow">&#9660;</span>
         </button>
         <div class="faq-answer">
-          <p>Sim, via upload de CSV com colunas nome, email e nicho. O sistema tamb&eacute;m importa automaticamente contatos para o CRM com lead scoring.</p>
+          <p>Sim, via upload de CSV. O sistema faz importa&ccedil;&atilde;o inteligente (upsert) &mdash; atualiza contatos existentes sem sobrescrever dados que voc&ecirc; j&aacute; tem, e adiciona novos ao CRM com lead scoring.</p>
+        </div>
+      </div>
+      <div class="faq-item">
+        <button class="faq-question" onclick="this.parentElement.classList.toggle('open')">
+          O que o gerenciador de email faz?
+          <span class="faq-arrow">&#9660;</span>
+        </button>
+        <div class="faq-answer">
+          <p>&Eacute; uma caixa de email completa dentro do ConvertMail. Voc&ecirc; l&ecirc;, responde, encaminha e comp&otilde;e emails com anexos &mdash; sem precisar abrir outra ferramenta. Suporta m&uacute;ltiplas contas IMAP/SMTP com busca integrada.</p>
         </div>
       </div>
       <div class="faq-item">
@@ -886,7 +1190,7 @@
           <span class="faq-arrow">&#9660;</span>
         </button>
         <div class="faq-answer">
-          <p>&Eacute; um assistente de intelig&ecirc;ncia artificial integrado no ConvertMail que responde suas d&uacute;vidas sobre a ferramenta, ajuda a criar estrat&eacute;gias e sugere melhorias nas suas campanhas.</p>
+          <p>&Eacute; um assistente de intelig&ecirc;ncia artificial integrado no ConvertMail que responde suas d&uacute;vidas, ajuda a criar estrat&eacute;gias de email e sugere melhorias nas suas campanhas em tempo real.</p>
         </div>
       </div>
     </div>
@@ -896,8 +1200,8 @@
 <!-- CTA FINAL -->
 <section class="cta-final">
   <div class="container">
-    <h2 class="section-title" style="color:var(--branco)">Pronto para vender mais com email inteligente?</h2>
-    <p>Comece agora por apenas R$ 39/m&ecirc;s e transforme sua comunica&ccedil;&atilde;o com clientes.</p>
+    <h2 class="section-title" style="color:var(--branco)">Chega de pagar caro por ferramentas separadas</h2>
+    <p>Email marketing + IA + CRM + prospec&ccedil;&atilde;o + inbox &mdash; tudo por R$ 39/m&ecirc;s.<br>Comece agora e transforme contatos em vendas reais.</p>
     <a href="{{ url_for('index') }}" class="btn-cta" style="padding:16px 48px;font-size:1.1rem">Entrar no ConvertMail &rarr;</a>
   </div>
 </section>
@@ -916,7 +1220,7 @@
         <li><a href="{{ url_for('index') }}">Entrar</a></li>
       </ul>
     </div>
-    <div class="footer-copy">ConvertMail &mdash; por TFA ConvertBusiness. Todos os direitos reservados.</div>
+    <div class="footer-copy">ConvertMail &mdash; por TFA Solu&ccedil;&otilde;es Digitais. Todos os direitos reservados.</div>
   </div>
 </footer>
 
