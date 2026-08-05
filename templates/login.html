@@ -26,12 +26,10 @@
     }
     .login-header {
       background: #FAF7F2;
-      padding: 48px 32px 36px;
+      padding: 40px 32px 32px;
       text-align: center;
       border-bottom: 1px solid #E3CFA0;
     }
-    .login-header h2 { font-weight: 800; margin-bottom: 4px; font-size: 1.5rem; color: #3E1B4D; }
-    .login-header p { color: #7B0A6C; font-size: 0.9rem; margin: 0; }
     .login-body { padding: 32px; }
     .form-control:focus { border-color: #5B2A6E; box-shadow: 0 0 0 3px rgba(91,42,110,0.15); }
     .btn-login {
@@ -61,9 +59,7 @@
 <body>
   <div class="login-card">
     <div class="login-header">
-      <img src="/static/logo-convertmail.png" alt="ConvertMail" style="height:100px;margin-bottom:20px;filter:drop-shadow(0 2px 8px rgba(91,42,110,0.15))">
-      <h2>ConvertMail</h2>
-      <p>Email Marketing com IA</p>
+      <img src="/static/logo-convertmail.png" alt="ConvertMail" style="max-height:160px;width:auto;max-width:90%">
     </div>
     <div class="login-body">
       {% with messages = get_flashed_messages(with_categories=true) %}
