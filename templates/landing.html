@@ -5,21 +5,22 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>ConvertMail &mdash; Email Marketing com IA, CRM e Prospec&ccedil;&atilde;o</title>
   <link rel="icon" type="image/png" href="/static/favicon.png">
-  <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
+  <link rel="apple-touch-icon" href="/static/apple-touch-icon.png">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700;9..144,800&display=swap" rel="stylesheet">
   <style>
     :root {
-      --verde: #1AC78A;
-      --verde-escuro: #15a572;
-      --vermelho: #5B2A6E;
-      --vermelho-hover: #4A2259;
-      --bege: #FAF7F2;
+      --roxo: #5B2A6E;
+      --roxo-noite: #3E1B4D;
+      --rosa: #C2298A;
+      --magenta: #7B0A6C;
+      --esmeralda: #0E997C;
+      --esmeralda-escuro: #0B7A63;
       --dourado: #C9A86A;
-      --dourado-claro: #E5D2A1;
+      --dourado-claro: #E3CFA0;
+      --bege: #FAF7F2;
+      --lavanda: #EDE7F6;
       --texto: #2D2D2D;
       --texto-suave: #6B6B6B;
-      --verde-suave: #E8FAF3;
-      --vermelho-suave: #F3EBF6;
       --branco: #FFFFFF;
     }
 
@@ -45,17 +46,28 @@
       padding: 0 24px;
     }
 
+    /* ANIMATIONS */
+    .fade-up {
+      opacity: 0;
+      transform: translateY(32px);
+      transition: opacity 0.7s cubic-bezier(0.22,1,0.36,1), transform 0.7s cubic-bezier(0.22,1,0.36,1);
+    }
+    .fade-up.visible {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
     /* NAV */
     nav {
       position: fixed;
       top: 0; left: 0; right: 0;
       z-index: 100;
-      background: rgba(250, 247, 242, 0.92);
-      backdrop-filter: blur(12px);
-      border-bottom: 1px solid rgba(0,0,0,0.06);
+      background: rgba(250, 247, 242, 0.95);
+      backdrop-filter: blur(16px);
+      border-bottom: 1px solid rgba(91,42,110,0.06);
       transition: box-shadow 0.3s;
     }
-    nav.scrolled { box-shadow: 0 2px 20px rgba(0,0,0,0.08); }
+    nav.scrolled { box-shadow: 0 2px 24px rgba(91,42,110,0.1); }
     .nav-inner {
       max-width: 1120px;
       margin: 0 auto;
@@ -63,17 +75,14 @@
       display: flex;
       align-items: center;
       justify-content: space-between;
-      height: 64px;
+      height: 72px;
     }
     .nav-logo {
-      font-family: 'Fraunces', Georgia, serif;
-      font-weight: 800;
-      font-size: 1.4rem;
-      color: var(--verde);
+      display: flex;
+      align-items: center;
+      gap: 8px;
       text-decoration: none;
-      letter-spacing: -0.02em;
     }
-    .nav-logo span { color: var(--texto); }
     .nav-links {
       display: flex;
       align-items: center;
@@ -81,105 +90,177 @@
       list-style: none;
     }
     .nav-links a {
-      color: var(--texto-suave);
+      color: var(--roxo);
       text-decoration: none;
       font-size: 0.9rem;
-      font-weight: 500;
+      font-weight: 600;
       transition: color 0.2s;
     }
-    .nav-links a:hover { color: var(--verde); }
+    .nav-links a:hover { color: var(--dourado); }
     .btn-cta {
       display: inline-flex;
       align-items: center;
       gap: 8px;
-      background: var(--vermelho);
+      background: linear-gradient(135deg, var(--roxo), var(--rosa));
       color: var(--branco) !important;
-      padding: 10px 24px;
-      border-radius: 8px;
-      font-weight: 600;
+      padding: 11px 28px;
+      border-radius: 100px;
+      font-weight: 700;
       font-size: 0.9rem;
       text-decoration: none;
       border: none;
       cursor: pointer;
-      transition: background 0.2s, transform 0.15s;
+      transition: transform 0.2s, box-shadow 0.2s;
     }
-    .btn-cta:hover { background: var(--vermelho-hover); transform: translateY(-1px); }
+    .btn-cta:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 24px rgba(91,42,110,0.3);
+    }
     .btn-entrar {
-      background: var(--verde);
+      background: var(--esmeralda);
       color: var(--branco) !important;
-      padding: 10px 24px;
-      border-radius: 8px;
-      font-weight: 600;
+      padding: 11px 28px;
+      border-radius: 100px;
+      font-weight: 700;
       font-size: 0.9rem;
       text-decoration: none;
-      transition: background 0.2s, transform 0.15s;
+      transition: background 0.2s, transform 0.2s;
     }
-    .btn-entrar:hover { background: var(--verde-escuro); transform: translateY(-1px); }
+    .btn-entrar:hover { background: var(--esmeralda-escuro); transform: translateY(-2px); }
+    .btn-ghost {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: transparent;
+      color: var(--branco) !important;
+      padding: 12px 32px;
+      border-radius: 100px;
+      font-weight: 700;
+      font-size: 0.95rem;
+      text-decoration: none;
+      border: 2px solid rgba(255,255,255,0.5);
+      transition: all 0.2s;
+    }
+    .btn-ghost:hover {
+      background: rgba(255,255,255,0.1);
+      border-color: var(--branco);
+      transform: translateY(-2px);
+    }
+    .btn-dourado {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: var(--dourado);
+      color: var(--roxo-noite) !important;
+      padding: 11px 28px;
+      border-radius: 100px;
+      font-weight: 700;
+      font-size: 0.9rem;
+      text-decoration: none;
+      border: none;
+      cursor: pointer;
+      transition: transform 0.2s, box-shadow 0.2s;
+    }
+    .btn-dourado:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 24px rgba(201,168,106,0.35);
+    }
     .nav-mobile {
       display: none;
       background: none;
       border: none;
       cursor: pointer;
       padding: 8px;
-      color: var(--texto);
+      color: var(--roxo);
       font-size: 1.5rem;
     }
 
     /* HERO */
     .hero {
-      padding: 140px 0 80px;
-      background: linear-gradient(180deg, var(--bege) 0%, var(--verde-suave) 100%);
+      padding: 150px 0 100px;
+      background: linear-gradient(160deg, var(--roxo) 0%, var(--roxo-noite) 60%, #2A1233 100%);
       text-align: center;
+      position: relative;
+      overflow: hidden;
     }
+    .hero::before {
+      content: '';
+      position: absolute;
+      top: -50%;
+      right: -20%;
+      width: 600px;
+      height: 600px;
+      background: radial-gradient(circle, rgba(201,168,106,0.12) 0%, transparent 70%);
+      border-radius: 50%;
+    }
+    .hero::after {
+      content: '';
+      position: absolute;
+      bottom: -30%;
+      left: -15%;
+      width: 500px;
+      height: 500px;
+      background: radial-gradient(circle, rgba(194,41,138,0.1) 0%, transparent 70%);
+      border-radius: 50%;
+    }
+    .hero .container { position: relative; z-index: 1; }
     .hero-badge {
       display: inline-flex;
       align-items: center;
       gap: 6px;
-      background: var(--verde-suave);
-      border: 1px solid rgba(26, 199, 138, 0.25);
-      color: var(--verde-escuro);
-      padding: 6px 16px;
+      background: rgba(201,168,106,0.15);
+      border: 1px solid rgba(201,168,106,0.4);
+      color: var(--dourado-claro);
+      padding: 8px 20px;
       border-radius: 100px;
       font-size: 0.82rem;
-      font-weight: 600;
-      margin-bottom: 24px;
-      letter-spacing: 0.02em;
+      font-weight: 700;
+      margin-bottom: 28px;
+      letter-spacing: 0.03em;
     }
     .hero h1 {
-      font-size: clamp(2.2rem, 5vw, 3.4rem);
+      font-size: clamp(2.4rem, 5.5vw, 3.6rem);
       font-weight: 800;
-      color: var(--texto);
+      color: var(--branco);
       margin-bottom: 20px;
       letter-spacing: -0.02em;
     }
     .hero h1 em {
       font-style: normal;
-      color: var(--verde);
+      background: linear-gradient(135deg, var(--dourado-claro), var(--dourado));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
     }
     .hero p {
       font-size: clamp(1rem, 2vw, 1.15rem);
-      color: var(--texto-suave);
+      color: rgba(255,255,255,0.75);
       max-width: 660px;
-      margin: 0 auto 32px;
+      margin: 0 auto 36px;
       line-height: 1.7;
     }
     .hero-cta-group {
       display: flex;
       flex-direction: column;
       align-items: center;
-      gap: 12px;
+      gap: 14px;
+    }
+    .hero-cta-group .btn-cta {
+      padding: 16px 48px;
+      font-size: 1.05rem;
+      background: linear-gradient(135deg, var(--rosa), var(--roxo));
+      box-shadow: 0 4px 20px rgba(194,41,138,0.3);
     }
     .hero-cta-group .price-note {
       font-size: 0.85rem;
-      color: var(--texto-suave);
+      color: rgba(255,255,255,0.5);
     }
 
     /* STATS BAR */
     .stats-bar {
       background: var(--branco);
-      border-top: 1px solid rgba(0,0,0,0.04);
-      border-bottom: 1px solid rgba(0,0,0,0.04);
-      padding: 40px 0;
+      border-bottom: 1px solid rgba(91,42,110,0.06);
+      padding: 48px 0;
     }
     .stats-grid {
       display: grid;
@@ -189,9 +270,9 @@
     }
     .stat-item .stat-number {
       font-family: 'Fraunces', serif;
-      font-size: 2.2rem;
+      font-size: 2.4rem;
       font-weight: 800;
-      color: var(--verde);
+      color: var(--dourado);
       line-height: 1;
       margin-bottom: 6px;
     }
@@ -202,7 +283,7 @@
     }
 
     /* SECTION SHARED */
-    section { padding: 80px 0; }
+    section { padding: 88px 0; }
     .section-label {
       display: inline-flex;
       align-items: center;
@@ -211,7 +292,7 @@
       font-weight: 700;
       letter-spacing: 0.1em;
       text-transform: uppercase;
-      color: var(--verde);
+      color: var(--roxo);
       margin-bottom: 12px;
     }
     .section-title {
@@ -227,39 +308,7 @@
       line-height: 1.7;
     }
     .section-sub.center { margin: 0 auto; text-align: center; }
-    .section-header { text-align: center; margin-bottom: 48px; }
-
-    /* PARA QUEM */
-    .para-quem { background: var(--branco); }
-    .audience-grid {
-      display: grid;
-      grid-template-columns: repeat(4, 1fr);
-      gap: 20px;
-    }
-    .audience-card {
-      background: var(--bege);
-      border-radius: 16px;
-      padding: 32px 24px;
-      text-align: center;
-      transition: transform 0.25s, box-shadow 0.25s;
-      border: 1px solid transparent;
-    }
-    .audience-card:hover {
-      transform: translateY(-4px);
-      box-shadow: 0 12px 32px rgba(26, 199, 138, 0.1);
-      border-color: rgba(26, 199, 138, 0.2);
-    }
-    .audience-icon {
-      width: 56px; height: 56px;
-      border-radius: 14px;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 1.5rem;
-      margin-bottom: 16px;
-    }
-    .audience-card h4 { font-size: 1rem; font-weight: 700; margin-bottom: 8px; }
-    .audience-card p { font-size: 0.85rem; color: var(--texto-suave); line-height: 1.55; }
+    .section-header { text-align: center; margin-bottom: 52px; }
 
     /* RECURSOS */
     .recursos { background: var(--bege); }
@@ -272,25 +321,26 @@
       background: var(--branco);
       border-radius: 16px;
       padding: 32px;
-      border: 1px solid rgba(0,0,0,0.05);
-      transition: transform 0.25s, box-shadow 0.25s;
+      border: 0.5px solid var(--dourado-claro);
+      transition: transform 0.3s cubic-bezier(0.22,1,0.36,1), box-shadow 0.3s, border-color 0.3s;
     }
     .recurso-card:hover {
-      transform: translateY(-3px);
-      box-shadow: 0 8px 24px rgba(0,0,0,0.06);
+      transform: translateY(-4px);
+      box-shadow: 0 12px 32px rgba(91,42,110,0.08);
+      border-color: var(--dourado);
     }
     .recurso-card.destaque {
       grid-column: 1 / -1;
-      background: linear-gradient(135deg, var(--verde-suave) 0%, var(--branco) 100%);
-      border: 1px solid rgba(26, 199, 138, 0.15);
+      background: linear-gradient(135deg, var(--lavanda) 0%, var(--branco) 100%);
+      border: 1px solid var(--dourado-claro);
       display: grid;
       grid-template-columns: 1fr 1fr;
       gap: 32px;
       align-items: center;
     }
     .recurso-icon {
-      width: 44px; height: 44px;
-      border-radius: 10px;
+      width: 48px; height: 48px;
+      border-radius: 12px;
       display: flex;
       align-items: center;
       justify-content: center;
@@ -310,7 +360,7 @@
     }
     .recurso-card ul li::before {
       content: '\2713';
-      color: var(--verde);
+      color: var(--esmeralda);
       font-weight: 700;
       font-size: 0.8rem;
     }
@@ -318,8 +368,8 @@
       display: inline-flex;
       align-items: center;
       gap: 4px;
-      background: var(--verde-suave);
-      color: var(--verde-escuro);
+      background: rgba(14,153,124,0.1);
+      color: var(--esmeralda);
       padding: 3px 10px;
       border-radius: 100px;
       font-size: 0.72rem;
@@ -330,8 +380,8 @@
     .tag-novo {
       display: inline-flex;
       align-items: center;
-      background: var(--vermelho-suave);
-      color: var(--vermelho);
+      background: var(--lavanda);
+      color: var(--roxo);
       padding: 3px 10px;
       border-radius: 100px;
       font-size: 0.72rem;
@@ -340,8 +390,49 @@
       letter-spacing: 0.04em;
     }
 
+    /* PARA QUEM */
+    .para-quem {
+      background: var(--esmeralda);
+      color: var(--branco);
+    }
+    .para-quem .section-label { color: var(--dourado-claro); }
+    .para-quem .section-title { color: var(--branco); }
+    .para-quem .section-sub { color: rgba(255,255,255,0.8); }
+    .audience-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 20px;
+    }
+    .audience-card {
+      background: rgba(255,255,255,0.1);
+      backdrop-filter: blur(8px);
+      border-radius: 16px;
+      padding: 32px 24px;
+      text-align: center;
+      transition: transform 0.3s cubic-bezier(0.22,1,0.36,1), box-shadow 0.3s, background 0.3s;
+      border: 0.5px solid rgba(255,255,255,0.2);
+    }
+    .audience-card:hover {
+      transform: translateY(-4px);
+      box-shadow: 0 12px 32px rgba(0,0,0,0.15);
+      background: rgba(255,255,255,0.18);
+    }
+    .audience-icon {
+      width: 56px; height: 56px;
+      border-radius: 14px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.5rem;
+      margin-bottom: 16px;
+      background: rgba(255,255,255,0.15) !important;
+      color: var(--branco) !important;
+    }
+    .audience-card h4 { font-size: 1rem; font-weight: 700; margin-bottom: 8px; color: var(--branco); }
+    .audience-card p { font-size: 0.85rem; color: rgba(255,255,255,0.8); line-height: 1.55; }
+
     /* DIFERENCIAIS */
-    .diferenciais { background: var(--branco); }
+    .diferenciais { background: var(--bege); }
     .dif-grid {
       display: grid;
       grid-template-columns: repeat(3, 1fr);
@@ -353,15 +444,20 @@
       gap: 14px;
       padding: 20px;
       border-radius: 12px;
-      background: var(--bege);
-      transition: transform 0.2s;
+      background: var(--branco);
+      border: 0.5px solid var(--dourado-claro);
+      transition: transform 0.25s, box-shadow 0.25s, border-color 0.25s;
     }
-    .dif-item:hover { transform: translateY(-2px); }
+    .dif-item:hover {
+      transform: translateY(-3px);
+      box-shadow: 0 8px 24px rgba(91,42,110,0.06);
+      border-color: var(--dourado);
+    }
     .dif-check {
       width: 28px; height: 28px;
       border-radius: 8px;
-      background: var(--verde-suave);
-      color: var(--verde);
+      background: var(--lavanda);
+      color: var(--roxo);
       display: flex;
       align-items: center;
       justify-content: center;
@@ -379,7 +475,12 @@
     .dif-item p { font-size: 0.8rem; color: var(--texto-suave); line-height: 1.5; }
 
     /* COMO FUNCIONA */
-    .como-funciona { background: var(--verde-suave); }
+    .como-funciona {
+      background: linear-gradient(160deg, var(--roxo) 0%, var(--roxo-noite) 100%);
+      color: var(--branco);
+    }
+    .como-funciona .section-label { color: var(--dourado-claro); }
+    .como-funciona .section-title { color: var(--branco); }
     .steps-grid {
       display: grid;
       grid-template-columns: repeat(4, 1fr);
@@ -387,34 +488,46 @@
     }
     .step { text-align: center; }
     .step-number {
-      width: 48px; height: 48px;
+      width: 52px; height: 52px;
       border-radius: 50%;
-      background: var(--verde);
-      color: var(--branco);
+      background: var(--dourado);
+      color: var(--roxo-noite);
       display: inline-flex;
       align-items: center;
       justify-content: center;
       font-family: 'Fraunces', serif;
       font-weight: 800;
-      font-size: 1.2rem;
+      font-size: 1.3rem;
       margin-bottom: 20px;
     }
-    .step h3 { font-size: 1.05rem; font-weight: 700; margin-bottom: 10px; }
-    .step p { font-size: 0.88rem; color: var(--texto-suave); line-height: 1.6; }
+    .step h3 { font-size: 1.05rem; font-weight: 700; margin-bottom: 10px; color: var(--branco); }
+    .step p { font-size: 0.88rem; color: rgba(255,255,255,0.75); line-height: 1.6; }
 
     /* TUDO INCLUSO */
-    .tudo-incluso { background: var(--bege); }
+    .tudo-incluso {
+      background: var(--esmeralda);
+      color: var(--branco);
+    }
+    .tudo-incluso .section-label { color: var(--dourado-claro); }
+    .tudo-incluso .section-title { color: var(--branco); }
+    .tudo-incluso .section-sub { color: rgba(255,255,255,0.8); }
     .incluso-grid {
       display: grid;
       grid-template-columns: repeat(4, 1fr);
       gap: 16px;
     }
     .incluso-item {
-      background: var(--branco);
+      background: rgba(255,255,255,0.1);
+      backdrop-filter: blur(8px);
       border-radius: 12px;
       padding: 24px 20px;
       text-align: center;
-      border: 1px solid rgba(0,0,0,0.04);
+      border: 0.5px solid rgba(255,255,255,0.15);
+      transition: transform 0.25s, background 0.25s;
+    }
+    .incluso-item:hover {
+      transform: translateY(-3px);
+      background: rgba(255,255,255,0.18);
     }
     .incluso-item .incluso-icon {
       font-size: 1.8rem;
@@ -425,21 +538,23 @@
       font-size: 0.85rem;
       font-weight: 600;
       margin-bottom: 6px;
+      color: var(--branco);
     }
-    .incluso-item p { font-size: 0.78rem; color: var(--texto-suave); line-height: 1.5; }
+    .incluso-item p { font-size: 0.78rem; color: rgba(255,255,255,0.75); line-height: 1.5; }
 
     /* PRICING */
-    .pricing { background: var(--branco); }
+    .pricing { background: var(--lavanda); }
     .pricing-card {
       max-width: 520px;
       margin: 0 auto;
-      background: var(--bege);
+      background: var(--branco);
       border-radius: 20px;
       overflow: hidden;
-      border: 2px solid var(--dourado-claro);
+      border: 2px solid var(--dourado);
+      box-shadow: 0 16px 48px rgba(91,42,110,0.12);
     }
     .pricing-header {
-      background: linear-gradient(135deg, var(--texto) 0%, #1a1a1a 50%, var(--verde-escuro) 100%);
+      background: linear-gradient(135deg, var(--roxo) 0%, var(--roxo-noite) 50%, #2A1233 100%);
       padding: 40px 40px 32px;
       text-align: center;
       color: var(--branco);
@@ -471,12 +586,12 @@
       align-items: center;
       gap: 12px;
       padding: 8px 0;
-      border-bottom: 1px solid rgba(0,0,0,0.05);
+      border-bottom: 1px solid rgba(91,42,110,0.06);
       font-size: 0.88rem;
     }
     .pricing-features li:last-child { border-bottom: none; }
     .pricing-features .check {
-      color: var(--verde);
+      color: var(--esmeralda);
       font-weight: 700;
       font-size: 1rem;
       flex-shrink: 0;
@@ -485,7 +600,7 @@
     .pricing-footer .btn-cta {
       width: 100%;
       justify-content: center;
-      padding: 14px 24px;
+      padding: 16px 24px;
       font-size: 1rem;
     }
     .pricing-note {
@@ -500,7 +615,7 @@
       gap: 6px;
       background: rgba(201, 168, 106, 0.15);
       color: var(--dourado);
-      padding: 4px 12px;
+      padding: 4px 14px;
       border-radius: 100px;
       font-size: 0.72rem;
       font-weight: 700;
@@ -511,7 +626,7 @@
     /* FAQ */
     .faq { background: var(--bege); }
     .faq-list { max-width: 700px; margin: 0 auto; }
-    .faq-item { border-bottom: 1px solid rgba(0,0,0,0.08); }
+    .faq-item { border-bottom: 1px solid rgba(91,42,110,0.08); }
     .faq-question {
       width: 100%;
       text-align: left;
@@ -529,12 +644,12 @@
       gap: 16px;
       transition: color 0.2s;
     }
-    .faq-question:hover { color: var(--verde); }
+    .faq-question:hover { color: var(--roxo); }
     .faq-arrow {
       font-size: 0.75rem;
       transition: transform 0.3s;
       flex-shrink: 0;
-      color: var(--verde);
+      color: var(--roxo);
     }
     .faq-item.open .faq-arrow { transform: rotate(180deg); }
     .faq-answer {
@@ -550,38 +665,54 @@
 
     /* CTA FINAL */
     .cta-final {
-      background: linear-gradient(135deg, var(--texto) 0%, #1a1a1a 40%, var(--verde-escuro) 100%);
-      padding: 80px 0;
+      background: linear-gradient(135deg, var(--roxo) 0%, var(--rosa) 50%, var(--magenta) 100%);
+      padding: 88px 0;
       text-align: center;
       color: var(--branco);
+      position: relative;
+      overflow: hidden;
     }
+    .cta-final::before {
+      content: '';
+      position: absolute;
+      top: -40%;
+      right: -10%;
+      width: 500px;
+      height: 500px;
+      background: radial-gradient(circle, rgba(201,168,106,0.1) 0%, transparent 70%);
+      border-radius: 50%;
+    }
+    .cta-final .container { position: relative; z-index: 1; }
     .cta-final h2 { color: var(--branco); margin-bottom: 16px; }
     .cta-final p {
-      color: rgba(255,255,255,0.7);
+      color: rgba(255,255,255,0.8);
       max-width: 560px;
-      margin: 0 auto 32px;
+      margin: 0 auto 36px;
       font-size: 1.05rem;
       line-height: 1.7;
+    }
+    .cta-final .btn-cta {
+      background: var(--branco);
+      color: var(--roxo) !important;
+      padding: 16px 48px;
+      font-size: 1.1rem;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+    }
+    .cta-final .btn-cta:hover {
+      box-shadow: 0 8px 32px rgba(0,0,0,0.25);
     }
 
     /* FOOTER */
     footer {
-      background: var(--texto);
+      background: var(--roxo-noite);
       color: rgba(255,255,255,0.5);
-      padding: 40px 0;
+      padding: 48px 0;
     }
     .footer-inner {
       display: flex;
       justify-content: space-between;
       align-items: center;
     }
-    .footer-logo {
-      font-family: 'Fraunces', Georgia, serif;
-      font-weight: 800;
-      font-size: 1.1rem;
-      color: var(--verde);
-    }
-    .footer-logo span { color: rgba(255,255,255,0.8); }
     .footer-links { display: flex; gap: 24px; list-style: none; }
     .footer-links a {
       color: rgba(255,255,255,0.5);
@@ -589,7 +720,7 @@
       font-size: 0.85rem;
       transition: color 0.2s;
     }
-    .footer-links a:hover { color: var(--verde); }
+    .footer-links a:hover { color: var(--dourado); }
     .footer-copy {
       font-size: 0.78rem;
       text-align: center;
@@ -606,7 +737,7 @@
       z-index: 999;
       width: 56px; height: 56px;
       border-radius: 50%;
-      background: var(--verde);
+      background: linear-gradient(135deg, var(--roxo), var(--rosa));
       color: var(--branco);
       border: none;
       cursor: pointer;
@@ -614,12 +745,12 @@
       display: flex;
       align-items: center;
       justify-content: center;
-      box-shadow: 0 4px 20px rgba(26, 199, 138, 0.4);
+      box-shadow: 0 4px 20px rgba(91,42,110,0.4);
       transition: transform 0.2s, box-shadow 0.2s;
     }
     .chat-fab:hover {
       transform: scale(1.08);
-      box-shadow: 0 6px 28px rgba(26, 199, 138, 0.5);
+      box-shadow: 0 6px 28px rgba(91,42,110,0.5);
     }
     .chat-fab.open { display: none; }
     .chat-tooltip {
@@ -658,7 +789,7 @@
     }
     .chat-window.open { display: flex; }
     .chat-header {
-      background: linear-gradient(135deg, var(--verde), #0D6E5D);
+      background: linear-gradient(135deg, var(--roxo), var(--roxo-noite));
       color: var(--branco);
       padding: 16px 20px;
       display: flex;
@@ -699,19 +830,19 @@
     }
     .chat-msg.bot {
       align-self: flex-start;
-      background: #f0f4f0;
+      background: var(--lavanda);
       color: var(--texto);
       border-bottom-left-radius: 4px;
     }
     .chat-msg.user {
       align-self: flex-end;
-      background: var(--verde);
+      background: linear-gradient(135deg, var(--roxo), var(--rosa));
       color: var(--branco);
       border-bottom-right-radius: 4px;
     }
     .chat-msg.typing {
       align-self: flex-start;
-      background: #f0f4f0;
+      background: var(--lavanda);
       color: #999;
       font-style: italic;
     }
@@ -724,18 +855,18 @@
     }
     .chat-input-area input {
       flex: 1;
-      border: 1px solid rgba(0,0,0,0.12);
+      border: 1px solid rgba(91,42,110,0.15);
       border-radius: 24px;
       padding: 10px 16px;
       font-size: 0.88rem;
       outline: none;
       transition: border-color 0.2s;
     }
-    .chat-input-area input:focus { border-color: var(--verde); }
+    .chat-input-area input:focus { border-color: var(--roxo); }
     .chat-send {
       width: 40px; height: 40px;
       border-radius: 50%;
-      background: var(--verde);
+      background: linear-gradient(135deg, var(--roxo), var(--rosa));
       color: var(--branco);
       border: none;
       cursor: pointer;
@@ -743,10 +874,10 @@
       align-items: center;
       justify-content: center;
       font-size: 1rem;
-      transition: background 0.2s;
+      transition: opacity 0.2s;
       flex-shrink: 0;
     }
-    .chat-send:hover { background: #0D6E5D; }
+    .chat-send:hover { opacity: 0.9; }
     .chat-send:disabled { opacity: 0.5; cursor: not-allowed; }
     .chat-suggestions {
       display: flex;
@@ -755,8 +886,8 @@
       padding: 0 16px 12px;
     }
     .chat-sug {
-      background: #e8f5e9;
-      color: #0D6E5D;
+      background: var(--lavanda);
+      color: var(--roxo);
       border: none;
       border-radius: 16px;
       padding: 6px 12px;
@@ -764,7 +895,7 @@
       cursor: pointer;
       transition: background 0.2s;
     }
-    .chat-sug:hover { background: #c8e6c9; }
+    .chat-sug:hover { background: #DDD0F0; }
 
     /* RESPONSIVE */
     @media (max-width: 900px) {
@@ -779,13 +910,13 @@
     @media (max-width: 640px) {
       .nav-links { display: none; }
       .nav-mobile { display: block; }
-      .hero { padding: 120px 0 60px; }
+      .hero { padding: 120px 0 70px; }
       .audience-grid { grid-template-columns: 1fr; }
       .dif-grid { grid-template-columns: 1fr; }
       .steps-grid { grid-template-columns: 1fr; }
       .stats-grid { grid-template-columns: repeat(2, 1fr); gap: 16px; }
       .incluso-grid { grid-template-columns: 1fr; }
-      section { padding: 60px 0; }
+      section { padding: 64px 0; }
       .pricing-header, .pricing-body { padding-left: 24px; padding-right: 24px; }
       .footer-inner { flex-direction: column; gap: 16px; text-align: center; }
       .footer-links { flex-wrap: wrap; justify-content: center; }
@@ -797,8 +928,8 @@
 <!-- NAV -->
 <nav id="mainNav">
   <div class="nav-inner">
-    <a href="/" class="nav-logo" style="display:flex;align-items:center;gap:8px">
-      <img src="/static/logo-convertmail.png" alt="ConvertMail" style="height:44px;width:auto">
+    <a href="/" class="nav-logo">
+      <img src="/static/logo-convertmail.png" alt="ConvertMail" style="height:64px;width:auto">
     </a>
     <ul class="nav-links">
       <li><a href="#recursos">Recursos</a></li>
@@ -816,12 +947,12 @@
 <!-- HERO -->
 <section class="hero">
   <div class="container">
-    <div class="hero-badge">&#9889; Email Marketing + IA + CRM + Prospec&ccedil;&atilde;o &mdash; Tudo em 1</div>
-    <h1>Pare de perder vendas<br>com emails que ningu&eacute;m abre</h1>
-    <p>O ConvertMail une intelig&ecirc;ncia artificial, CRM com lead scoring, sequ&ecirc;ncias automatizadas, prospec&ccedil;&atilde;o de leads e gerenciador de email em uma &uacute;nica plataforma &mdash; para voc&ecirc; converter mais, com menos esfor&ccedil;o.</p>
-    <div class="hero-cta-group">
-      <a href="#precos" class="btn-cta" style="padding:14px 40px;font-size:1.05rem">Conhecer o Plano &rarr;</a>
-      <a href="{{ url_for('login') }}" class="btn-entrar" style="padding:12px 32px;font-size:0.95rem">J&aacute; tenho conta &mdash; Entrar</a>
+    <div class="hero-badge fade-up">&#9889; Email Marketing + IA + CRM + Prospec&ccedil;&atilde;o &mdash; Tudo em 1</div>
+    <h1 class="fade-up">Pare de perder vendas<br>com emails que <em>ningu&eacute;m abre</em></h1>
+    <p class="fade-up">O ConvertMail une intelig&ecirc;ncia artificial, CRM com lead scoring, sequ&ecirc;ncias automatizadas, prospec&ccedil;&atilde;o de leads e gerenciador de email em uma &uacute;nica plataforma &mdash; para voc&ecirc; converter mais, com menos esfor&ccedil;o.</p>
+    <div class="hero-cta-group fade-up">
+      <a href="#precos" class="btn-cta">Conhecer o Plano &rarr;</a>
+      <a href="{{ url_for('login') }}" class="btn-ghost">J&aacute; tenho conta &mdash; Entrar</a>
       <span class="price-note">Sem fidelidade &bull; Cancele quando quiser &bull; Todos os recursos inclu&iacute;dos</span>
     </div>
   </div>
@@ -831,20 +962,20 @@
 <div class="stats-bar">
   <div class="container">
     <div class="stats-grid">
-      <div class="stat-item">
-        <div class="stat-number">30+</div>
+      <div class="stat-item fade-up">
+        <div class="stat-number" data-target="30" data-suffix="+">0</div>
         <div class="stat-label">Ferramentas integradas</div>
       </div>
-      <div class="stat-item">
-        <div class="stat-number">5x</div>
+      <div class="stat-item fade-up">
+        <div class="stat-number" data-target="5" data-suffix="x">0</div>
         <div class="stat-label">Mais r&aacute;pido com IA</div>
       </div>
-      <div class="stat-item">
-        <div class="stat-number">100%</div>
+      <div class="stat-item fade-up">
+        <div class="stat-number" data-target="100" data-suffix="%">0</div>
         <div class="stat-label">Autom&aacute;tico</div>
       </div>
-      <div class="stat-item">
-        <div class="stat-number">0</div>
+      <div class="stat-item fade-up">
+        <div class="stat-number" data-target="0" data-suffix="" data-display="0">0</div>
         <div class="stat-label">Limite de envios</div>
       </div>
     </div>
@@ -854,15 +985,14 @@
 <!-- RECURSOS -->
 <section class="recursos" id="recursos">
   <div class="container">
-    <div class="section-header">
+    <div class="section-header fade-up">
       <div class="section-label">Recursos</div>
       <h2 class="section-title">Tudo que voc&ecirc; precisa em um s&oacute; lugar</h2>
       <p class="section-sub center">Substitua 8 ferramentas por uma. Email marketing, CRM, formul&aacute;rios, warm-up, analytics, IA e muito mais &mdash; tudo integrado.</p>
     </div>
     <div class="recursos-grid">
 
-      <!-- DESTAQUE: IA -->
-      <div class="recurso-card destaque">
+      <div class="recurso-card destaque fade-up">
         <div>
           <div class="tag-ia">INTELIG&Ecirc;NCIA ARTIFICIAL</div>
           <h3>IA completa: gera, classifica, analisa e assiste</h3>
@@ -875,8 +1005,8 @@
             <li>Melhoria de texto, templates e formata&ccedil;&atilde;o</li>
           </ul>
         </div>
-        <div style="background:var(--branco);border-radius:12px;padding:24px;border:1px solid rgba(0,0,0,0.06)">
-          <div style="font-size:0.72rem;color:var(--verde);font-weight:700;margin-bottom:8px;letter-spacing:0.06em">EXEMPLO DE GERA&Ccedil;&Atilde;O</div>
+        <div style="background:var(--branco);border-radius:12px;padding:24px;border:0.5px solid var(--dourado-claro)">
+          <div style="font-size:0.72rem;color:var(--roxo);font-weight:700;margin-bottom:8px;letter-spacing:0.06em">EXEMPLO DE GERA&Ccedil;&Atilde;O</div>
           <div style="font-size:0.82rem;color:var(--texto-suave);line-height:1.6">
             <strong style="color:var(--texto)">Nicho:</strong> Nutri&ccedil;&atilde;o<br>
             <strong style="color:var(--texto)">Tema:</strong> Reten&ccedil;&atilde;o de pacientes<br>
@@ -886,9 +1016,8 @@
         </div>
       </div>
 
-      <!-- CRM -->
-      <div class="recurso-card">
-        <div class="recurso-icon" style="background:var(--verde-suave);color:var(--verde)">&#128202;</div>
+      <div class="recurso-card fade-up">
+        <div class="recurso-icon" style="background:var(--lavanda);color:var(--roxo)">&#128202;</div>
         <h3>CRM com Lead Scoring Autom&aacute;tico</h3>
         <p>Cada contato recebe pontua&ccedil;&atilde;o baseada em aberturas, cliques e intera&ccedil;&otilde;es. Classifica&ccedil;&atilde;o por temperatura: <strong>Frio &rarr; Morno &rarr; Quente &rarr; Muito Quente</strong>. Saiba exatamente quem est&aacute; pronto para comprar.</p>
         <ul>
@@ -899,9 +1028,8 @@
         </ul>
       </div>
 
-      <!-- CADENCIAS -->
-      <div class="recurso-card">
-        <div class="recurso-icon" style="background:var(--vermelho-suave);color:var(--vermelho)">&#128260;</div>
+      <div class="recurso-card fade-up">
+        <div class="recurso-icon" style="background:var(--lavanda);color:var(--roxo)">&#128260;</div>
         <h3>Sequ&ecirc;ncias com Teste A/B</h3>
         <p>Follow-ups autom&aacute;ticos com intervalos personalizados, envio condicional inteligente e teste A/B por etapa para maximizar convers&otilde;es.</p>
         <ul>
@@ -912,9 +1040,8 @@
         </ul>
       </div>
 
-      <!-- PROSPECCAO -->
-      <div class="recurso-card">
-        <div class="recurso-icon" style="background:rgba(201,168,106,0.15);color:var(--dourado)">&#127758;</div>
+      <div class="recurso-card fade-up">
+        <div class="recurso-icon" style="background:rgba(201,168,106,0.12);color:var(--dourado)">&#127758;</div>
         <h3>Prospec&ccedil;&atilde;o com Enriquecimento IA</h3>
         <p>Extraia leads de qualquer site da internet. A IA analisa a p&aacute;gina e enriquece cada contato com nome, telefone, empresa e cargo automaticamente.</p>
         <ul>
@@ -925,9 +1052,8 @@
         </ul>
       </div>
 
-      <!-- CAMPANHAS -->
-      <div class="recurso-card">
-        <div class="recurso-icon" style="background:var(--verde-suave);color:var(--verde)">&#127919;</div>
+      <div class="recurso-card fade-up">
+        <div class="recurso-icon" style="background:rgba(14,153,124,0.1);color:var(--esmeralda)">&#127919;</div>
         <h3>Campanhas Inteligentes por Nicho</h3>
         <p>A IA gera uma vers&atilde;o &uacute;nica do email para cada nicho da sua base. Uma campanha, m&uacute;ltiplos emails personalizados &mdash; autom&aacute;tico.</p>
         <ul>
@@ -938,10 +1064,9 @@
         </ul>
       </div>
 
-      <!-- GERENCIADOR DE EMAIL -->
-      <div class="recurso-card">
+      <div class="recurso-card fade-up">
         <div class="tag-novo">EXCLUSIVO</div>
-        <div class="recurso-icon" style="background:var(--vermelho-suave);color:var(--vermelho)">&#128233;</div>
+        <div class="recurso-icon" style="background:var(--lavanda);color:var(--roxo)">&#128233;</div>
         <h3>Gerenciador de Email Completo</h3>
         <p>Caixa de entrada, enviados, lixeira e spam &mdash; tudo dentro do ConvertMail. Leia, responda, encaminhe e componha emails sem sair da plataforma.</p>
         <ul>
@@ -952,9 +1077,8 @@
         </ul>
       </div>
 
-      <!-- KIT DE MARCA -->
-      <div class="recurso-card">
-        <div class="recurso-icon" style="background:rgba(201,168,106,0.15);color:var(--dourado)">&#127912;</div>
+      <div class="recurso-card fade-up">
+        <div class="recurso-icon" style="background:rgba(201,168,106,0.12);color:var(--dourado)">&#127912;</div>
         <h3>Kit de Marca + Templates Visuais</h3>
         <p>Configure cores, fontes, tom de voz, redes sociais e assinatura da sua empresa. A IA aplica automaticamente em cada email gerado.</p>
         <ul>
@@ -965,9 +1089,8 @@
         </ul>
       </div>
 
-      <!-- ANALYTICS -->
-      <div class="recurso-card">
-        <div class="recurso-icon" style="background:var(--verde-suave);color:var(--verde-escuro)">&#128200;</div>
+      <div class="recurso-card fade-up">
+        <div class="recurso-icon" style="background:rgba(14,153,124,0.1);color:var(--esmeralda)">&#128200;</div>
         <h3>Analytics Avan&ccedil;ado com Receita e DNS</h3>
         <p>Dashboard completo com gr&aacute;ficos de envios, aberturas por hora/dia, distribui&ccedil;&atilde;o de leads, rastreamento de receita e verifica&ccedil;&atilde;o de dom&iacute;nio (SPF/DKIM/DMARC).</p>
         <ul>
@@ -978,10 +1101,9 @@
         </ul>
       </div>
 
-      <!-- REENVIO -->
-      <div class="recurso-card">
+      <div class="recurso-card fade-up">
         <div class="tag-novo">NOVO</div>
-        <div class="recurso-icon" style="background:var(--vermelho-suave);color:var(--vermelho)">&#128257;</div>
+        <div class="recurso-icon" style="background:var(--lavanda);color:var(--roxo)">&#128257;</div>
         <h3>Re-envio para N&atilde;o Abridores</h3>
         <p>Campanhas com taxa de abertura baixa? Reenvie automaticamente para quem n&atilde;o abriu, com novo assunto. Aumente suas convers&otilde;es sem esfor&ccedil;o extra.</p>
         <ul>
@@ -992,10 +1114,9 @@
         </ul>
       </div>
 
-      <!-- FORMULARIOS CAPTURA -->
-      <div class="recurso-card">
+      <div class="recurso-card fade-up">
         <div class="tag-novo">NOVO</div>
-        <div class="recurso-icon" style="background:var(--verde-suave);color:var(--verde)">&#128221;</div>
+        <div class="recurso-icon" style="background:rgba(14,153,124,0.1);color:var(--esmeralda)">&#128221;</div>
         <h3>Formul&aacute;rios de Captura Embut&iacute;veis</h3>
         <p>Crie formul&aacute;rios de captura de leads personaliz&aacute;veis e cole no seu site. Cada inscri&ccedil;&atilde;o vai direto para o CRM com tag e inscri&ccedil;&atilde;o autom&aacute;tica em cad&ecirc;ncia.</p>
         <ul>
@@ -1006,10 +1127,9 @@
         </ul>
       </div>
 
-      <!-- PREVIEW + SPAM -->
-      <div class="recurso-card">
+      <div class="recurso-card fade-up">
         <div class="tag-novo">NOVO</div>
-        <div class="recurso-icon" style="background:rgba(201,168,106,0.15);color:var(--dourado)">&#128270;</div>
+        <div class="recurso-icon" style="background:rgba(201,168,106,0.12);color:var(--dourado)">&#128270;</div>
         <h3>Preview e Spam Score</h3>
         <p>Visualize seus emails em desktop, tablet e mobile antes de enviar. O verificador de spam analisa palavras gatilho, links, propor&ccedil;&atilde;o imagem/texto e mais.</p>
         <ul>
@@ -1020,10 +1140,9 @@
         </ul>
       </div>
 
-      <!-- WARM-UP -->
-      <div class="recurso-card">
+      <div class="recurso-card fade-up">
         <div class="tag-novo">NOVO</div>
-        <div class="recurso-icon" style="background:var(--vermelho-suave);color:var(--vermelho)">&#127777;</div>
+        <div class="recurso-icon" style="background:var(--lavanda);color:var(--roxo)">&#127777;</div>
         <h3>Warm-up de Dom&iacute;nio</h3>
         <p>Aque&ccedil;a seu dom&iacute;nio gradualmente para evitar filtros de spam. Planos com crescimento exponencial autom&aacute;tico de 7 a 60 dias.</p>
         <ul>
@@ -1034,10 +1153,9 @@
         </ul>
       </div>
 
-      <!-- NOTIFICACOES -->
-      <div class="recurso-card">
+      <div class="recurso-card fade-up">
         <div class="tag-novo">NOVO</div>
-        <div class="recurso-icon" style="background:var(--verde-suave);color:var(--verde-escuro)">&#128276;</div>
+        <div class="recurso-icon" style="background:rgba(14,153,124,0.1);color:var(--esmeralda)">&#128276;</div>
         <h3>Notifica&ccedil;&otilde;es em Tempo Real</h3>
         <p>Receba alertas instant&acirc;neos quando leads quentes abrem seus emails ou clicam em links. Nunca mais perca o timing perfeito de abordagem.</p>
         <ul>
@@ -1055,29 +1173,29 @@
 <!-- PARA QUEM -->
 <section class="para-quem" id="para-quem">
   <div class="container">
-    <div class="section-header">
+    <div class="section-header fade-up">
       <div class="section-label">P&uacute;blico</div>
       <h2 class="section-title">Para quem &eacute; o ConvertMail?</h2>
       <p class="section-sub center">Para quem precisa vender mais usando e-mail de forma inteligente e profissional.</p>
     </div>
     <div class="audience-grid">
-      <div class="audience-card">
-        <div class="audience-icon" style="background:var(--verde-suave);color:var(--verde)">&#127970;</div>
+      <div class="audience-card fade-up">
+        <div class="audience-icon">&#127970;</div>
         <h4>Pequenas e M&eacute;dias Empresas</h4>
         <p>Automatize a comunica&ccedil;&atilde;o com sua base de clientes e potencialize suas vendas sem equipe de marketing.</p>
       </div>
-      <div class="audience-card">
-        <div class="audience-icon" style="background:var(--vermelho-suave);color:var(--vermelho)">&#128188;</div>
+      <div class="audience-card fade-up">
+        <div class="audience-icon">&#128188;</div>
         <h4>Profissionais Liberais</h4>
         <p>Dentistas, advogados, nutricionistas &mdash; mantenha contato ativo com pacientes e clientes via email profissional com IA.</p>
       </div>
-      <div class="audience-card">
-        <div class="audience-icon" style="background:rgba(201,168,106,0.15);color:var(--dourado)">&#128200;</div>
+      <div class="audience-card fade-up">
+        <div class="audience-icon">&#128200;</div>
         <h4>Profissionais de Vendas</h4>
         <p>Gerencie leads com scoring, cad&ecirc;ncias autom&aacute;ticas com teste A/B e acompanhe do primeiro contato ao fechamento.</p>
       </div>
-      <div class="audience-card">
-        <div class="audience-icon" style="background:var(--verde-suave);color:var(--verde-escuro)">&#127891;</div>
+      <div class="audience-card fade-up">
+        <div class="audience-icon">&#127891;</div>
         <h4>Consultores e Mentores</h4>
         <p>Segmente por nicho, envie conte&uacute;do personalizado por IA e converta leads em mentorados e clientes.</p>
       </div>
@@ -1088,146 +1206,146 @@
 <!-- DIFERENCIAIS -->
 <section class="diferenciais" id="diferenciais">
   <div class="container">
-    <div class="section-header">
+    <div class="section-header fade-up">
       <div class="section-label">Diferenciais</div>
       <h2 class="section-title">Por que escolher o ConvertMail?</h2>
       <p class="section-sub center">Funcionalidades que ferramentas de R$ 200+/m&ecirc;s n&atilde;o oferecem.</p>
     </div>
     <div class="dif-grid">
-      <div class="dif-item">
+      <div class="dif-item fade-up">
         <div class="dif-check">&#10003;</div>
         <div>
           <h4>IA que escreve emails por nicho</h4>
           <p>Gera conte&uacute;do espec&iacute;fico para cada segmento com linguagem, dores e exemplos personalizados.</p>
         </div>
       </div>
-      <div class="dif-item">
+      <div class="dif-item fade-up">
         <div class="dif-check">&#10003;</div>
         <div>
           <h4>Teste A/B nas sequ&ecirc;ncias</h4>
           <p>Teste dois assuntos e corpos por etapa com split configur&aacute;vel para descobrir o que converte mais.</p>
         </div>
       </div>
-      <div class="dif-item">
+      <div class="dif-item fade-up">
         <div class="dif-check">&#10003;</div>
         <div>
           <h4>Envio condicional inteligente</h4>
           <p>Envie o pr&oacute;ximo passo s&oacute; se o contato abriu (ou n&atilde;o abriu) o email anterior.</p>
         </div>
       </div>
-      <div class="dif-item">
+      <div class="dif-item fade-up">
         <div class="dif-check">&#10003;</div>
         <div>
           <h4>Melhor hor&aacute;rio por contato</h4>
           <p>O sistema calcula o hor&aacute;rio ideal de envio para cada pessoa baseado no hist&oacute;rico de aberturas.</p>
         </div>
       </div>
-      <div class="dif-item">
+      <div class="dif-item fade-up">
         <div class="dif-check">&#10003;</div>
         <div>
           <h4>Enriquecimento de leads com IA</h4>
           <p>Extraia emails de sites e a IA completa com nome, telefone, empresa e cargo automaticamente.</p>
         </div>
       </div>
-      <div class="dif-item">
+      <div class="dif-item fade-up">
         <div class="dif-check">&#10003;</div>
         <div>
           <h4>Gerenciador de email integrado</h4>
           <p>Inbox, enviados, lixeira e spam dentro do ConvertMail. Leia, responda e componha sem sair.</p>
         </div>
       </div>
-      <div class="dif-item">
+      <div class="dif-item fade-up">
         <div class="dif-check">&#10003;</div>
         <div>
           <h4>Kit de Marca aplicado por IA</h4>
           <p>Cores, fontes, tom de voz e assinatura aplicados automaticamente em cada email gerado.</p>
         </div>
       </div>
-      <div class="dif-item">
+      <div class="dif-item fade-up">
         <div class="dif-check">&#10003;</div>
         <div>
           <h4>Heatmap de engajamento</h4>
           <p>Descubra os melhores dias e hor&aacute;rios para enviar com o mapa de calor de aberturas.</p>
         </div>
       </div>
-      <div class="dif-item">
+      <div class="dif-item fade-up">
         <div class="dif-check">&#10003;</div>
         <div>
           <h4>Blacklist e descadastro autom&aacute;tico</h4>
           <p>P&aacute;gina de descadastro p&uacute;blica. Contatos removidos param sequ&ecirc;ncias automaticamente.</p>
         </div>
       </div>
-      <div class="dif-item">
+      <div class="dif-item fade-up">
         <div class="dif-check">&#10003;</div>
         <div>
           <h4>Re-envio inteligente</h4>
           <p>Reenvie campanhas para quem n&atilde;o abriu com novo assunto e aumente suas convers&otilde;es.</p>
         </div>
       </div>
-      <div class="dif-item">
+      <div class="dif-item fade-up">
         <div class="dif-check">&#10003;</div>
         <div>
           <h4>Classifica&ccedil;&atilde;o de respostas com IA</h4>
           <p>A IA classifica cada resposta: interessado, d&uacute;vida, n&atilde;o interessado ou pedido de remo&ccedil;&atilde;o.</p>
         </div>
       </div>
-      <div class="dif-item">
+      <div class="dif-item fade-up">
         <div class="dif-check">&#10003;</div>
         <div>
           <h4>Formul&aacute;rios de captura embut&iacute;veis</h4>
           <p>Cole um c&oacute;digo HTML no seu site e capture leads direto no CRM com tag autom&aacute;tica.</p>
         </div>
       </div>
-      <div class="dif-item">
+      <div class="dif-item fade-up">
         <div class="dif-check">&#10003;</div>
         <div>
           <h4>Spam score antes de enviar</h4>
           <p>Verifique se seu email pode cair no spam antes de disparar. An&aacute;lise de 0 a 100.</p>
         </div>
       </div>
-      <div class="dif-item">
+      <div class="dif-item fade-up">
         <div class="dif-check">&#10003;</div>
         <div>
           <h4>Preview responsivo</h4>
           <p>Visualize como seu email aparece em desktop, tablet e celular antes de enviar.</p>
         </div>
       </div>
-      <div class="dif-item">
+      <div class="dif-item fade-up">
         <div class="dif-check">&#10003;</div>
         <div>
           <h4>Verifica&ccedil;&atilde;o SPF/DKIM/DMARC</h4>
           <p>Verifique se seu dom&iacute;nio est&aacute; configurado corretamente para m&aacute;xima entregabilidade.</p>
         </div>
       </div>
-      <div class="dif-item">
+      <div class="dif-item fade-up">
         <div class="dif-check">&#10003;</div>
         <div>
           <h4>Warm-up de dom&iacute;nio</h4>
           <p>Aque&ccedil;a dom&iacute;nios novos gradualmente para evitar filtros de spam.</p>
         </div>
       </div>
-      <div class="dif-item">
+      <div class="dif-item fade-up">
         <div class="dif-check">&#10003;</div>
         <div>
           <h4>Notifica&ccedil;&otilde;es de leads quentes</h4>
           <p>Alertas em tempo real quando leads com score alto abrem seus emails ou clicam.</p>
         </div>
       </div>
-      <div class="dif-item">
+      <div class="dif-item fade-up">
         <div class="dif-check">&#10003;</div>
         <div>
           <h4>Rastreamento de receita (ROI)</h4>
           <p>Registre compras por contato e acompanhe o retorno real das suas campanhas.</p>
         </div>
       </div>
-      <div class="dif-item">
+      <div class="dif-item fade-up">
         <div class="dif-check">&#10003;</div>
         <div>
           <h4>M&uacute;ltiplas contas de email</h4>
           <p>Conecte v&aacute;rias contas IMAP/SMTP com teste de conex&atilde;o integrado.</p>
         </div>
       </div>
-      <div class="dif-item">
+      <div class="dif-item fade-up">
         <div class="dif-check">&#10003;</div>
         <div>
           <h4>Exporta&ccedil;&atilde;o completa (CSV)</h4>
@@ -1241,27 +1359,27 @@
 <!-- COMO FUNCIONA -->
 <section class="como-funciona">
   <div class="container">
-    <div class="section-header">
+    <div class="section-header fade-up">
       <div class="section-label">Como funciona</div>
-      <h2 class="section-title">Quatro passos para come&ccedil;ar a vender</h2>
+      <h2 class="section-title" style="color:var(--branco)">Quatro passos para come&ccedil;ar a vender</h2>
     </div>
     <div class="steps-grid">
-      <div class="step">
+      <div class="step fade-up">
         <div class="step-number">1</div>
         <h3>Importe ou prospecte</h3>
         <p>Suba seu CSV, prospecte leads em sites com IA, ou adicione manualmente. Defina nicho e tags.</p>
       </div>
-      <div class="step">
+      <div class="step fade-up">
         <div class="step-number">2</div>
         <h3>Configure sua marca</h3>
         <p>Crie seu Kit de Marca com cores, fontes, tom de voz e assinatura. A IA usa em cada email.</p>
       </div>
-      <div class="step">
+      <div class="step fade-up">
         <div class="step-number">3</div>
         <h3>Gere com IA e dispare</h3>
         <p>Escolha o tema, a IA gera o email completo. Envie imediato, agende, ou crie sequ&ecirc;ncias autom&aacute;ticas.</p>
       </div>
-      <div class="step">
+      <div class="step fade-up">
         <div class="step-number">4</div>
         <h3>Acompanhe e otimize</h3>
         <p>Dashboard com aberturas, cliques, lead scoring e heatmap. Identifique os leads quentes e feche mais vendas.</p>
@@ -1273,68 +1391,68 @@
 <!-- TUDO INCLUSO -->
 <section class="tudo-incluso">
   <div class="container">
-    <div class="section-header">
+    <div class="section-header fade-up">
       <div class="section-label">Plataforma completa</div>
       <h2 class="section-title">Substitua 8 ferramentas por uma</h2>
       <p class="section-sub center">Tudo que voc&ecirc; usa separado hoje, integrado em um &uacute;nico lugar.</p>
     </div>
     <div class="incluso-grid">
-      <div class="incluso-item">
+      <div class="incluso-item fade-up">
         <div class="incluso-icon">&#128231;</div>
         <h4>Email Marketing</h4>
         <p>Campanhas, templates, re-envio e envio ilimitado</p>
       </div>
-      <div class="incluso-item">
+      <div class="incluso-item fade-up">
         <div class="incluso-icon">&#129302;</div>
         <h4>IA Completa</h4>
         <p>Gera&ccedil;&atilde;o, classifica&ccedil;&atilde;o, spam score e assistente</p>
       </div>
-      <div class="incluso-item">
+      <div class="incluso-item fade-up">
         <div class="incluso-icon">&#128101;</div>
         <h4>CRM + Receita</h4>
         <p>Contatos, scoring, receita por contato e ROI</p>
       </div>
-      <div class="incluso-item">
+      <div class="incluso-item fade-up">
         <div class="incluso-icon">&#128260;</div>
         <h4>Automa&ccedil;&otilde;es</h4>
         <p>Sequ&ecirc;ncias com A/B, envio condicional e agendamento</p>
       </div>
-      <div class="incluso-item">
+      <div class="incluso-item fade-up">
         <div class="incluso-icon">&#128221;</div>
         <h4>Formul&aacute;rios de Captura</h4>
         <p>Crie formul&aacute;rios embut&iacute;veis e capture leads no seu site</p>
       </div>
-      <div class="incluso-item">
+      <div class="incluso-item fade-up">
         <div class="incluso-icon">&#128233;</div>
         <h4>Inbox Integrado</h4>
         <p>Leia, responda e gerencie emails sem sair do app</p>
       </div>
-      <div class="incluso-item">
+      <div class="incluso-item fade-up">
         <div class="incluso-icon">&#127777;</div>
         <h4>Warm-up</h4>
         <p>Aque&ccedil;a dom&iacute;nios novos para evitar spam</p>
       </div>
-      <div class="incluso-item">
+      <div class="incluso-item fade-up">
         <div class="incluso-icon">&#128270;</div>
         <h4>Spam Score + Preview</h4>
         <p>Verifique spam e visualize em desktop/mobile</p>
       </div>
-      <div class="incluso-item">
+      <div class="incluso-item fade-up">
         <div class="incluso-icon">&#128269;</div>
         <h4>Prospec&ccedil;&atilde;o</h4>
         <p>Captura de leads em sites com enriquecimento por IA</p>
       </div>
-      <div class="incluso-item">
+      <div class="incluso-item fade-up">
         <div class="incluso-icon">&#127912;</div>
         <h4>Kit de Marca</h4>
         <p>Cores, fontes, tom de voz e assinatura personalizada</p>
       </div>
-      <div class="incluso-item">
+      <div class="incluso-item fade-up">
         <div class="incluso-icon">&#128276;</div>
         <h4>Notifica&ccedil;&otilde;es</h4>
         <p>Alertas de leads quentes e cliques em tempo real</p>
       </div>
-      <div class="incluso-item">
+      <div class="incluso-item fade-up">
         <div class="incluso-icon">&#128200;</div>
         <h4>Analytics + DNS</h4>
         <p>Gr&aacute;ficos, receita, SPF/DKIM/DMARC e top campanhas</p>
@@ -1346,12 +1464,12 @@
 <!-- PRICING -->
 <section class="pricing" id="precos">
   <div class="container">
-    <div class="section-header">
+    <div class="section-header fade-up">
       <div class="section-label">Plano</div>
       <h2 class="section-title">Pre&ccedil;o &uacute;nico, tudo incluso</h2>
       <p class="section-sub center">Sem planos confusos. Um valor, todas as ferramentas. Sem limite de envios.</p>
     </div>
-    <div class="pricing-card">
+    <div class="pricing-card fade-up">
       <div class="pricing-header">
         <div class="pricing-badge">&#9733; MELHOR CUSTO-BENEF&Iacute;CIO DO MERCADO</div>
         <div class="plan-name">CONVERTMAIL PRO</div>
@@ -1393,12 +1511,12 @@
 <!-- FAQ -->
 <section class="faq" id="faq">
   <div class="container">
-    <div class="section-header">
+    <div class="section-header fade-up">
       <div class="section-label">D&uacute;vidas</div>
       <h2 class="section-title">Perguntas frequentes</h2>
     </div>
     <div class="faq-list">
-      <div class="faq-item">
+      <div class="faq-item fade-up">
         <button class="faq-question" onclick="this.parentElement.classList.toggle('open')">
           Preciso ter dom&iacute;nio verificado para enviar?
           <span class="faq-arrow">&#9660;</span>
@@ -1407,7 +1525,7 @@
           <p>Sim, voc&ecirc; precisa de um dom&iacute;nio verificado na Amazon SES ou Brevo. Ajudamos na configura&ccedil;&atilde;o inicial para garantir que seus emails cheguem na caixa de entrada.</p>
         </div>
       </div>
-      <div class="faq-item">
+      <div class="faq-item fade-up">
         <button class="faq-question" onclick="this.parentElement.classList.toggle('open')">
           Quantos emails posso enviar por m&ecirc;s?
           <span class="faq-arrow">&#9660;</span>
@@ -1416,7 +1534,7 @@
           <p>O ConvertMail n&atilde;o limita envios. A quantidade depende da quota do seu provedor de email (SES, Brevo, etc). Na Amazon SES, por exemplo, voc&ecirc; pode enviar milhares por dia a custos muito baixos.</p>
         </div>
       </div>
-      <div class="faq-item">
+      <div class="faq-item fade-up">
         <button class="faq-question" onclick="this.parentElement.classList.toggle('open')">
           A IA realmente gera o email inteiro?
           <span class="faq-arrow">&#9660;</span>
@@ -1425,7 +1543,7 @@
           <p>Sim. Voc&ecirc; define o nicho, tema, objetivo e tom de voz, e a IA gera o email completo em HTML com conte&uacute;do personalizado, j&aacute; aplicando as cores e fontes do seu Kit de Marca. Voc&ecirc; pode editar antes de enviar ou usar como est&aacute;.</p>
         </div>
       </div>
-      <div class="faq-item">
+      <div class="faq-item fade-up">
         <button class="faq-question" onclick="this.parentElement.classList.toggle('open')">
           O que &eacute; o envio condicional nas sequ&ecirc;ncias?
           <span class="faq-arrow">&#9660;</span>
@@ -1434,7 +1552,7 @@
           <p>&Eacute; a capacidade de enviar o pr&oacute;ximo email da sequ&ecirc;ncia apenas se o contato abriu (ou n&atilde;o abriu) o email anterior. Combinado com teste A/B, voc&ecirc; otimiza cada etapa do funil automaticamente.</p>
         </div>
       </div>
-      <div class="faq-item">
+      <div class="faq-item fade-up">
         <button class="faq-question" onclick="this.parentElement.classList.toggle('open')">
           Como funciona a prospec&ccedil;&atilde;o de leads?
           <span class="faq-arrow">&#9660;</span>
@@ -1443,7 +1561,7 @@
           <p>Voc&ecirc; insere a URL de um site e o sistema extrai todos os emails encontrados, podendo navegar at&eacute; 50 p&aacute;ginas. A IA ent&atilde;o enriquece os contatos, adicionando nome, telefone, empresa e cargo automaticamente.</p>
         </div>
       </div>
-      <div class="faq-item">
+      <div class="faq-item fade-up">
         <button class="faq-question" onclick="this.parentElement.classList.toggle('open')">
           Posso importar minha base de contatos atual?
           <span class="faq-arrow">&#9660;</span>
@@ -1452,7 +1570,7 @@
           <p>Sim, via upload de CSV. O sistema faz importa&ccedil;&atilde;o inteligente (upsert) &mdash; atualiza contatos existentes sem sobrescrever dados que voc&ecirc; j&aacute; tem, e adiciona novos ao CRM com lead scoring.</p>
         </div>
       </div>
-      <div class="faq-item">
+      <div class="faq-item fade-up">
         <button class="faq-question" onclick="this.parentElement.classList.toggle('open')">
           O que o gerenciador de email faz?
           <span class="faq-arrow">&#9660;</span>
@@ -1461,7 +1579,7 @@
           <p>&Eacute; uma caixa de email completa dentro do ConvertMail. Voc&ecirc; l&ecirc;, responde, encaminha e comp&otilde;e emails com anexos &mdash; sem precisar abrir outra ferramenta. Suporta m&uacute;ltiplas contas IMAP/SMTP com busca integrada.</p>
         </div>
       </div>
-      <div class="faq-item">
+      <div class="faq-item fade-up">
         <button class="faq-question" onclick="this.parentElement.classList.toggle('open')">
           O que &eacute; o Chat IA na plataforma?
           <span class="faq-arrow">&#9660;</span>
@@ -1470,7 +1588,7 @@
           <p>&Eacute; um assistente de intelig&ecirc;ncia artificial integrado no ConvertMail que responde suas d&uacute;vidas, ajuda a criar estrat&eacute;gias de email, analisa suas campanhas e sugere melhorias em tempo real. Al&eacute;m disso, a IA classifica automaticamente as respostas que voc&ecirc; recebe (interessado, d&uacute;vida, pedido de remo&ccedil;&atilde;o, etc).</p>
         </div>
       </div>
-      <div class="faq-item">
+      <div class="faq-item fade-up">
         <button class="faq-question" onclick="this.parentElement.classList.toggle('open')">
           O que &eacute; o re-envio para n&atilde;o abridores?
           <span class="faq-arrow">&#9660;</span>
@@ -1479,7 +1597,7 @@
           <p>Quando uma campanha tem taxa de abertura baixa, voc&ecirc; pode reenviar automaticamente para os contatos que n&atilde;o abriram, com um novo assunto. Isso pode aumentar em at&eacute; 30% o alcance da campanha sem precisar criar uma nova do zero.</p>
         </div>
       </div>
-      <div class="faq-item">
+      <div class="faq-item fade-up">
         <button class="faq-question" onclick="this.parentElement.classList.toggle('open')">
           Como funcionam os formul&aacute;rios de captura?
           <span class="faq-arrow">&#9660;</span>
@@ -1488,7 +1606,7 @@
           <p>Voc&ecirc; cria um formul&aacute;rio personalizado (cores, textos, bot&atilde;o) e o sistema gera um c&oacute;digo HTML para colar no seu site. Quando algu&eacute;m se cadastra, o contato vai direto para o CRM com tag autom&aacute;tica e pode ser inscrito automaticamente em uma sequ&ecirc;ncia de emails.</p>
         </div>
       </div>
-      <div class="faq-item">
+      <div class="faq-item fade-up">
         <button class="faq-question" onclick="this.parentElement.classList.toggle('open')">
           O que &eacute; o warm-up de dom&iacute;nio?
           <span class="faq-arrow">&#9660;</span>
@@ -1497,7 +1615,7 @@
           <p>Dom&iacute;nios novos que enviam muitos emails de uma vez s&atilde;o marcados como spam. O warm-up aumenta gradualmente o volume di&aacute;rio (ex: 10 &rarr; 15 &rarr; 22 &rarr; 33...) durante 14 a 60 dias, aquecendo sua reputa&ccedil;&atilde;o antes de enviar campanhas em massa.</p>
         </div>
       </div>
-      <div class="faq-item">
+      <div class="faq-item fade-up">
         <button class="faq-question" onclick="this.parentElement.classList.toggle('open')">
           Como funciona o spam score e o preview?
           <span class="faq-arrow">&#9660;</span>
@@ -1513,9 +1631,9 @@
 <!-- CTA FINAL -->
 <section class="cta-final">
   <div class="container">
-    <h2 class="section-title" style="color:var(--branco)">Chega de pagar caro por ferramentas separadas</h2>
-    <p>Email marketing + IA + CRM + formul&aacute;rios + warm-up + analytics + prospec&ccedil;&atilde;o &mdash; tudo em um s&oacute; lugar.<br>Comece agora e transforme contatos em vendas reais.</p>
-    <a href="https://pay.hotmart.com/P107032321Y?bid=1785942656081" class="btn-cta" style="padding:16px 48px;font-size:1.1rem" target="_blank">Assinar Agora &rarr;</a>
+    <h2 class="section-title fade-up" style="color:var(--branco)">Chega de pagar caro por ferramentas separadas</h2>
+    <p class="fade-up">Email marketing + IA + CRM + formul&aacute;rios + warm-up + analytics + prospec&ccedil;&atilde;o &mdash; tudo em um s&oacute; lugar.<br>Comece agora e transforme contatos em vendas reais.</p>
+    <a href="https://pay.hotmart.com/P107032321Y?bid=1785942656081" class="btn-cta fade-up" target="_blank">Assinar Agora &rarr;</a>
   </div>
 </section>
 
@@ -1523,7 +1641,7 @@
 <footer>
   <div class="container">
     <div class="footer-inner">
-      <div class="footer-logo"><img src="/static/logo-convertmail.png" alt="ConvertMail" style="height:60px;width:auto"></div>
+      <div><img src="/static/logo-convertmail.png" alt="ConvertMail" style="height:80px;width:auto"></div>
       <ul class="footer-links">
         <li><a href="#recursos">Recursos</a></li>
         <li><a href="#para-quem">Para Quem</a></li>
@@ -1569,28 +1687,79 @@
 </div>
 
 <script>
-window.addEventListener('scroll', () => {
+/* Nav scroll */
+window.addEventListener('scroll', function() {
   document.getElementById('mainNav').classList.toggle('scrolled', window.scrollY > 10);
 });
-document.querySelectorAll('a[href^="#"]').forEach(a => {
-  a.addEventListener('click', e => {
-    const t = document.querySelector(a.getAttribute('href'));
+
+/* Smooth scroll */
+document.querySelectorAll('a[href^="#"]').forEach(function(a) {
+  a.addEventListener('click', function(e) {
+    var t = document.querySelector(a.getAttribute('href'));
     if (t) { e.preventDefault(); t.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
   });
 });
 
+/* Fade-in on scroll */
+(function() {
+  var els = document.querySelectorAll('.fade-up');
+  var observer = new IntersectionObserver(function(entries) {
+    entries.forEach(function(entry, i) {
+      if (entry.isIntersecting) {
+        var siblings = entry.target.parentElement.querySelectorAll('.fade-up');
+        var idx = Array.prototype.indexOf.call(siblings, entry.target);
+        setTimeout(function() { entry.target.classList.add('visible'); }, idx * 80);
+        observer.unobserve(entry.target);
+      }
+    });
+  }, { threshold: 0.08, rootMargin: '0px 0px -40px 0px' });
+  els.forEach(function(el) { observer.observe(el); });
+})();
+
+/* CountUp animation */
+(function() {
+  var nums = document.querySelectorAll('.stat-number[data-target]');
+  var observed = false;
+  var observer = new IntersectionObserver(function(entries) {
+    entries.forEach(function(entry) {
+      if (entry.isIntersecting && !observed) {
+        observed = true;
+        nums.forEach(function(el) {
+          var target = parseInt(el.getAttribute('data-target'));
+          var suffix = el.getAttribute('data-suffix') || '';
+          if (target === 0) { el.textContent = '0' + suffix; return; }
+          var duration = 1800;
+          var start = 0;
+          var startTime = null;
+          function animate(ts) {
+            if (!startTime) startTime = ts;
+            var progress = Math.min((ts - startTime) / duration, 1);
+            var eased = 1 - Math.pow(1 - progress, 3);
+            var current = Math.round(eased * target);
+            el.textContent = current + suffix;
+            if (progress < 1) requestAnimationFrame(animate);
+          }
+          requestAnimationFrame(animate);
+        });
+        observer.disconnect();
+      }
+    });
+  }, { threshold: 0.3 });
+  nums.forEach(function(el) { observer.observe(el); });
+})();
+
 /* Chat IA */
 (function() {
-  const fab = document.getElementById('chatFab');
-  const tooltip = document.getElementById('chatTooltip');
-  const win = document.getElementById('chatWindow');
-  const closeBtn = document.getElementById('chatClose');
-  const msgs = document.getElementById('chatMessages');
-  const input = document.getElementById('chatInput');
-  const sendBtn = document.getElementById('chatSend');
-  const sugs = document.getElementById('chatSuggestions');
-  let historico = [];
-  let sending = false;
+  var fab = document.getElementById('chatFab');
+  var tooltip = document.getElementById('chatTooltip');
+  var win = document.getElementById('chatWindow');
+  var closeBtn = document.getElementById('chatClose');
+  var msgs = document.getElementById('chatMessages');
+  var input = document.getElementById('chatInput');
+  var sendBtn = document.getElementById('chatSend');
+  var sugs = document.getElementById('chatSuggestions');
+  var historico = [];
+  var sending = false;
 
   function openChat() {
     win.classList.add('open');
@@ -1609,7 +1778,7 @@ document.querySelectorAll('a[href^="#"]').forEach(a => {
   closeBtn.addEventListener('click', closeChat);
 
   function addMsg(text, role) {
-    const div = document.createElement('div');
+    var div = document.createElement('div');
     div.className = 'chat-msg ' + role;
     div.textContent = text;
     msgs.appendChild(div);
@@ -1627,15 +1796,15 @@ document.querySelectorAll('a[href^="#"]').forEach(a => {
     historico.push({ role: 'user', content: texto });
     input.value = '';
 
-    const typing = addMsg('Digitando...', 'typing');
+    var typing = addMsg('Digitando...', 'typing');
 
     try {
-      const resp = await fetch('/ia/chat-landing', {
+      var resp = await fetch('/ia/chat-landing', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ mensagem: texto, historico: historico.slice(-10) })
       });
-      const data = await resp.json();
+      var data = await resp.json();
       typing.remove();
 
       if (data.erro) {
@@ -1654,10 +1823,10 @@ document.querySelectorAll('a[href^="#"]').forEach(a => {
     input.focus();
   }
 
-  sendBtn.addEventListener('click', () => enviar(input.value));
-  input.addEventListener('keydown', e => { if (e.key === 'Enter') enviar(input.value); });
-  sugs.querySelectorAll('.chat-sug').forEach(btn => {
-    btn.addEventListener('click', () => enviar(btn.dataset.msg));
+  sendBtn.addEventListener('click', function() { enviar(input.value); });
+  input.addEventListener('keydown', function(e) { if (e.key === 'Enter') enviar(input.value); });
+  sugs.querySelectorAll('.chat-sug').forEach(function(btn) {
+    btn.addEventListener('click', function() { enviar(btn.dataset.msg); });
   });
 })();
 </script>
