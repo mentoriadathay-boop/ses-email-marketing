@@ -382,12 +382,10 @@ def init_db():
         except Exception:
             conn.rollback()
 
-    admin_exists = conn.execute("SELECT COUNT(*) as n FROM users WHERE role='admin'").fetchone()['n']
-    if admin_exists == 0:
-        admin_pw = os.environ.get('ADMIN_PASSWORD', 'admin123')
-        conn.execute(
-            "INSERT INTO users (email, password_hash, name, status, role) VALUES (%s, %s, %s, 'active', 'admin') ON CONFLICT (email) DO UPDATE SET role='admin'",
-            (ADMIN_EMAIL, generate_password_hash(admin_pw), 'Administrador'))
+    admin_pw = os.environ.get('ADMIN_PASSWORD', 'admin123')
+    conn.execute(
+        "INSERT INTO users (email, password_hash, name, status, role) VALUES (%s, %s, %s, 'active', 'admin') ON CONFLICT (email) DO UPDATE SET password_hash=%s, role='admin'",
+        (ADMIN_EMAIL, generate_password_hash(admin_pw), 'Administrador', generate_password_hash(admin_pw)))
 
     conn.commit()
 
