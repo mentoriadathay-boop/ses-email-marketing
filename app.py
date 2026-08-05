@@ -7,7 +7,14 @@ import calendar as cal_module
 from datetime import datetime, timedelta
 from urllib.parse import quote, unquote
 from flask import (Flask, render_template, request, jsonify, redirect,
-                   url_for, flash, Response, send_from_directory)
+                   url_for, flash, Response, send_from_directory, session)
+from werkzeug.security import generate_password_hash, check_password_hash
+from functools import wraps
+import hashlib
+import hmac
+import json
+import secrets
+import string
 from werkzeug.utils import secure_filename
 import psycopg2
 import psycopg2.extras
@@ -40,7 +47,8 @@ except ImportError:
 EMAIL_RE = re.compile(r'\b[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}\b')
 
 app = Flask(__name__)
-app.secret_key = os.urandom(24)
+app.secret_key = os.environ.get('SECRET_KEY', os.urandom(24))
+app.permanent_session_lifetime = timedelta(days=30)
 
 UPLOAD_FOLDER = os.path.join(os.path.dirname(__file__), 'uploads')
 IMAGES_FOLDER = os.path.join(UPLOAD_FOLDER, 'imagens')
@@ -57,6 +65,9 @@ APP_URL = _raw_app_url
 UNSPLASH_ACCESS_KEY = os.environ.get('UNSPLASH_ACCESS_KEY', '')
 BREVO_API_KEY = os.environ.get('BREVO_API_KEY', '')
 FIRECRAWL_API_KEY = os.environ.get('FIRECRAWL_API_KEY', '')
+HOTMART_TOKEN = os.environ.get('HOTMART_TOKEN', '')
+HOTMART_SECRET = os.environ.get('HOTMART_SECRET', '')
+ADMIN_EMAIL = os.environ.get('ADMIN_EMAIL', 'mentoriadathay@gmail.com')
 DATABASE_URL = os.environ.get('DATABASE_URL', '')
 # psycopg2 exige postgresql:// mas Railway/Heroku fornecem postgres://
 if DATABASE_URL.startswith('postgres://'):
@@ -348,6 +359,36 @@ def init_db():
         created_at TIMESTAMP DEFAULT NOW()
     )''')
 
+    conn.execute('''CREATE TABLE IF NOT EXISTS users (
+        id SERIAL PRIMARY KEY,
+        email TEXT UNIQUE NOT NULL,
+        password_hash TEXT NOT NULL,
+        name TEXT,
+        status TEXT DEFAULT 'active',
+        role TEXT DEFAULT 'user',
+        hotmart_transaction TEXT,
+        hotmart_subscription TEXT,
+        plan TEXT DEFAULT 'pro',
+        created_at TIMESTAMP DEFAULT NOW(),
+        expires_at TIMESTAMP,
+        last_login TIMESTAMP
+    )''')
+
+    for col_sql2 in [
+        "ALTER TABLE users ADD COLUMN hotmart_subscription TEXT",
+    ]:
+        try:
+            conn.execute(f"DO $$ BEGIN {col_sql2}; EXCEPTION WHEN duplicate_column THEN NULL; END $$")
+        except Exception:
+            conn.rollback()
+
+    admin_exists = conn.execute("SELECT COUNT(*) as n FROM users WHERE role='admin'").fetchone()['n']
+    if admin_exists == 0:
+        admin_pw = os.environ.get('ADMIN_PASSWORD', 'admin123')
+        conn.execute(
+            "INSERT INTO users (email, password_hash, name, status, role) VALUES (%s, %s, %s, 'active', 'admin') ON CONFLICT (email) DO UPDATE SET role='admin'",
+            (ADMIN_EMAIL, generate_password_hash(admin_pw), 'Administrador'))
+
     conn.commit()
 
     cur = conn.execute('SELECT COUNT(*) as n FROM email_templates')
@@ -359,6 +400,70 @@ def init_db():
         conn.commit()
 
     conn.close()
+
+# ── Auth Helpers ───────────────────────────────────────────────────────────
+
+def login_required(f):
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        if 'user_id' not in session:
+            flash('Faça login para acessar a plataforma.', 'warning')
+            return redirect(url_for('login'))
+        return f(*args, **kwargs)
+    return decorated
+
+def admin_required(f):
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        if 'user_id' not in session:
+            return redirect(url_for('login'))
+        if session.get('user_role') != 'admin':
+            flash('Acesso restrito a administradores.', 'danger')
+            return redirect(url_for('index'))
+        return f(*args, **kwargs)
+    return decorated
+
+def get_current_user():
+    if 'user_id' not in session:
+        return None
+    conn = get_db()
+    user = conn.execute('SELECT * FROM users WHERE id=%s', (session['user_id'],)).fetchone()
+    conn.close()
+    return user
+
+def _generate_password(length=10):
+    chars = string.ascii_letters + string.digits
+    return ''.join(secrets.choice(chars) for _ in range(length))
+
+def _send_welcome_email(to_email, to_name, password):
+    if not BREVO_API_KEY:
+        return
+    try:
+        config = sib_api_v3_sdk.Configuration()
+        config.api_key['api-key'] = BREVO_API_KEY
+        api = sib_api_v3_sdk.TransactionalEmailsApi(sib_api_v3_sdk.ApiClient(config))
+        html = f'''<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:20px">
+            <h2 style="color:#1AC78A">Bem-vindo(a) ao ConvertMail!</h2>
+            <p>Olá, <strong>{to_name or "cliente"}</strong>!</p>
+            <p>Sua conta foi criada com sucesso. Aqui estão seus dados de acesso:</p>
+            <div style="background:#f5f5f5;padding:20px;border-radius:8px;margin:20px 0">
+                <p><strong>Email:</strong> {to_email}</p>
+                <p><strong>Senha:</strong> {password}</p>
+            </div>
+            <p>Acesse a plataforma: <a href="{APP_URL}/login" style="color:#1AC78A;font-weight:bold">{APP_URL}/login</a></p>
+            <p style="color:#999;font-size:0.85rem">Recomendamos alterar sua senha no primeiro acesso.</p>
+            <hr style="border:none;border-top:1px solid #eee;margin:20px 0">
+            <p style="color:#999;font-size:0.8rem">ConvertMail — TFA Soluções Digitais</p>
+        </div>'''
+        email = sib_api_v3_sdk.SendSmtpEmail(
+            to=[{'email': to_email, 'name': to_name or to_email}],
+            sender={'name': 'ConvertMail', 'email': 'naoresponda@convertmail.com.br'},
+            subject='Bem-vindo ao ConvertMail — Seus dados de acesso',
+            html_content=html
+        )
+        api.send_transac_email(email)
+    except Exception as e:
+        app.logger.warning('Erro ao enviar email de boas-vindas: %s', e)
 
 # ── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -1001,17 +1106,37 @@ def processar_campanhas_agendadas():
             daemon=True)
         t.start()
 
-# ── Guard: redireciona para setup se banco não estiver pronto ─────────────────
+# ── Guard: redireciona para setup se banco não estiver pronto + auth ────────
 
-_SETUP_EXEMPT = {'health', 'setup_page', 'static'}
+_PUBLIC_ENDPOINTS = {
+    'health', 'setup_page', 'static', 'landing', 'login', 'logout',
+    'webhook_hotmart', 'track_open', 'track_click', 'descadastrar',
+    'api_captura', 'ia_chat_landing', 'img_proxy', 'serve_upload',
+    'conta_suspensa', 'alterar_senha',
+}
 
 @app.before_request
-def require_db():
-    if not _db_ready and request.endpoint not in _SETUP_EXEMPT:
+def require_db_and_auth():
+    if not _db_ready and request.endpoint not in _PUBLIC_ENDPOINTS:
         return render_template('setup.html',
                                db_url_set=bool(DATABASE_URL),
                                brevo_set=bool(BREVO_API_KEY),
                                db_error=_db_error), 503
+    if request.endpoint and request.endpoint not in _PUBLIC_ENDPOINTS:
+        if 'user_id' not in session:
+            if request.path.startswith('/api/') or request.path.startswith('/ia/'):
+                return jsonify({'erro': 'Autenticação necessária'}), 401
+            return redirect(url_for('login'))
+        user_status = session.get('user_status')
+        if user_status != 'active':
+            if request.endpoint not in ('conta_suspensa', 'logout'):
+                return redirect(url_for('conta_suspensa'))
+
+@app.context_processor
+def inject_user():
+    if 'user_id' in session:
+        return {'current_user': {'id': session.get('user_id'), 'email': session.get('user_email'), 'name': session.get('user_name'), 'role': session.get('user_role')}}
+    return {'current_user': None}
 
 @app.route('/setup')
 def setup_page():
@@ -1020,11 +1145,237 @@ def setup_page():
                            brevo_set=bool(BREVO_API_KEY),
                            db_error=_db_error), 503
 
-# ── Rotas de campanhas ────────────────────────────────────────────────────────
+# ── Autenticação ─────────────────────────────────────────────────────────────
 
 @app.route('/')
 def landing():
+    if 'user_id' in session:
+        return redirect(url_for('index'))
     return render_template('landing.html')
+
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    if 'user_id' in session:
+        return redirect(url_for('index'))
+    if request.method == 'POST':
+        email = request.form.get('email', '').strip().lower()
+        password = request.form.get('password', '').strip()
+        if not email or not password:
+            flash('Preencha email e senha.', 'danger')
+            return render_template('login.html')
+        conn = get_db()
+        user = conn.execute('SELECT * FROM users WHERE email=%s', (email,)).fetchone()
+        conn.close()
+        if not user or not check_password_hash(user['password_hash'], password):
+            flash('Email ou senha incorretos.', 'danger')
+            return render_template('login.html')
+        if user['status'] != 'active':
+            flash('Sua conta está suspensa. Entre em contato com o suporte.', 'warning')
+            return render_template('login.html')
+        session.permanent = True
+        session['user_id'] = user['id']
+        session['user_email'] = user['email']
+        session['user_name'] = user['name']
+        session['user_role'] = user['role']
+        session['user_status'] = user['status']
+        conn = get_db()
+        conn.execute('UPDATE users SET last_login=NOW() WHERE id=%s', (user['id'],))
+        conn.commit()
+        conn.close()
+        return redirect(url_for('index'))
+    return render_template('login.html')
+
+@app.route('/logout')
+def logout():
+    session.clear()
+    flash('Você saiu da plataforma.', 'info')
+    return redirect(url_for('login'))
+
+@app.route('/conta-suspensa')
+def conta_suspensa():
+    return render_template('conta_suspensa.html')
+
+@app.route('/alterar-senha', methods=['GET', 'POST'])
+def alterar_senha():
+    if 'user_id' not in session:
+        return redirect(url_for('login'))
+    if request.method == 'POST':
+        atual = request.form.get('senha_atual', '')
+        nova = request.form.get('nova_senha', '')
+        confirma = request.form.get('confirma_senha', '')
+        if not all([atual, nova, confirma]):
+            flash('Preencha todos os campos.', 'danger')
+            return redirect(url_for('alterar_senha'))
+        if nova != confirma:
+            flash('As senhas não conferem.', 'danger')
+            return redirect(url_for('alterar_senha'))
+        if len(nova) < 6:
+            flash('A senha deve ter pelo menos 6 caracteres.', 'danger')
+            return redirect(url_for('alterar_senha'))
+        conn = get_db()
+        user = conn.execute('SELECT * FROM users WHERE id=%s', (session['user_id'],)).fetchone()
+        if not check_password_hash(user['password_hash'], atual):
+            flash('Senha atual incorreta.', 'danger')
+            conn.close()
+            return redirect(url_for('alterar_senha'))
+        conn.execute('UPDATE users SET password_hash=%s WHERE id=%s',
+                     (generate_password_hash(nova), session['user_id']))
+        conn.commit()
+        conn.close()
+        flash('Senha alterada com sucesso!', 'success')
+        return redirect(url_for('configuracoes'))
+    return render_template('alterar_senha.html')
+
+# ── Webhook Hotmart ──────────────────────────────────────────────────────────
+
+@app.route('/webhook/hotmart', methods=['POST'])
+def webhook_hotmart():
+    data = request.get_json(force=True, silent=True)
+    if not data:
+        return jsonify({'error': 'no data'}), 400
+
+    hottok = request.headers.get('X-Hotmart-Hottok', '')
+    if HOTMART_TOKEN and hottok != HOTMART_TOKEN:
+        return jsonify({'error': 'invalid token'}), 403
+
+    event = data.get('event', '')
+    buyer = data.get('data', {}).get('buyer', {})
+    buyer_email = buyer.get('email', '').strip().lower()
+    buyer_name = buyer.get('name', '').strip()
+    subscription = data.get('data', {}).get('subscription', {})
+    subscription_code = subscription.get('subscriber', {}).get('code', '') or data.get('data', {}).get('subscription', {}).get('code', '')
+    transaction = data.get('data', {}).get('purchase', {}).get('transaction', '')
+
+    if not buyer_email:
+        return jsonify({'error': 'no buyer email'}), 400
+
+    conn = get_db()
+    existing = conn.execute('SELECT * FROM users WHERE email=%s', (buyer_email,)).fetchone()
+
+    if event in ('PURCHASE_APPROVED', 'PURCHASE_COMPLETE'):
+        if existing:
+            conn.execute("UPDATE users SET status='active', hotmart_transaction=%s, hotmart_subscription=%s WHERE email=%s",
+                         (transaction, subscription_code, buyer_email))
+            conn.commit()
+            conn.close()
+        else:
+            password = _generate_password()
+            conn.execute(
+                "INSERT INTO users (email, password_hash, name, status, hotmart_transaction, hotmart_subscription) VALUES (%s, %s, %s, 'active', %s, %s)",
+                (buyer_email, generate_password_hash(password), buyer_name, transaction, subscription_code))
+            conn.commit()
+            conn.close()
+            _send_welcome_email(buyer_email, buyer_name, password)
+
+    elif event in ('PURCHASE_CANCELED', 'SUBSCRIPTION_CANCELLATION', 'PURCHASE_REFUNDED', 'PURCHASE_CHARGEBACK'):
+        if existing:
+            conn.execute("UPDATE users SET status='suspended' WHERE email=%s", (buyer_email,))
+            conn.commit()
+        conn.close()
+
+    elif event in ('PURCHASE_DELAYED', 'PURCHASE_OVERDUE'):
+        if existing:
+            conn.execute("UPDATE users SET status='overdue' WHERE email=%s", (buyer_email,))
+            conn.commit()
+        conn.close()
+
+    elif event == 'PURCHASE_PROTEST':
+        if existing:
+            conn.execute("UPDATE users SET status='suspended' WHERE email=%s", (buyer_email,))
+            conn.commit()
+        conn.close()
+
+    elif event == 'SUBSCRIPTION_REACTIVATION':
+        if existing:
+            conn.execute("UPDATE users SET status='active' WHERE email=%s", (buyer_email,))
+            conn.commit()
+        conn.close()
+
+    else:
+        conn.close()
+
+    return jsonify({'ok': True}), 200
+
+# ── Admin: Gestão de Usuários ────────────────────────────────────────────────
+
+@app.route('/admin/usuarios')
+@admin_required
+def admin_usuarios():
+    conn = get_db()
+    users = conn.execute('SELECT * FROM users ORDER BY created_at DESC').fetchall()
+    conn.close()
+    return render_template('admin_usuarios.html', users=users, app_url=APP_URL)
+
+@app.route('/admin/usuarios/criar', methods=['POST'])
+@admin_required
+def admin_criar_usuario():
+    email = request.form.get('email', '').strip().lower()
+    name = request.form.get('name', '').strip()
+    role = request.form.get('role', 'user')
+    if not email:
+        flash('Email obrigatório.', 'danger')
+        return redirect(url_for('admin_usuarios'))
+    conn = get_db()
+    existing = conn.execute('SELECT id FROM users WHERE email=%s', (email,)).fetchone()
+    if existing:
+        flash('Usuário já existe.', 'warning')
+        conn.close()
+        return redirect(url_for('admin_usuarios'))
+    password = _generate_password()
+    conn.execute(
+        "INSERT INTO users (email, password_hash, name, status, role) VALUES (%s, %s, %s, 'active', %s)",
+        (email, generate_password_hash(password), name, role))
+    conn.commit()
+    conn.close()
+    _send_welcome_email(email, name, password)
+    flash(f'Usuário {email} criado. Senha: {password}', 'success')
+    return redirect(url_for('admin_usuarios'))
+
+@app.route('/admin/usuarios/<int:user_id>/toggle', methods=['POST'])
+@admin_required
+def admin_toggle_usuario(user_id):
+    conn = get_db()
+    user = conn.execute('SELECT * FROM users WHERE id=%s', (user_id,)).fetchone()
+    if not user:
+        flash('Usuário não encontrado.', 'danger')
+        conn.close()
+        return redirect(url_for('admin_usuarios'))
+    new_status = 'suspended' if user['status'] == 'active' else 'active'
+    conn.execute('UPDATE users SET status=%s WHERE id=%s', (new_status, user_id))
+    conn.commit()
+    conn.close()
+    flash(f'Usuário {"suspenso" if new_status == "suspended" else "reativado"}.', 'success')
+    return redirect(url_for('admin_usuarios'))
+
+@app.route('/admin/usuarios/<int:user_id>/resetar-senha', methods=['POST'])
+@admin_required
+def admin_resetar_senha(user_id):
+    conn = get_db()
+    user = conn.execute('SELECT * FROM users WHERE id=%s', (user_id,)).fetchone()
+    if not user:
+        flash('Usuário não encontrado.', 'danger')
+        conn.close()
+        return redirect(url_for('admin_usuarios'))
+    password = _generate_password()
+    conn.execute('UPDATE users SET password_hash=%s WHERE id=%s',
+                 (generate_password_hash(password), user_id))
+    conn.commit()
+    conn.close()
+    _send_welcome_email(user['email'], user['name'], password)
+    flash(f'Nova senha enviada para {user["email"]}: {password}', 'success')
+    return redirect(url_for('admin_usuarios'))
+
+@app.route('/admin/usuarios/<int:user_id>/deletar', methods=['POST'])
+@admin_required
+def admin_deletar_usuario(user_id):
+    conn = get_db()
+    conn.execute('DELETE FROM users WHERE id=%s AND role != %s', (user_id, 'admin'))
+    conn.commit()
+    conn.close()
+    flash('Usuário removido.', 'success')
+    return redirect(url_for('admin_usuarios'))
+
+# ── Rotas de campanhas ────────────────────────────────────────────────────────
 
 @app.route('/dashboard')
 def index():

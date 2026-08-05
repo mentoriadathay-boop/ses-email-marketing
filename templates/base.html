@@ -131,12 +131,29 @@
       <a href="{{ url_for('configuracoes') }}" class="nav-link {% if request.endpoint == 'configuracoes' %}active{% endif %}">
         <i class="bi bi-gear"></i> Configuracoes
       </a>
+      <a href="{{ url_for('alterar_senha') }}" class="nav-link {% if request.endpoint == 'alterar_senha' %}active{% endif %}">
+        <i class="bi bi-key"></i> Alterar Senha
+      </a>
+      {% if current_user and current_user.role == 'admin' %}
+      <div style="border-top:1px solid #ffffff22;margin:8px 20px 4px;"></div>
+      <div style="padding:4px 20px 2px;font-size:.65rem;color:#ffffff55;text-transform:uppercase;letter-spacing:.08em;font-weight:700">Admin</div>
+      <a href="{{ url_for('admin_usuarios') }}" class="nav-link {% if 'admin' in (request.endpoint or '') %}active{% endif %}">
+        <i class="bi bi-people"></i> Usuarios
+      </a>
+      {% endif %}
+      <div style="border-top:1px solid #ffffff22;margin:8px 20px 4px;"></div>
+      <a href="{{ url_for('logout') }}" class="nav-link text-danger">
+        <i class="bi bi-box-arrow-left"></i> Sair
+      </a>
     </nav>
   </div>
 
   <div class="main-content">
-    <!-- Barra de notificações -->
-    <div class="d-flex justify-content-end mb-2" style="margin-top:-12px">
+    <!-- Barra superior -->
+    <div class="d-flex justify-content-end align-items-center gap-2 mb-2" style="margin-top:-12px">
+      {% if current_user %}
+      <span class="small text-muted"><i class="bi bi-person-circle me-1"></i>{{ current_user.email }}</span>
+      {% endif %}
       <div class="dropdown">
         <button class="btn btn-sm btn-light position-relative" data-bs-toggle="dropdown" id="notifBtn" style="border-radius:20px">
           <i class="bi bi-bell"></i>
