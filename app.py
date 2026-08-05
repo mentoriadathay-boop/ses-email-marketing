@@ -1112,7 +1112,7 @@ _PUBLIC_ENDPOINTS = {
     'health', 'setup_page', 'static', 'landing', 'login', 'logout',
     'webhook_hotmart', 'track_open', 'track_click', 'descadastrar',
     'api_captura', 'ia_chat_landing', 'img_proxy', 'serve_upload',
-    'conta_suspensa', 'alterar_senha',
+    'conta_suspensa', 'alterar_senha', 'esqueci_senha',
 }
 
 @app.before_request
@@ -1225,6 +1225,54 @@ def alterar_senha():
         flash('Senha alterada com sucesso!', 'success')
         return redirect(url_for('configuracoes'))
     return render_template('alterar_senha.html')
+
+@app.route('/esqueci-senha', methods=['GET', 'POST'])
+def esqueci_senha():
+    if request.method == 'POST':
+        email = request.form.get('email', '').strip().lower()
+        if not email:
+            flash('Informe seu email.', 'danger')
+            return render_template('esqueci_senha.html')
+        conn = get_db()
+        user = conn.execute('SELECT * FROM users WHERE email=%s', (email,)).fetchone()
+        if not user:
+            flash('Se esse email estiver cadastrado, você receberá uma nova senha.', 'info')
+            conn.close()
+            return render_template('esqueci_senha.html')
+        password = _generate_password()
+        conn.execute('UPDATE users SET password_hash=%s WHERE id=%s',
+                     (generate_password_hash(password), user['id']))
+        conn.commit()
+        conn.close()
+        if BREVO_API_KEY:
+            try:
+                config = sib_api_v3_sdk.Configuration()
+                config.api_key['api-key'] = BREVO_API_KEY
+                api = sib_api_v3_sdk.TransactionalEmailsApi(sib_api_v3_sdk.ApiClient(config))
+                html = f'''<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:20px">
+                    <h2 style="color:#1AC78A">Recuperação de Senha</h2>
+                    <p>Olá, <strong>{user["name"] or "cliente"}</strong>!</p>
+                    <p>Sua senha do ConvertMail foi redefinida. Aqui está sua nova senha:</p>
+                    <div style="background:#f5f5f5;padding:20px;border-radius:8px;margin:20px 0">
+                        <p><strong>Nova senha:</strong> {password}</p>
+                    </div>
+                    <p>Acesse a plataforma: <a href="{APP_URL}/login" style="color:#1AC78A;font-weight:bold">{APP_URL}/login</a></p>
+                    <p style="color:#999;font-size:0.85rem">Recomendamos alterar sua senha após o login.</p>
+                    <hr style="border:none;border-top:1px solid #eee;margin:20px 0">
+                    <p style="color:#999;font-size:0.8rem">ConvertMail — Email Marketing com IA</p>
+                </div>'''
+                smtp_email = sib_api_v3_sdk.SendSmtpEmail(
+                    to=[{'email': user['email'], 'name': user['name'] or user['email']}],
+                    sender={'name': 'ConvertMail', 'email': 'naoresponda@convertmail.com.br'},
+                    subject='ConvertMail — Sua nova senha',
+                    html_content=html
+                )
+                api.send_transac_email(smtp_email)
+            except Exception as e:
+                app.logger.warning('Erro ao enviar email de recuperação: %s', e)
+        flash('Se esse email estiver cadastrado, você receberá uma nova senha.', 'info')
+        return render_template('esqueci_senha.html')
+    return render_template('esqueci_senha.html')
 
 # ── Webhook Hotmart ──────────────────────────────────────────────────────────
 
