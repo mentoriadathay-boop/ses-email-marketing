@@ -1,0 +1,29 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <div>
+    <h2 class="fw-bold"><i class="bi bi-key me-2"></i>Alterar Senha</h2>
+    <p class="text-muted mb-0 small">Atualize sua senha de acesso à plataforma</p>
+  </div>
+</div>
+
+<div class="card p-4" style="max-width:480px">
+  <form method="POST" action="{{ url_for('alterar_senha') }}">
+    <div class="mb-3">
+      <label class="form-label small fw-semibold">Senha atual</label>
+      <input type="password" name="senha_atual" class="form-control" required>
+    </div>
+    <div class="mb-3">
+      <label class="form-label small fw-semibold">Nova senha</label>
+      <input type="password" name="nova_senha" class="form-control" minlength="6" required>
+      <div class="form-text">Mínimo 6 caracteres.</div>
+    </div>
+    <div class="mb-3">
+      <label class="form-label small fw-semibold">Confirmar nova senha</label>
+      <input type="password" name="confirma_senha" class="form-control" minlength="6" required>
+    </div>
+    <button type="submit" class="btn btn-primary"><i class="bi bi-check-lg me-1"></i>Alterar Senha</button>
+    <a href="{{ url_for('configuracoes') }}" class="btn btn-outline-secondary ms-2">Cancelar</a>
+  </form>
+</div>
+{% endblock %}

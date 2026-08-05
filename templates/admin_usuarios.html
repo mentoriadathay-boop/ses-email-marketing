@@ -1,0 +1,161 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <div>
+    <h2 class="fw-bold"><i class="bi bi-people me-2"></i>Gestão de Usuários</h2>
+    <p class="text-muted mb-0 small">Gerencie os assinantes da plataforma ConvertMail</p>
+  </div>
+  <button class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#modalCriar"><i class="bi bi-plus-lg me-1"></i>Novo Usuário</button>
+</div>
+
+<!-- Resumo -->
+<div class="row g-3 mb-4">
+  {% set total = users|length %}
+  {% set ativos = users|selectattr('status', 'equalto', 'active')|list|length %}
+  {% set suspensos = users|selectattr('status', 'equalto', 'suspended')|list|length %}
+  {% set pendentes = total - ativos - suspensos %}
+  <div class="col-md-3">
+    <div class="stat-card" style="background:linear-gradient(135deg,#4361ee,#3451d1)">
+      <div style="font-size:1.8rem;font-weight:800">{{ total }}</div>
+      <div class="small opacity-75">Total de Usuários</div>
+    </div>
+  </div>
+  <div class="col-md-3">
+    <div class="stat-card" style="background:linear-gradient(135deg,#22c55e,#16a34a)">
+      <div style="font-size:1.8rem;font-weight:800">{{ ativos }}</div>
+      <div class="small opacity-75">Ativos</div>
+    </div>
+  </div>
+  <div class="col-md-3">
+    <div class="stat-card" style="background:linear-gradient(135deg,#ef4444,#dc2626)">
+      <div style="font-size:1.8rem;font-weight:800">{{ suspensos }}</div>
+      <div class="small opacity-75">Suspensos</div>
+    </div>
+  </div>
+  <div class="col-md-3">
+    <div class="stat-card" style="background:linear-gradient(135deg,#f59e0b,#d97706)">
+      <div style="font-size:1.8rem;font-weight:800">{{ pendentes }}</div>
+      <div class="small opacity-75">Pendentes/Outros</div>
+    </div>
+  </div>
+</div>
+
+<!-- Tabela de usuários -->
+<div class="card p-3">
+  <div class="table-responsive">
+    <table class="table table-sm align-middle">
+      <thead>
+        <tr>
+          <th>Usuário</th>
+          <th>Status</th>
+          <th>Plano</th>
+          <th>Tipo</th>
+          <th>Cadastro</th>
+          <th>Último Login</th>
+          <th>Hotmart</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for u in users %}
+        <tr>
+          <td>
+            <div class="fw-semibold">{{ u.name or '—' }}</div>
+            <div class="text-muted small">{{ u.email }}</div>
+          </td>
+          <td>
+            {% if u.status == 'active' %}
+              <span class="badge bg-success">Ativo</span>
+            {% elif u.status == 'suspended' %}
+              <span class="badge bg-danger">Suspenso</span>
+            {% elif u.status == 'overdue' %}
+              <span class="badge bg-warning text-dark">Inadimplente</span>
+            {% else %}
+              <span class="badge bg-secondary">{{ u.status }}</span>
+            {% endif %}
+          </td>
+          <td><span class="badge bg-primary">{{ u.plan or 'pro' }}</span></td>
+          <td>
+            {% if u.role == 'admin' %}
+              <span class="badge bg-dark"><i class="bi bi-shield-check me-1"></i>Admin</span>
+            {% else %}
+              <span class="text-muted small">Usuário</span>
+            {% endif %}
+          </td>
+          <td class="small text-muted">{{ u.created_at.strftime('%d/%m/%Y') if u.created_at else '—' }}</td>
+          <td class="small text-muted">{{ u.last_login.strftime('%d/%m/%Y %H:%M') if u.last_login else 'Nunca' }}</td>
+          <td class="small text-muted">{{ u.hotmart_transaction[:12] + '...' if u.hotmart_transaction and u.hotmart_transaction|length > 12 else u.hotmart_transaction or '—' }}</td>
+          <td>
+            <div class="d-flex gap-1">
+              {% if u.role != 'admin' %}
+              <form method="POST" action="{{ url_for('admin_toggle_usuario', user_id=u.id) }}" class="d-inline">
+                <button class="btn btn-sm btn-outline-{{ 'danger' if u.status == 'active' else 'success' }}" title="{{ 'Suspender' if u.status == 'active' else 'Reativar' }}">
+                  <i class="bi bi-{{ 'pause-circle' if u.status == 'active' else 'play-circle' }}"></i>
+                </button>
+              </form>
+              <form method="POST" action="{{ url_for('admin_resetar_senha', user_id=u.id) }}" class="d-inline"
+                    onsubmit="return confirm('Resetar a senha deste usuário?')">
+                <button class="btn btn-sm btn-outline-warning" title="Resetar Senha"><i class="bi bi-key"></i></button>
+              </form>
+              <form method="POST" action="{{ url_for('admin_deletar_usuario', user_id=u.id) }}" class="d-inline"
+                    onsubmit="return confirm('Remover este usuário permanentemente?')">
+                <button class="btn btn-sm btn-outline-danger" title="Remover"><i class="bi bi-trash"></i></button>
+              </form>
+              {% else %}
+              <span class="text-muted small">—</span>
+              {% endif %}
+            </div>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Info Webhook -->
+<div class="card p-3 mt-4" style="background:#eef2ff;border:1px solid #c7d2fe">
+  <h6 class="fw-bold text-primary"><i class="bi bi-info-circle me-2"></i>Integração Hotmart</h6>
+  <ul class="small mb-0 text-muted">
+    <li><strong>URL do Webhook:</strong> <code>{{ app_url }}/webhook/hotmart</code></li>
+    <li>Configure no Hotmart: Ferramentas > Webhook > Adicionar URL acima</li>
+    <li>Eventos suportados: PURCHASE_APPROVED, SUBSCRIPTION_CANCELLATION, PURCHASE_REFUNDED, PURCHASE_DELAYED, SUBSCRIPTION_REACTIVATION</li>
+    <li>Defina <code>HOTMART_TOKEN</code> nas variáveis de ambiente para validar o hottok</li>
+  </ul>
+</div>
+
+<!-- Modal criar usuário -->
+<div class="modal fade" id="modalCriar" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <form method="POST" action="{{ url_for('admin_criar_usuario') }}">
+        <div class="modal-header"><h5 class="modal-title"><i class="bi bi-person-plus me-2"></i>Novo Usuário</h5><button class="btn-close" data-bs-dismiss="modal"></button></div>
+        <div class="modal-body">
+          <div class="mb-3">
+            <label class="form-label small fw-semibold">Email</label>
+            <input type="email" name="email" class="form-control" required>
+          </div>
+          <div class="mb-3">
+            <label class="form-label small fw-semibold">Nome</label>
+            <input type="text" name="name" class="form-control">
+          </div>
+          <div class="mb-3">
+            <label class="form-label small fw-semibold">Tipo</label>
+            <select name="role" class="form-select">
+              <option value="user">Usuário</option>
+              <option value="admin">Administrador</option>
+            </select>
+          </div>
+          <div class="alert alert-info small mb-0">
+            <i class="bi bi-info-circle me-1"></i>Uma senha será gerada automaticamente e enviada por email via Brevo.
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+          <button class="btn btn-primary" type="submit"><i class="bi bi-check-lg me-1"></i>Criar Usuário</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}
