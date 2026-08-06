@@ -15,6 +15,13 @@
     </h4>
     <small class="text-muted">{{ contact.email }}</small>
   </div>
+  {% set wa_num = contact.whatsapp or contact.phone or '' %}
+  {% if wa_num %}
+  <a href="https://wa.me/{{ wa_num | replace(' ','') | replace('(','') | replace(')','') | replace('-','') | replace('+','') }}"
+     target="_blank" class="btn btn-success btn-sm px-3 me-2">
+    <i class="bi bi-whatsapp me-1"></i>WhatsApp
+  </a>
+  {% endif %}
   <span class="badge fw-semibold px-3 py-2 fs-6"
         style="background:{{ lbl[2] }};color:{{ lbl[1] }}">
     {{ lbl[0] }} &mdash; {{ contact.current_score }} pts
@@ -22,126 +29,102 @@
 </div>
 
 <div class="row g-4">
-  <!-- Coluna esquerda: dados editáveis -->
-  <div class="col-lg-5">
-    {% set wa_num = contact.whatsapp or contact.phone or '' %}
-    {% if wa_num %}
-    <div class="card mb-3" style="border:1px solid #25D366">
-      <div class="card-body py-3 d-flex align-items-center justify-content-between">
-        <div>
-          <div class="fw-semibold small"><i class="bi bi-whatsapp text-success me-1"></i>WhatsApp</div>
-          <div class="text-muted" style="font-size:.8rem">{{ wa_num }}</div>
-        </div>
-        <a href="https://wa.me/{{ wa_num | replace(' ','') | replace('(','') | replace(')','') | replace('-','') | replace('+','') }}"
-           target="_blank" class="btn btn-success btn-sm px-3">
-          <i class="bi bi-whatsapp me-1"></i>Abrir Conversa
-        </a>
-      </div>
-    </div>
-    {% endif %}
+  <!-- Coluna principal: gestao do contato (ampla) -->
+  <div class="col-lg-8">
     <div class="card mb-4">
       <div class="card-body">
         <h6 class="fw-semibold mb-3"><i class="bi bi-person-lines-fill me-2 text-primary"></i>Dados do Contato</h6>
         <form method="POST">
-          <div class="mb-2">
-            <label class="form-label small fw-semibold">Nome</label>
-            <input type="text" name="name" class="form-control form-control-sm"
-                   value="{{ contact.name or '' }}">
-          </div>
-          <div class="mb-2">
-            <label class="form-label small fw-semibold">Telefone</label>
-            <input type="text" name="phone" class="form-control form-control-sm"
-                   value="{{ contact.phone or '' }}" placeholder="(11) 99999-9999">
-          </div>
-          <div class="mb-2">
-            <label class="form-label small fw-semibold"><i class="bi bi-whatsapp text-success me-1"></i>WhatsApp</label>
-            <div class="input-group input-group-sm">
-              <input type="text" name="whatsapp" class="form-control"
-                     value="{{ contact.whatsapp or '' }}" placeholder="5511999999999">
-              {% set wa_num = contact.whatsapp or contact.phone or '' %}
-              {% if wa_num %}
-              <a href="https://wa.me/{{ wa_num | replace(' ','') | replace('(','') | replace(')','') | replace('-','') | replace('+','') }}"
-                 target="_blank" class="btn btn-success" title="Abrir conversa no WhatsApp">
-                <i class="bi bi-whatsapp me-1"></i>Conversar
-              </a>
-              {% endif %}
+          <div class="row g-3">
+            <div class="col-md-6">
+              <label class="form-label small fw-semibold">Nome</label>
+              <input type="text" name="name" class="form-control form-control-sm"
+                     value="{{ contact.name or '' }}">
             </div>
-            <div class="form-text">Numero com DDI+DDD. Ex: 5511999999999</div>
+            <div class="col-md-6">
+              <label class="form-label small fw-semibold">Email</label>
+              <input type="email" class="form-control form-control-sm bg-light" value="{{ contact.email }}" disabled>
+            </div>
+            <div class="col-md-4">
+              <label class="form-label small fw-semibold">Telefone</label>
+              <input type="text" name="phone" class="form-control form-control-sm"
+                     value="{{ contact.phone or '' }}" placeholder="(11) 99999-9999">
+            </div>
+            <div class="col-md-4">
+              <label class="form-label small fw-semibold"><i class="bi bi-whatsapp text-success me-1"></i>WhatsApp</label>
+              <input type="text" name="whatsapp" class="form-control form-control-sm"
+                     value="{{ contact.whatsapp or '' }}" placeholder="5511999999999">
+            </div>
+            <div class="col-md-4">
+              <label class="form-label small fw-semibold">Empresa</label>
+              <input type="text" name="company" class="form-control form-control-sm"
+                     value="{{ contact.company or '' }}">
+            </div>
+            <div class="col-md-4">
+              <label class="form-label small fw-semibold">Cargo</label>
+              <input type="text" name="position" class="form-control form-control-sm"
+                     value="{{ contact.position or '' }}">
+            </div>
+            <div class="col-md-4">
+              <label class="form-label small fw-semibold">Status</label>
+              <select name="status" class="form-select form-select-sm">
+                {% for val, label in [('lead','Lead'),('interessado','Interessado'),('negocio_quente','Negocio quente'),('em_prospeccao','Em Prospeccao'),('respondeu_aplicacao','Respondeu aplicacao'),('mentoria','Mentoria'),('mentorado','Mentorado'),('diagnostico','Diagnostico'),('vibe_coding','Vibe Coding'),('mailing_mentores','Mailing Mentores'),('wix','Wix'),('cliente','Cliente'),('inativo','Inativo')] %}
+                <option value="{{ val }}" {% if contact.status == val %}selected{% endif %}>{{ label }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="col-md-4">
+              <label class="form-label small fw-semibold">Tags</label>
+              <input type="text" name="tags" class="form-control form-control-sm"
+                     value="{{ contact.tags or '' }}" placeholder="B2B, vip">
+            </div>
+            <div class="col-md-4">
+              <label class="form-label small fw-semibold">Produto de Interesse</label>
+              <select name="product_interest" class="form-select form-select-sm">
+                <option value="">— Nenhum —</option>
+                {% set produtos = ['Estruturação de Mentoria','Estruturação de negócio digital','Curso MMP','Curso Mentoria Profissional','Sessão avulsa de mentoria','Consultoria Vibe Coding','Serviços Vibe Coding','Carrosséis Mágicos','Serviços Autoescolas','ASA Marketing e Vendas','Agente de IA'] %}
+                {% for p in produtos %}
+                <option value="{{ p }}" {% if contact.product_interest == p %}selected{% endif %}>{{ p }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="col-md-4">
+              <label class="form-label small fw-semibold">Como me Conheceu</label>
+              <select name="source" class="form-select form-select-sm">
+                <option value="">— Nenhum —</option>
+                {% for src in ['Youtube','Instagram','IA indicou','Indicação','TikTok','LinkedIn','Google','Facebook','Outro'] %}
+                <option value="{{ src }}" {% if contact.source == src %}selected{% endif %}>{{ src }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="col-md-4">
+              <label class="form-label small fw-semibold">Nicho / Segmento</label>
+              <select name="nicho" class="form-select form-select-sm">
+                <option value="">— Nenhum —</option>
+                {% set nichos = ['Empreendedorismo e Negócios','Saúde e Bem-Estar','Desenvolvimento Pessoal e Espiritualidade','Mulheres','Liderança e Gestão','Educação e Ensino','Marketing Digital e Vendas','Relacionamentos e Família','Beleza e Estética','Carreira e Recursos Humanos','Finanças e Investimentos','Tecnologia e Inovação','Direito e Advocacia','Coaching','Alimentação e Nutrição','Psicologia e Terapia','Fitness e Esportes','Arte e Cultura','Mentoria e Consultoria'] %}
+                {% for n in nichos %}
+                <option value="{{ n }}" {% if contact.nicho == n %}selected{% endif %}>{{ n }}</option>
+                {% endfor %}
+              </select>
+            </div>
           </div>
-          <div class="mb-2">
-            <label class="form-label small fw-semibold">Empresa</label>
-            <input type="text" name="company" class="form-control form-control-sm"
-                   value="{{ contact.company or '' }}">
+
+          <hr class="my-3">
+
+          <div class="row g-3">
+            <div class="col-md-6">
+              <label class="form-label small fw-semibold">Observacoes</label>
+              <textarea name="notes" class="form-control form-control-sm" rows="3"
+                        placeholder="Notas internas sobre o contato...">{{ contact.notes or '' }}</textarea>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label small fw-semibold"><i class="bi bi-whatsapp text-success me-1"></i>Notas WhatsApp</label>
+              <textarea name="whatsapp_notes" class="form-control form-control-sm" rows="3"
+                        placeholder="Resumo das conversas pelo WhatsApp...">{{ contact.whatsapp_notes or '' }}</textarea>
+            </div>
           </div>
-          <div class="mb-2">
-            <label class="form-label small fw-semibold">Cargo</label>
-            <input type="text" name="position" class="form-control form-control-sm"
-                   value="{{ contact.position or '' }}">
-          </div>
-          <div class="mb-2">
-            <label class="form-label small fw-semibold">Status</label>
-            <select name="status" class="form-select form-select-sm">
-              <option value="lead" {% if contact.status == 'lead' %}selected{% endif %}>Lead</option>
-              <option value="interessado" {% if contact.status == 'interessado' %}selected{% endif %}>Interessado</option>
-              <option value="negocio_quente" {% if contact.status == 'negocio_quente' %}selected{% endif %}>Negocio quente</option>
-              <option value="em_prospeccao" {% if contact.status == 'em_prospeccao' %}selected{% endif %}>Em Prospeccao</option>
-              <option value="respondeu_aplicacao" {% if contact.status == 'respondeu_aplicacao' %}selected{% endif %}>Respondeu aplicacao</option>
-              <option value="mentoria" {% if contact.status == 'mentoria' %}selected{% endif %}>Mentoria</option>
-              <option value="mentorado" {% if contact.status == 'mentorado' %}selected{% endif %}>Mentorado</option>
-              <option value="diagnostico" {% if contact.status == 'diagnostico' %}selected{% endif %}>Diagnostico</option>
-              <option value="vibe_coding" {% if contact.status == 'vibe_coding' %}selected{% endif %}>Vibe Coding</option>
-              <option value="mailing_mentores" {% if contact.status == 'mailing_mentores' %}selected{% endif %}>Mailing Mentores</option>
-              <option value="wix" {% if contact.status == 'wix' %}selected{% endif %}>Wix</option>
-              <option value="cliente" {% if contact.status == 'cliente' %}selected{% endif %}>Cliente</option>
-              <option value="inativo" {% if contact.status == 'inativo' %}selected{% endif %}>Inativo</option>
-            </select>
-          </div>
-          <div class="mb-2">
-            <label class="form-label small fw-semibold">Tags</label>
-            <input type="text" name="tags" class="form-control form-control-sm"
-                   value="{{ contact.tags or '' }}" placeholder="Ex: B2B, cliente-vip">
-            <div class="form-text">Separe com vírgula</div>
-          </div>
-          <div class="mb-2">
-            <label class="form-label small fw-semibold">Produto/Servico de Interesse</label>
-            <select name="product_interest" class="form-select form-select-sm">
-              <option value="">— Nenhum selecionado —</option>
-              {% set produtos = ['Estruturação de Mentoria','Estruturação de negócio digital','Curso MMP','Curso Mentoria Profissional','Sessão avulsa de mentoria','Consultoria Vibe Coding','Serviços Vibe Coding','Carrosséis Mágicos','Serviços Autoescolas','ASA Marketing e Vendas','Agente de IA'] %}
-              {% for p in produtos %}
-              <option value="{{ p }}" {% if contact.product_interest == p %}selected{% endif %}>{{ p }}</option>
-              {% endfor %}
-            </select>
-          </div>
-          <div class="mb-2">
-            <label class="form-label small fw-semibold">Como me Conheceu</label>
-            <select name="source" class="form-select form-select-sm">
-              <option value="">— Nenhum selecionado —</option>
-              {% for src in ['Youtube','Instagram','IA indicou','Indicação','TikTok','LinkedIn','Google','Facebook','Outro'] %}
-              <option value="{{ src }}" {% if contact.source == src %}selected{% endif %}>{{ src }}</option>
-              {% endfor %}
-            </select>
-          </div>
-          <div class="mb-2">
-            <label class="form-label small fw-semibold">Nicho / Segmento</label>
-            <select name="nicho" class="form-select form-select-sm">
-              <option value="">— Nenhum —</option>
-              {% set nichos = ['Empreendedorismo e Negócios','Saúde e Bem-Estar','Desenvolvimento Pessoal e Espiritualidade','Mulheres','Liderança e Gestão','Educação e Ensino','Marketing Digital e Vendas','Relacionamentos e Família','Beleza e Estética','Carreira e Recursos Humanos','Finanças e Investimentos','Tecnologia e Inovação','Direito e Advocacia','Coaching','Alimentação e Nutrição','Psicologia e Terapia','Fitness e Esportes','Arte e Cultura','Mentoria e Consultoria'] %}
-              {% for n in nichos %}
-              <option value="{{ n }}" {% if contact.nicho == n %}selected{% endif %}>{{ n }}</option>
-              {% endfor %}
-            </select>
-          </div>
-          <div class="mb-3">
-            <label class="form-label small fw-semibold">Observacoes</label>
-            <textarea name="notes" class="form-control form-control-sm" rows="3"
-                      placeholder="Notas internas sobre o contato...">{{ contact.notes or '' }}</textarea>
-          </div>
-          <div class="mb-3">
-            <label class="form-label small fw-semibold"><i class="bi bi-whatsapp text-success me-1"></i>Notas de Conversas WhatsApp</label>
-            <textarea name="whatsapp_notes" class="form-control form-control-sm" rows="4"
-                      placeholder="Registre aqui o resumo das conversas pelo WhatsApp...">{{ contact.whatsapp_notes or '' }}</textarea>
-            <div class="form-text">Anote datas e resumos das conversas para manter o historico no CRM.</div>
-          </div>
+
+          <hr class="my-3">
 
           <!-- Produtos Adquiridos -->
           <div class="mb-3">
@@ -157,7 +140,6 @@
               <div class="purchase-row d-flex gap-2 mb-2 align-items-center">
                 <select name="purchase_product[]" class="form-select form-select-sm flex-fill">
                   <option value="">— Produto —</option>
-                  {% set produtos = ['Estruturação de Mentoria','Estruturação de negócio digital','Curso MMP','Curso Mentoria Profissional','Sessão avulsa de mentoria','Consultoria Vibe Coding','Serviços Vibe Coding','Carrosséis Mágicos','Serviços Autoescolas','ASA Marketing e Vendas','Agente de IA'] %}
                   {% for prod in produtos %}
                   <option value="{{ prod }}" {% if p.product == prod %}selected{% endif %}>{{ prod }}</option>
                   {% endfor %}
@@ -180,103 +162,109 @@
       </div>
     </div>
 
-    <!-- Smart send time -->
-    {% if best_hour is not none %}
-    <div class="card mb-4">
-      <div class="card-body">
-        <h6 class="fw-semibold mb-2"><i class="bi bi-clock me-2 text-warning"></i>Melhor Horario de Envio</h6>
-        <div class="fs-4 fw-bold text-warning">{{ '%02d:00' % best_hour }}</div>
-        <div class="text-muted small">Baseado no historico de aberturas deste contato.</div>
-      </div>
-    </div>
-    {% endif %}
-
-    <!-- Cadências -->
-    {% if cadencias %}
-    <div class="card">
-      <div class="card-body">
-        <h6 class="fw-semibold mb-3"><i class="bi bi-arrow-repeat me-2 text-primary"></i>Cadencias</h6>
-        {% for cad in cadencias %}
-        <div class="d-flex justify-content-between align-items-center mb-2 pb-2 border-bottom">
-          <div>
-            <div class="small fw-semibold">{{ cad.seq_name }}</div>
-            <div class="text-muted" style="font-size:.75rem">Passo {{ cad.current_step }}</div>
+    <div class="row g-3">
+      <!-- Smart send time -->
+      {% if best_hour is not none %}
+      <div class="col-md-4">
+        <div class="card h-100">
+          <div class="card-body">
+            <h6 class="fw-semibold mb-2"><i class="bi bi-clock me-2 text-warning"></i>Melhor Horario</h6>
+            <div class="fs-4 fw-bold text-warning">{{ '%02d:00' % best_hour }}</div>
+            <div class="text-muted small">Baseado em aberturas</div>
           </div>
-          {% if cad.status == 'active' %}
-            <span class="badge" style="background:#d1fae5;color:#065f46">Ativo</span>
-          {% elif cad.status == 'finished' %}
-            <span class="badge" style="background:#dbeafe;color:#1e40af">Finalizado</span>
-          {% elif cad.status == 'unsubscribed' %}
-            <span class="badge" style="background:#EDE0F2;color:#5B2A6E">Descadastrado</span>
-          {% else %}
-            <span class="badge bg-secondary">{{ cad.status }}</span>
-          {% endif %}
         </div>
-        {% endfor %}
       </div>
-    </div>
-    {% endif %}
+      {% endif %}
 
-    <!-- Registrar compra -->
-    <div class="card mt-3">
-      <div class="card-body">
-        <h6 class="fw-semibold mb-2"><i class="bi bi-cart-check me-2 text-success"></i>Registrar Compra</h6>
-        <form method="POST" action="{{ url_for('registrar_compra', email=contact.email) }}">
-          <div class="mb-2"><input type="text" name="product" class="form-control form-control-sm" placeholder="Produto/Serviço" required></div>
-          <div class="mb-2"><input type="text" name="amount" class="form-control form-control-sm" placeholder="Valor (R$)" value="0"></div>
-          <button class="btn btn-sm btn-success w-100"><i class="bi bi-plus-lg me-1"></i>Registrar</button>
-        </form>
+      <!-- Registrar compra -->
+      <div class="col-md-{% if best_hour is not none %}4{% else %}6{% endif %}">
+        <div class="card h-100">
+          <div class="card-body">
+            <h6 class="fw-semibold mb-2"><i class="bi bi-cart-check me-2 text-success"></i>Registrar Compra</h6>
+            <form method="POST" action="{{ url_for('registrar_compra', email=contact.email) }}">
+              <div class="mb-2"><input type="text" name="product" class="form-control form-control-sm" placeholder="Produto/Servico" required></div>
+              <div class="mb-2"><input type="text" name="amount" class="form-control form-control-sm" placeholder="Valor (R$)" value="0"></div>
+              <button class="btn btn-sm btn-success w-100"><i class="bi bi-plus-lg me-1"></i>Registrar</button>
+            </form>
+          </div>
+        </div>
       </div>
+
+      <!-- Cadências -->
+      {% if cadencias %}
+      <div class="col-md-4">
+        <div class="card h-100">
+          <div class="card-body">
+            <h6 class="fw-semibold mb-2"><i class="bi bi-arrow-repeat me-2 text-primary"></i>Cadencias</h6>
+            {% for cad in cadencias %}
+            <div class="d-flex justify-content-between align-items-center mb-2 pb-2 {% if not loop.last %}border-bottom{% endif %}">
+              <div>
+                <div class="small fw-semibold">{{ cad.seq_name }}</div>
+                <div class="text-muted" style="font-size:.7rem">Passo {{ cad.current_step }}</div>
+              </div>
+              {% if cad.status == 'active' %}
+                <span class="badge" style="background:#d1fae5;color:#065f46;font-size:.65rem">Ativo</span>
+              {% elif cad.status == 'finished' %}
+                <span class="badge" style="background:#dbeafe;color:#1e40af;font-size:.65rem">Finalizado</span>
+              {% elif cad.status == 'unsubscribed' %}
+                <span class="badge" style="background:#EDE0F2;color:#5B2A6E;font-size:.65rem">Descadastrado</span>
+              {% else %}
+                <span class="badge bg-secondary" style="font-size:.65rem">{{ cad.status }}</span>
+              {% endif %}
+            </div>
+            {% endfor %}
+          </div>
+        </div>
+      </div>
+      {% endif %}
     </div>
   </div>
 
-  <!-- Coluna direita: timeline de atividades -->
-  <div class="col-lg-7">
-    <div class="card">
-      <div class="card-header bg-white border-0 pt-4 pb-0 px-4">
-        <h6 class="fw-semibold mb-0"><i class="bi bi-activity me-2 text-primary"></i>Historico de Atividades</h6>
+  <!-- Coluna direita: timeline compacta -->
+  <div class="col-lg-4">
+    <div class="card" style="position:sticky;top:80px">
+      <div class="card-header bg-white border-0 pt-3 pb-0 px-3">
+        <h6 class="fw-semibold mb-0" style="font-size:.85rem"><i class="bi bi-activity me-2 text-primary"></i>Historico</h6>
       </div>
-      <div class="card-body" style="max-height:520px;overflow-y:auto">
+      <div class="card-body px-3 pt-2" style="max-height:calc(100vh - 160px);overflow-y:auto">
         {% if activities %}
-        <div class="timeline">
-          {% for act in activities %}
-          <div class="d-flex gap-3 mb-3">
-            <div class="flex-shrink-0 mt-1">
-              {% if act.type == 'email_sent' %}
-                <span class="badge rounded-pill" style="background:#dbeafe;color:#1e40af;font-size:.7rem"><i class="bi bi-send"></i></span>
-              {% elif act.type == 'email_opened' %}
-                <span class="badge rounded-pill" style="background:#d1fae5;color:#065f46;font-size:.7rem"><i class="bi bi-eye"></i></span>
-              {% elif act.type == 'link_clicked' %}
-                <span class="badge rounded-pill" style="background:#fef3c7;color:#92400e;font-size:.7rem"><i class="bi bi-cursor"></i></span>
-              {% elif act.type == 'unsubscribed' %}
-                <span class="badge rounded-pill" style="background:#EDE0F2;color:#5B2A6E;font-size:.7rem"><i class="bi bi-x-lg"></i></span>
-              {% elif act.type == 'contact_updated' %}
-                <span class="badge rounded-pill" style="background:#f3f4f6;color:#6b7280;font-size:.7rem"><i class="bi bi-pencil"></i></span>
-              {% else %}
-                <span class="badge rounded-pill bg-secondary" style="font-size:.7rem"><i class="bi bi-dot"></i></span>
-              {% endif %}
-            </div>
-            <div class="flex-fill">
-              <div class="small fw-semibold">
-                {% if act.type == 'email_sent' %}Email enviado
-                {% elif act.type == 'email_opened' %}Email aberto
-                {% elif act.type == 'link_clicked' %}Link clicado
-                {% elif act.type == 'unsubscribed' %}Descadastro
-                {% elif act.type == 'contact_updated' %}Dados atualizados
-                {% else %}{{ act.type }}{% endif %}
-              </div>
-              {% if act.description %}
-              <div class="text-muted" style="font-size:.75rem">{{ act.description }}</div>
-              {% endif %}
-              <div class="text-muted" style="font-size:.72rem">{{ act.created_at }}</div>
-            </div>
+        {% for act in activities %}
+        <div class="d-flex gap-2 mb-2 pb-2 {% if not loop.last %}border-bottom{% endif %}">
+          <div class="flex-shrink-0 mt-1">
+            {% if act.type == 'email_sent' %}
+              <span class="badge rounded-pill" style="background:#dbeafe;color:#1e40af;font-size:.6rem"><i class="bi bi-send"></i></span>
+            {% elif act.type == 'email_opened' %}
+              <span class="badge rounded-pill" style="background:#d1fae5;color:#065f46;font-size:.6rem"><i class="bi bi-eye"></i></span>
+            {% elif act.type == 'link_clicked' %}
+              <span class="badge rounded-pill" style="background:#fef3c7;color:#92400e;font-size:.6rem"><i class="bi bi-cursor"></i></span>
+            {% elif act.type == 'unsubscribed' %}
+              <span class="badge rounded-pill" style="background:#EDE0F2;color:#5B2A6E;font-size:.6rem"><i class="bi bi-x-lg"></i></span>
+            {% elif act.type == 'contact_updated' %}
+              <span class="badge rounded-pill" style="background:#f3f4f6;color:#6b7280;font-size:.6rem"><i class="bi bi-pencil"></i></span>
+            {% else %}
+              <span class="badge rounded-pill bg-secondary" style="font-size:.6rem"><i class="bi bi-dot"></i></span>
+            {% endif %}
           </div>
-          {% endfor %}
+          <div class="flex-fill" style="min-width:0">
+            <div style="font-size:.78rem" class="fw-semibold">
+              {% if act.type == 'email_sent' %}Enviado
+              {% elif act.type == 'email_opened' %}Aberto
+              {% elif act.type == 'link_clicked' %}Clicou
+              {% elif act.type == 'unsubscribed' %}Descadastro
+              {% elif act.type == 'contact_updated' %}Atualizado
+              {% else %}{{ act.type }}{% endif %}
+            </div>
+            {% if act.description %}
+            <div class="text-muted text-truncate" style="font-size:.7rem">{{ act.description }}</div>
+            {% endif %}
+            <div class="text-muted" style="font-size:.65rem">{{ act.created_at.strftime('%d/%m %H:%M') if act.created_at.strftime is defined else act.created_at }}</div>
+          </div>
         </div>
+        {% endfor %}
         {% else %}
         <div class="text-center py-4 text-muted">
-          <i class="bi bi-activity fs-2 d-block mb-2"></i>
-          Nenhuma atividade registrada ainda.
+          <i class="bi bi-activity fs-3 d-block mb-2"></i>
+          <span style="font-size:.8rem">Nenhuma atividade</span>
         </div>
         {% endif %}
       </div>
