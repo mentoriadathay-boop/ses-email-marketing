@@ -125,7 +125,7 @@
             <label class="form-label small fw-semibold">Nicho / Segmento</label>
             <select name="nicho" class="form-select form-select-sm">
               <option value="">— Nenhum —</option>
-              {% set nichos = ['Empreendedorismo e Negócios','Saúde e Bem-Estar','Desenvolvimento Pessoal e Espiritualidade','Mulheres','Liderança e Gestão','Educação e Ensino','Marketing Digital e Vendas','Relacionamentos e Família','Beleza e Estética','Carreira e Recursos Humanos','Finanças e Investimentos','Tecnologia e Inovação','Direito e Advocacia','Coaching','Alimentação e Nutrição','Psicologia e Terapia','Fitness e Esportes','Arte e Cultura'] %}
+              {% set nichos = ['Empreendedorismo e Negócios','Saúde e Bem-Estar','Desenvolvimento Pessoal e Espiritualidade','Mulheres','Liderança e Gestão','Educação e Ensino','Marketing Digital e Vendas','Relacionamentos e Família','Beleza e Estética','Carreira e Recursos Humanos','Finanças e Investimentos','Tecnologia e Inovação','Direito e Advocacia','Coaching','Alimentação e Nutrição','Psicologia e Terapia','Fitness e Esportes','Arte e Cultura','Mentoria e Consultoria'] %}
               {% for n in nichos %}
               <option value="{{ n }}" {% if contact.nicho == n %}selected{% endif %}>{{ n }}</option>
               {% endfor %}
@@ -221,7 +221,7 @@
     <div class="card mt-3">
       <div class="card-body">
         <h6 class="fw-semibold mb-2"><i class="bi bi-cart-check me-2 text-success"></i>Registrar Compra</h6>
-        <form method="POST" action="{{ url_for('registrar_compra', email=contato.email) }}">
+        <form method="POST" action="{{ url_for('registrar_compra', email=contact.email) }}">
           <div class="mb-2"><input type="text" name="product" class="form-control form-control-sm" placeholder="Produto/Serviço" required></div>
           <div class="mb-2"><input type="text" name="amount" class="form-control form-control-sm" placeholder="Valor (R$)" value="0"></div>
           <button class="btn btn-sm btn-success w-100"><i class="bi bi-plus-lg me-1"></i>Registrar</button>
