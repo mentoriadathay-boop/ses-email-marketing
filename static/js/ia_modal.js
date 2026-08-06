@@ -498,46 +498,45 @@ async function gtmAplicarKit() {
 function gtmPersonalizarComIA() {
   if (!_gtmTemplateAtivo || !_aiTarget) return;
   bootstrap.Modal.getInstance(document.getElementById('modalGtmPrevia'))?.hide();
-  const tema = _gtmTemplateAtivo.name + ' — ' + _gtmTemplateAtivo.cat;
-  openAIModalComTema(_aiTarget.containerId, _aiTarget.textareaId, _aiTarget.subjectId, tema);
+
+  const conteudoAtual = getEditorContent(_aiTarget.containerId, _aiTarget.textareaId);
+  if (conteudoAtual.trim()) {
+    _gtmPendingTemplate = { html: _gtmTemplateAtivo.html, nome: _gtmTemplateAtivo.name };
+    new bootstrap.Modal(document.getElementById('modalEscolhaTemplate')).show();
+  } else {
+    const tema = _gtmTemplateAtivo.name + ' — ' + _gtmTemplateAtivo.cat;
+    openAIModalComTema(_aiTarget.containerId, _aiTarget.textareaId, _aiTarget.subjectId, tema);
+  }
 }
 
 function gtmUsarTemplate() {
   if (!_gtmTemplateAtivo || !_aiTarget) return;
-  _gtmAplicarTemplateAoConteudo(_gtmTemplateAtivo.html, _gtmTemplateAtivo.name, _gtmTemplateAtivo.wrapOnly);
   bootstrap.Modal.getInstance(document.getElementById('modalGtmPrevia'))?.hide();
+
+  const conteudoAtual = getEditorContent(_aiTarget.containerId, _aiTarget.textareaId);
+  if (conteudoAtual.trim()) {
+    _gtmPendingTemplate = { html: _gtmTemplateAtivo.html, nome: _gtmTemplateAtivo.name };
+    new bootstrap.Modal(document.getElementById('modalEscolhaTemplate')).show();
+  } else {
+    showHtmlInEditor(_aiTarget.containerId, _aiTarget.textareaId, _gtmTemplateAtivo.html, _aiTarget.subjectId, _gtmTemplateAtivo.name);
+  }
 }
 
 function gtmUsarDireto(id) {
   const tpl = _TEMPLATES.find(t => t.id === id);
   if (!tpl || !_aiTarget) return;
-  _gtmAplicarTemplateAoConteudo(tpl.html, tpl.name, tpl.wrapOnly);
   bootstrap.Modal.getInstance(document.getElementById('modalGaleriaTemplates'))?.hide();
-}
 
-// Se o editor de destino já tem conteúdo (texto/imagens/links do usuário),
-// pergunta o que fazer com esse conteúdo em relação ao template escolhido.
-// Caso contrário, apenas insere o template.
-let _gtmPendingTemplate = null; // { html, nome, wrapOnly }
-
-async function _gtmAplicarTemplateAoConteudo(templateHtml, nome, wrapOnly) {
   const conteudoAtual = getEditorContent(_aiTarget.containerId, _aiTarget.textareaId);
-
-  if (!conteudoAtual.trim()) {
-    showHtmlInEditor(_aiTarget.containerId, _aiTarget.textareaId, templateHtml, _aiTarget.subjectId, nome);
-    return;
+  if (conteudoAtual.trim()) {
+    _gtmPendingTemplate = { html: tpl.html, nome: tpl.name };
+    new bootstrap.Modal(document.getElementById('modalEscolhaTemplate')).show();
+  } else {
+    showHtmlInEditor(_aiTarget.containerId, _aiTarget.textareaId, tpl.html, _aiTarget.subjectId, tpl.name);
   }
-
-  if (wrapOnly) {
-    const wrapped = _wrapContentInTemplate(conteudoAtual, templateHtml);
-    showHtmlInEditor(_aiTarget.containerId, _aiTarget.textareaId, wrapped, _aiTarget.subjectId, nome);
-    showToast('Layout aplicado ao seu conteúdo (texto mantido na íntegra).', 'success');
-    return;
-  }
-
-  _gtmPendingTemplate = { html: templateHtml, nome };
-  new bootstrap.Modal(document.getElementById('modalEscolhaTemplate')).show();
 }
+
+let _gtmPendingTemplate = null; // { html, nome }
 
 function _wrapContentInTemplate(content, templateHtml) {
   const marker = '<!-- CONTEUDO_USUARIO -->';
@@ -573,21 +572,15 @@ async function gtmEscolherOpcao(opcao) {
   const { html: templateHtml, nome } = _gtmPendingTemplate;
   _gtmPendingTemplate = null;
 
-  if (opcao === 'substituir') {
-    showHtmlInEditor(_aiTarget.containerId, _aiTarget.textareaId, templateHtml, _aiTarget.subjectId, nome);
+  if (opcao === 'reescrever') {
+    const tema = nome;
+    openAIModalComTema(_aiTarget.containerId, _aiTarget.textareaId, _aiTarget.subjectId, tema);
     return;
   }
 
-  if (opcao === 'encaixar') {
-    const conteudoAtual = getEditorContent(_aiTarget.containerId, _aiTarget.textareaId);
-    const wrapped = _wrapContentInTemplate(conteudoAtual, templateHtml);
-    showHtmlInEditor(_aiTarget.containerId, _aiTarget.textareaId, wrapped, _aiTarget.subjectId, nome);
-    showToast('Layout aplicado (texto mantido na íntegra).', 'success');
-    return;
-  }
-
+  // 'manter' — encaixa o texto original no layout do template via IA (ajuste visual apenas)
   const conteudoAtual = getEditorContent(_aiTarget.containerId, _aiTarget.textareaId);
-  const endpoint = opcao === 'visual' ? '/ia/ajustar-visual' : '/ia/aplicar-template';
+  const endpoint = '/ia/ajustar-visual';
 
   showToast('Aplicando com IA, aguarde...', 'info');
   try {
