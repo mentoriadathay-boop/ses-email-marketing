@@ -34,6 +34,8 @@
           <option value="respondeu_aplicacao" {% if status_filter == 'respondeu_aplicacao' %}selected{% endif %}>Respondeu aplicacao</option>
           <option value="mentoria" {% if status_filter == 'mentoria' %}selected{% endif %}>Mentoria</option>
           <option value="mentorado" {% if status_filter == 'mentorado' %}selected{% endif %}>Mentorado</option>
+          <option value="aluno_curso_mentoria" {% if status_filter == 'aluno_curso_mentoria' %}selected{% endif %}>Aluno Curso Mentoria</option>
+          <option value="mentoria_consultoria" {% if status_filter == 'mentoria_consultoria' %}selected{% endif %}>Mentoria e Consultoria</option>
           <option value="diagnostico" {% if status_filter == 'diagnostico' %}selected{% endif %}>Diagnostico</option>
           <option value="vibe_coding" {% if status_filter == 'vibe_coding' %}selected{% endif %}>Vibe Coding</option>
           <option value="mailing_mentores" {% if status_filter == 'mailing_mentores' %}selected{% endif %}>Mailing Mentores</option>
@@ -82,6 +84,7 @@
           <tr>
             <th class="ps-4">Email / Nome</th>
             <th>Empresa</th>
+            <th>Cidade/UF</th>
             <th>WhatsApp</th>
             <th>Tags</th>
             <th>Status</th>
@@ -98,6 +101,9 @@
               {% if c.name %}<div class="text-muted" style="font-size:.8rem">{{ c.name }}</div>{% endif %}
             </td>
             <td class="small text-muted">{{ c.company or '—' }}</td>
+            <td class="small text-muted">
+              {% if c.city %}{{ c.city }}{% if c.state %}/{{ c.state }}{% endif %}{% else %}—{% endif %}
+            </td>
             <td>
               {% if c.whatsapp %}
               <a href="https://wa.me/{{ c.whatsapp | replace(' ','') | replace('(','') | replace(')','') | replace('-','') | replace('+','') }}"
@@ -137,6 +143,8 @@
                 'respondeu_aplicacao': ('Respondeu aplicacao', '#fef3c7', '#92400e'),
                 'mentoria': ('Mentoria', '#f0fdf4', '#166534'),
                 'mentorado': ('Mentorado', '#d1fae5', '#065f46'),
+                'aluno_curso_mentoria': ('Aluno Curso Mentoria', '#fce7f3', '#9d174d'),
+                'mentoria_consultoria': ('Mentoria e Consultoria', '#ede9fe', '#5b21b6'),
                 'diagnostico': ('Diagnostico', '#f0f9ff', '#0c4a6e'),
                 'vibe_coding': ('Vibe Coding', '#fdf4ff', '#6b21a8'),
                 'mailing_mentores': ('Mailing Mentores', '#fff7ed', '#9a3412'),
@@ -280,6 +288,8 @@
                 <option value="respondeu_aplicacao">Respondeu aplicacao</option>
                 <option value="mentoria">Mentoria</option>
                 <option value="mentorado">Mentorado</option>
+                <option value="aluno_curso_mentoria">Aluno Curso Mentoria</option>
+                <option value="mentoria_consultoria">Mentoria e Consultoria</option>
                 <option value="diagnostico">Diagnostico</option>
                 <option value="vibe_coding">Vibe Coding</option>
                 <option value="mailing_mentores">Mailing Mentores</option>
@@ -292,6 +302,23 @@
               <label class="form-label fw-semibold">Tags</label>
               <input type="text" name="tags" class="form-control form-control-sm"
                      placeholder="Ex: B2B, vip">
+            </div>
+          </div>
+          <div class="row g-2 mb-3">
+            <div class="col-5">
+              <label class="form-label fw-semibold">Cidade</label>
+              <input type="text" name="city" class="form-control form-control-sm"
+                     placeholder="São Paulo">
+            </div>
+            <div class="col-3">
+              <label class="form-label fw-semibold">Estado</label>
+              <input type="text" name="state" class="form-control form-control-sm"
+                     placeholder="SP">
+            </div>
+            <div class="col-4">
+              <label class="form-label fw-semibold">País</label>
+              <input type="text" name="country" class="form-control form-control-sm"
+                     placeholder="Brasil">
             </div>
           </div>
         </div>

@@ -321,6 +321,9 @@ def init_db():
         "ALTER TABLE campaigns ADD COLUMN total_clicked INTEGER DEFAULT 0",
         "ALTER TABLE contacts ADD COLUMN whatsapp TEXT",
         "ALTER TABLE contacts ADD COLUMN whatsapp_notes TEXT",
+        "ALTER TABLE contacts ADD COLUMN city TEXT",
+        "ALTER TABLE contacts ADD COLUMN state TEXT",
+        "ALTER TABLE contacts ADD COLUMN country TEXT",
     ]:
         try:
             conn.execute(f"DO $$ BEGIN {col_sql}; EXCEPTION WHEN duplicate_column THEN NULL; END $$")
@@ -503,6 +506,9 @@ def parse_csv(filepath):
                         'source':           _col(row, 'fonte', 'Fonte', 'source', 'Source'),
                         'status':           _col(row, 'status', 'Status') or 'lead',
                         'nicho':            _col(row, 'nicho', 'Nicho', 'NICHO', 'niche', 'Niche', 'segmento', 'Segmento', 'categoria', 'Categoria'),
+                        'city':             _col(row, 'cidade', 'Cidade', 'city', 'City', 'CIDADE'),
+                        'state':            _col(row, 'estado', 'Estado', 'state', 'State', 'UF', 'uf'),
+                        'country':          _col(row, 'pais', 'País', 'Pais', 'country', 'Country', 'PAIS'),
                     })
             return contacts
         except UnicodeDecodeError:
@@ -517,10 +523,11 @@ def get_mailing_contacts_db(mailing_id, conn):
         (mailing_id,)).fetchall()
     return [{'email': r['email'], 'name': r['name'] or '', 'tags': r['tags'] or ''} for r in rows]
 
-def upsert_contact(email, name='', tags='', conn=None, **extra):
+def upsert_contact(email, name='', tags='', conn=None, force_update=False, **extra):
     """Insere ou atualiza contato no CRM.
-    extra: phone, company, position, notes, product_interest, source, status, nicho
-    Regra: só preenche campos que estão vazios/NULL no registro existente.
+    extra: phone, company, position, notes, product_interest, source, status, nicho, city, state, country
+    force_update=True: sobrescreve campos mesmo que já preenchidos (usado no upload CSV).
+    force_update=False: só preenche campos vazios/NULL.
     Tags são sempre mescladas (nunca sobrescritas).
     """
     close = conn is None
@@ -530,14 +537,24 @@ def upsert_contact(email, name='', tags='', conn=None, **extra):
         'INSERT INTO contacts (email,name,tags,status) VALUES (%s,%s,%s,%s) ON CONFLICT (email) DO NOTHING',
         (email, name, tags, extra.get('status') or 'lead'))
 
-    # Atualiza cada campo simples apenas se o existente estiver vazio
-    for field in ('name', 'phone', 'company', 'position', 'notes', 'product_interest', 'source', 'nicho'):
+    fill_fields = ('name', 'phone', 'company', 'position', 'notes', 'product_interest', 'source', 'nicho', 'city', 'state', 'country')
+    overwrite_fields = ('status', 'product_interest', 'nicho')
+    for field in fill_fields:
         value = name if field == 'name' else extra.get(field, '')
         if value:
-            conn.execute(
-                f"UPDATE contacts SET {field}=%s, updated_at=NOW() "
-                f"WHERE email=%s AND ({field} IS NULL OR {field}='')",
-                (value, email))
+            if force_update and field in overwrite_fields:
+                conn.execute(
+                    f"UPDATE contacts SET {field}=%s, updated_at=NOW() WHERE email=%s",
+                    (value, email))
+            else:
+                conn.execute(
+                    f"UPDATE contacts SET {field}=%s, updated_at=NOW() "
+                    f"WHERE email=%s AND ({field} IS NULL OR {field}='')",
+                    (value, email))
+    if force_update and extra.get('status'):
+        conn.execute(
+            "UPDATE contacts SET status=%s, updated_at=NOW() WHERE email=%s",
+            (extra['status'], email))
 
     # Tags: mescla sem duplicar
     if tags:
@@ -3151,6 +3168,9 @@ def adicionar_contato_manual():
     product_interest = request.form.get('product_interest', '').strip()
     source = request.form.get('source', '').strip()
     nicho = request.form.get('nicho', '').strip()
+    city = request.form.get('city', '').strip()
+    state = request.form.get('state', '').strip()
+    country = request.form.get('country', '').strip()
     if not email:
         flash('Email é obrigatório.', 'danger')
         return redirect(url_for('lista_contatos'))
@@ -3161,8 +3181,8 @@ def adicionar_contato_manual():
         conn.close()
         return redirect(url_for('contato_perfil', email=email))
     conn.execute(
-        'INSERT INTO contacts (email,name,phone,company,whatsapp,status,tags,product_interest,source,nicho) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)',
-        (email, name, phone, company, whatsapp or None, status or 'lead', tags, product_interest or None, source or None, nicho or None))
+        'INSERT INTO contacts (email,name,phone,company,whatsapp,status,tags,product_interest,source,nicho,city,state,country) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)',
+        (email, name, phone, company, whatsapp or None, status or 'lead', tags, product_interest or None, source or None, nicho or None, city or None, state or None, country or None))
     conn.commit()
     conn.close()
     flash(f'Contato {email} adicionado!', 'success')
@@ -3207,10 +3227,10 @@ def contato_perfil(email):
         flash('Contato não encontrado.', 'danger'); conn.close(); return redirect(url_for('lista_contatos'))
 
     if request.method == 'POST':
-        fields = ['name', 'phone', 'company', 'position', 'whatsapp', 'status', 'tags', 'notes', 'whatsapp_notes', 'product_interest', 'source', 'nicho']
+        fields = ['name', 'phone', 'company', 'position', 'whatsapp', 'status', 'tags', 'notes', 'whatsapp_notes', 'product_interest', 'source', 'nicho', 'city', 'state', 'country']
         updates = {f: request.form.get(f, '').strip() for f in fields}
         conn.execute(
-            "UPDATE contacts SET name=%s,phone=%s,company=%s,position=%s,whatsapp=%s,status=%s,tags=%s,notes=%s,whatsapp_notes=%s,product_interest=%s,source=%s,nicho=%s,updated_at=NOW() WHERE email=%s",
+            "UPDATE contacts SET name=%s,phone=%s,company=%s,position=%s,whatsapp=%s,status=%s,tags=%s,notes=%s,whatsapp_notes=%s,product_interest=%s,source=%s,nicho=%s,city=%s,state=%s,country=%s,updated_at=NOW() WHERE email=%s",
             (*updates.values(), email))
         # Salva produtos adquiridos
         conn.execute('DELETE FROM contact_purchases WHERE contact_email=%s', (email,))
@@ -3401,12 +3421,13 @@ def upload_mailing():
             'INSERT INTO mailing_contacts (mailing_id,email,name,tags,nicho) VALUES (%s,%s,%s,%s,%s) ON CONFLICT (mailing_id,email) DO NOTHING',
             (mailing_id, c['email'], c['name'], c['tags'], nicho_contato))
         existia = conn.execute('SELECT id FROM contacts WHERE email=%s', (c['email'],)).fetchone()
-        upsert_contact(c['email'], c['name'], c['tags'], conn,
+        upsert_contact(c['email'], c['name'], c['tags'], conn, force_update=True,
                        phone=c.get('phone'), company=c.get('company'),
                        position=c.get('position'), notes=c.get('notes'),
                        product_interest=c.get('product_interest'),
                        source=c.get('source'), status=c.get('status'),
-                       nicho=nicho_contato)
+                       nicho=nicho_contato, city=c.get('city'),
+                       state=c.get('state'), country=c.get('country'))
         if not existia:
             novos_no_crm += 1
     conn.commit()

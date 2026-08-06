@@ -68,7 +68,7 @@
             <div class="col-md-4">
               <label class="form-label small fw-semibold">Status</label>
               <select name="status" class="form-select form-select-sm">
-                {% for val, label in [('lead','Lead'),('interessado','Interessado'),('negocio_quente','Negocio quente'),('em_prospeccao','Em Prospeccao'),('respondeu_aplicacao','Respondeu aplicacao'),('mentoria','Mentoria'),('mentorado','Mentorado'),('diagnostico','Diagnostico'),('vibe_coding','Vibe Coding'),('mailing_mentores','Mailing Mentores'),('wix','Wix'),('cliente','Cliente'),('inativo','Inativo')] %}
+                {% for val, label in [('lead','Lead'),('interessado','Interessado'),('negocio_quente','Negocio quente'),('em_prospeccao','Em Prospeccao'),('respondeu_aplicacao','Respondeu aplicacao'),('mentoria','Mentoria'),('mentorado','Mentorado'),('aluno_curso_mentoria','Aluno Curso Mentoria'),('mentoria_consultoria','Mentoria e Consultoria'),('diagnostico','Diagnostico'),('vibe_coding','Vibe Coding'),('mailing_mentores','Mailing Mentores'),('wix','Wix'),('cliente','Cliente'),('inativo','Inativo')] %}
                 <option value="{{ val }}" {% if contact.status == val %}selected{% endif %}>{{ label }}</option>
                 {% endfor %}
               </select>
@@ -106,6 +106,21 @@
                 <option value="{{ n }}" {% if contact.nicho == n %}selected{% endif %}>{{ n }}</option>
                 {% endfor %}
               </select>
+            </div>
+            <div class="col-md-4">
+              <label class="form-label small fw-semibold">Cidade</label>
+              <input type="text" name="city" class="form-control form-control-sm"
+                     value="{{ contact.city or '' }}" placeholder="São Paulo">
+            </div>
+            <div class="col-md-4">
+              <label class="form-label small fw-semibold">Estado</label>
+              <input type="text" name="state" class="form-control form-control-sm"
+                     value="{{ contact.state or '' }}" placeholder="SP">
+            </div>
+            <div class="col-md-4">
+              <label class="form-label small fw-semibold">País</label>
+              <input type="text" name="country" class="form-control form-control-sm"
+                     value="{{ contact.country or '' }}" placeholder="Brasil">
             </div>
           </div>
 
