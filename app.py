@@ -292,9 +292,25 @@ def init_db():
             signature_name TEXT, signature_role TEXT, signature_phone TEXT,
             created_at TIMESTAMP DEFAULT NOW()
         )''',
+        '''CREATE TABLE IF NOT EXISTS nichos (
+            id SERIAL PRIMARY KEY,
+            name TEXT NOT NULL UNIQUE,
+            created_at TIMESTAMP DEFAULT NOW()
+        )''',
     ]
     for sql in tables:
         conn.execute(sql)
+
+    _NICHOS_SEED = [
+        'Empreendedorismo e Negócios','Saúde e Bem-Estar','Desenvolvimento Pessoal e Espiritualidade',
+        'Mulheres','Liderança e Gestão','Educação e Ensino','Marketing Digital e Vendas',
+        'Relacionamentos e Família','Beleza e Estética','Carreira e Recursos Humanos',
+        'Finanças e Investimentos','Tecnologia e Inovação','Direito e Advocacia','Coaching',
+        'Alimentação e Nutrição','Psicologia e Terapia','Fitness e Esportes','Arte e Cultura',
+        'Mentoria e Consultoria',
+    ]
+    for n in _NICHOS_SEED:
+        conn.execute('INSERT INTO nichos (name) VALUES (%s) ON CONFLICT (name) DO NOTHING', (n,))
 
     # Migrations idempotentes via bloco DO
     for col_sql in [
@@ -1151,9 +1167,18 @@ def require_db_and_auth():
 
 @app.context_processor
 def inject_user():
+    ctx = {}
     if 'user_id' in session:
-        return {'current_user': {'id': session.get('user_id'), 'email': session.get('user_email'), 'name': session.get('user_name'), 'role': session.get('user_role')}}
-    return {'current_user': None}
+        ctx['current_user'] = {'id': session.get('user_id'), 'email': session.get('user_email'), 'name': session.get('user_name'), 'role': session.get('user_role')}
+    else:
+        ctx['current_user'] = None
+    try:
+        conn = get_db()
+        ctx['nichos_list'] = [r['name'] for r in conn.execute('SELECT name FROM nichos ORDER BY name').fetchall()]
+        conn.close()
+    except Exception:
+        ctx['nichos_list'] = []
+    return ctx
 
 @app.route('/setup')
 def setup_page():
@@ -1667,13 +1692,48 @@ def pagina_nichos():
         ORDER BY qtd DESC
     """).fetchall()
 
+    nichos_db = conn.execute('SELECT id, name FROM nichos ORDER BY name').fetchall()
     conn.close()
     return render_template('nichos.html',
                            nichos_crm=nichos_crm,
                            nichos_mailing=nichos_mailing,
+                           nichos_db=nichos_db,
                            total_com_nicho=total_com_nicho,
                            total_sem_nicho=total_sem_nicho,
                            total_contatos=total_contatos)
+
+
+@app.route('/nichos/adicionar', methods=['POST'])
+@login_required
+def adicionar_nicho():
+    name = request.form.get('name', '').strip()
+    if not name:
+        flash('Informe o nome do nicho.', 'danger')
+        return redirect(url_for('pagina_nichos'))
+    conn = get_db()
+    existing = conn.execute('SELECT id FROM nichos WHERE name=%s', (name,)).fetchone()
+    if existing:
+        flash(f'Nicho "{name}" já existe.', 'warning')
+    else:
+        conn.execute('INSERT INTO nichos (name) VALUES (%s)', (name,))
+        conn.commit()
+        flash(f'Nicho "{name}" adicionado!', 'success')
+    conn.close()
+    return redirect(url_for('pagina_nichos'))
+
+
+@app.route('/nichos/<int:nicho_id>/remover', methods=['POST'])
+@login_required
+def remover_nicho(nicho_id):
+    conn = get_db()
+    nicho = conn.execute('SELECT name FROM nichos WHERE id=%s', (nicho_id,)).fetchone()
+    if nicho:
+        conn.execute('DELETE FROM nichos WHERE id=%s', (nicho_id,))
+        conn.commit()
+        flash(f'Nicho "{nicho["name"]}" removido da lista.', 'info')
+    conn.close()
+    return redirect(url_for('pagina_nichos'))
+
 
 @app.route('/api/nichos')
 def api_nichos():
