@@ -286,23 +286,15 @@
           <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
         </div>
         <div class="modal-body">
-          <p class="text-muted small mb-3">Você já tem conteúdo neste e-mail. O que a IA deve fazer com o template escolhido?</p>
+          <p class="text-muted small mb-3">Você já tem conteúdo neste e-mail. O que deseja fazer?</p>
           <div class="d-grid gap-2">
-            <button type="button" class="btn btn-outline-danger text-start p-3" onclick="gtmEscolherOpcao('substituir')">
-              <strong>🔄 Substituir tudo</strong>
-              <div class="small text-muted">A IA gera um novo conteúdo do zero, no layout do template (perde o conteúdo atual).</div>
+            <button type="button" class="btn btn-outline-success text-start p-3" onclick="gtmEscolherOpcao('manter')">
+              <strong>📝 Manter meu texto original</strong>
+              <div class="small text-muted">Encaixa seu texto no layout/cores do template sem alterar nenhuma palavra.</div>
             </button>
-            <button type="button" class="btn btn-outline-primary text-start p-3" onclick="gtmEscolherOpcao('melhorar')">
-              <strong>✏️ Melhorar conteúdo atual</strong>
-              <div class="small text-muted">Mantém todo o seu conteúdo na íntegra e só melhora a formatação, encaixando no layout do template.</div>
-            </button>
-            <button type="button" class="btn btn-outline-secondary text-start p-3" onclick="gtmEscolherOpcao('visual')">
-              <strong>🎨 Só ajustar visual</strong>
-              <div class="small text-muted">Mantém conteúdo e formatação como estão, só ajusta cores e layout pelo template.</div>
-            </button>
-            <button type="button" class="btn btn-outline-success text-start p-3" onclick="gtmEscolherOpcao('encaixar')">
-              <strong>📝 Encaixar no layout (sem IA)</strong>
-              <div class="small text-muted">Coloca seu texto dentro do layout do template sem alterar nenhuma palavra. Sem uso de IA.</div>
+            <button type="button" class="btn btn-outline-primary text-start p-3" onclick="gtmEscolherOpcao('reescrever')">
+              <strong>✨ Reescrever com IA</strong>
+              <div class="small text-muted">A IA cria um conteúdo novo usando o template como base (abre o assistente de criação).</div>
             </button>
           </div>
         </div>
