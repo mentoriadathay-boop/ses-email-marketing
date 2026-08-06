@@ -82,6 +82,7 @@
           <tr>
             <th class="ps-4">Email / Nome</th>
             <th>Empresa</th>
+            <th>WhatsApp</th>
             <th>Tags</th>
             <th>Status</th>
             <th>Score</th>
@@ -97,6 +98,23 @@
               {% if c.name %}<div class="text-muted" style="font-size:.8rem">{{ c.name }}</div>{% endif %}
             </td>
             <td class="small text-muted">{{ c.company or '—' }}</td>
+            <td>
+              {% if c.whatsapp %}
+              <a href="https://wa.me/{{ c.whatsapp | replace(' ','') | replace('(','') | replace(')','') | replace('-','') | replace('+','') }}"
+                 target="_blank" class="btn btn-sm px-2 py-1" style="background:#25D366;color:#fff;border-radius:8px"
+                 title="Conversar no WhatsApp">
+                <i class="bi bi-whatsapp"></i>
+              </a>
+              {% elif c.phone %}
+              <a href="https://wa.me/55{{ c.phone | replace(' ','') | replace('(','') | replace(')','') | replace('-','') | replace('+','') }}"
+                 target="_blank" class="btn btn-sm px-2 py-1" style="background:#25D366;color:#fff;border-radius:8px;opacity:0.6"
+                 title="Tentar via telefone">
+                <i class="bi bi-whatsapp"></i>
+              </a>
+              {% else %}
+              <span class="text-muted small">—</span>
+              {% endif %}
+            </td>
             <td>
               {% if c.tags %}
                 {% for t in c.tags.split(',') %}
@@ -187,6 +205,12 @@
               <input type="text" name="company" class="form-control form-control-sm"
                      placeholder="Nome da empresa">
             </div>
+          </div>
+          <div class="mb-3">
+            <label class="form-label fw-semibold"><i class="bi bi-whatsapp text-success me-1"></i>WhatsApp</label>
+            <input type="text" name="whatsapp" class="form-control form-control-sm"
+                   placeholder="5511999999999 (com DDI+DDD, sem espacos)">
+            <div class="form-text">Numero completo com codigo do pais. Ex: 5511999999999</div>
           </div>
           <div class="mb-3">
             <label class="form-label fw-semibold">Produto/Servico de Interesse</label>
