@@ -3236,12 +3236,66 @@ def contato_perfil(email):
     purchases = conn.execute(
         'SELECT * FROM contact_purchases WHERE contact_email=%s ORDER BY created_at DESC',
         (email,)).fetchall()
+    all_mailings = conn.execute('SELECT id, name, contact_count FROM mailings ORDER BY name').fetchall()
+    contact_mailings = conn.execute(
+        'SELECT m.id, m.name, m.contact_count FROM mailing_contacts mc JOIN mailings m ON m.id=mc.mailing_id WHERE mc.email=%s ORDER BY m.name',
+        (email,)).fetchall()
     best_hour = get_best_send_hour(email)
     is_bl = is_blacklisted(email, conn)
     conn.close()
     return render_template('contato_perfil.html', contact=contact, activities=activities,
                            cadencias=cadencias_do_contato, purchases=purchases,
+                           all_mailings=all_mailings, contact_mailings=contact_mailings,
                            best_hour=best_hour, is_blacklisted=is_bl)
+
+
+@app.route('/contatos/<path:email>/mailing', methods=['POST'])
+@login_required
+def contato_add_mailing(email):
+    mailing_id = request.form.get('mailing_id', '').strip()
+    if not mailing_id:
+        flash('Selecione um mailing.', 'danger')
+        return redirect(url_for('contato_perfil', email=email))
+    conn = get_db()
+    contact = conn.execute('SELECT name, tags FROM contacts WHERE email=%s', (email,)).fetchone()
+    if not contact:
+        conn.close()
+        flash('Contato não encontrado.', 'danger')
+        return redirect(url_for('lista_contatos'))
+    try:
+        conn.execute(
+            'INSERT INTO mailing_contacts (mailing_id, email, name, tags) VALUES (%s, %s, %s, %s) ON CONFLICT (mailing_id, email) DO NOTHING',
+            (int(mailing_id), email, contact['name'] or '', contact['tags'] or ''))
+        conn.execute('UPDATE mailings SET contact_count = (SELECT COUNT(*) FROM mailing_contacts WHERE mailing_id=%s) WHERE id=%s',
+                     (int(mailing_id), int(mailing_id)))
+        conn.commit()
+        mailing = conn.execute('SELECT name FROM mailings WHERE id=%s', (int(mailing_id),)).fetchone()
+        flash(f'Contato adicionado ao mailing "{mailing["name"]}"!', 'success')
+        log_activity(email, 'added_to_mailing', f'Adicionado ao mailing: {mailing["name"]}', conn)
+        conn.commit()
+    except Exception as e:
+        conn.rollback()
+        flash(f'Erro ao adicionar ao mailing: {e}', 'danger')
+    conn.close()
+    return redirect(url_for('contato_perfil', email=email))
+
+
+@app.route('/contatos/<path:email>/mailing/<int:mailing_id>/remover', methods=['POST'])
+@login_required
+def contato_remove_mailing(email, mailing_id):
+    conn = get_db()
+    conn.execute('DELETE FROM mailing_contacts WHERE mailing_id=%s AND email=%s', (mailing_id, email))
+    conn.execute('UPDATE mailings SET contact_count = (SELECT COUNT(*) FROM mailing_contacts WHERE mailing_id=%s) WHERE id=%s',
+                 (mailing_id, mailing_id))
+    conn.commit()
+    mailing = conn.execute('SELECT name FROM mailings WHERE id=%s', (mailing_id,)).fetchone()
+    if mailing:
+        flash(f'Contato removido do mailing "{mailing["name"]}".', 'info')
+        log_activity(email, 'removed_from_mailing', f'Removido do mailing: {mailing["name"]}', conn)
+        conn.commit()
+    conn.close()
+    return redirect(url_for('contato_perfil', email=email))
+
 
 # ── Tags ──────────────────────────────────────────────────────────────────────
 
