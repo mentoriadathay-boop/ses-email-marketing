@@ -319,6 +319,8 @@ def init_db():
         "ALTER TABLE campaigns ADD COLUMN resent_from INTEGER",
         "ALTER TABLE campaigns ADD COLUMN total_opened INTEGER DEFAULT 0",
         "ALTER TABLE campaigns ADD COLUMN total_clicked INTEGER DEFAULT 0",
+        "ALTER TABLE contacts ADD COLUMN whatsapp TEXT",
+        "ALTER TABLE contacts ADD COLUMN whatsapp_notes TEXT",
     ]:
         try:
             conn.execute(f"DO $$ BEGIN {col_sql}; EXCEPTION WHEN duplicate_column THEN NULL; END $$")
@@ -3143,6 +3145,7 @@ def adicionar_contato_manual():
     name = request.form.get('name', '').strip()
     phone = request.form.get('phone', '').strip()
     company = request.form.get('company', '').strip()
+    whatsapp = request.form.get('whatsapp', '').strip()
     status = request.form.get('status', 'lead').strip()
     tags = request.form.get('tags', '').strip()
     product_interest = request.form.get('product_interest', '').strip()
@@ -3158,8 +3161,8 @@ def adicionar_contato_manual():
         conn.close()
         return redirect(url_for('contato_perfil', email=email))
     conn.execute(
-        'INSERT INTO contacts (email,name,phone,company,status,tags,product_interest,source,nicho) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)',
-        (email, name, phone, company, status or 'lead', tags, product_interest or None, source or None, nicho or None))
+        'INSERT INTO contacts (email,name,phone,company,whatsapp,status,tags,product_interest,source,nicho) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)',
+        (email, name, phone, company, whatsapp or None, status or 'lead', tags, product_interest or None, source or None, nicho or None))
     conn.commit()
     conn.close()
     flash(f'Contato {email} adicionado!', 'success')
@@ -3204,10 +3207,10 @@ def contato_perfil(email):
         flash('Contato não encontrado.', 'danger'); conn.close(); return redirect(url_for('lista_contatos'))
 
     if request.method == 'POST':
-        fields = ['name', 'phone', 'company', 'position', 'status', 'tags', 'notes', 'product_interest', 'source', 'nicho']
+        fields = ['name', 'phone', 'company', 'position', 'whatsapp', 'status', 'tags', 'notes', 'whatsapp_notes', 'product_interest', 'source', 'nicho']
         updates = {f: request.form.get(f, '').strip() for f in fields}
         conn.execute(
-            "UPDATE contacts SET name=%s,phone=%s,company=%s,position=%s,status=%s,tags=%s,notes=%s,product_interest=%s,source=%s,nicho=%s,updated_at=NOW() WHERE email=%s",
+            "UPDATE contacts SET name=%s,phone=%s,company=%s,position=%s,whatsapp=%s,status=%s,tags=%s,notes=%s,whatsapp_notes=%s,product_interest=%s,source=%s,nicho=%s,updated_at=NOW() WHERE email=%s",
             (*updates.values(), email))
         # Salva produtos adquiridos
         conn.execute('DELETE FROM contact_purchases WHERE contact_email=%s', (email,))

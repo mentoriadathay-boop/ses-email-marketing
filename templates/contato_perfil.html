@@ -24,6 +24,21 @@
 <div class="row g-4">
   <!-- Coluna esquerda: dados editáveis -->
   <div class="col-lg-5">
+    {% set wa_num = contact.whatsapp or contact.phone or '' %}
+    {% if wa_num %}
+    <div class="card mb-3" style="border:1px solid #25D366">
+      <div class="card-body py-3 d-flex align-items-center justify-content-between">
+        <div>
+          <div class="fw-semibold small"><i class="bi bi-whatsapp text-success me-1"></i>WhatsApp</div>
+          <div class="text-muted" style="font-size:.8rem">{{ wa_num }}</div>
+        </div>
+        <a href="https://wa.me/{{ wa_num | replace(' ','') | replace('(','') | replace(')','') | replace('-','') | replace('+','') }}"
+           target="_blank" class="btn btn-success btn-sm px-3">
+          <i class="bi bi-whatsapp me-1"></i>Abrir Conversa
+        </a>
+      </div>
+    </div>
+    {% endif %}
     <div class="card mb-4">
       <div class="card-body">
         <h6 class="fw-semibold mb-3"><i class="bi bi-person-lines-fill me-2 text-primary"></i>Dados do Contato</h6>
@@ -37,6 +52,21 @@
             <label class="form-label small fw-semibold">Telefone</label>
             <input type="text" name="phone" class="form-control form-control-sm"
                    value="{{ contact.phone or '' }}" placeholder="(11) 99999-9999">
+          </div>
+          <div class="mb-2">
+            <label class="form-label small fw-semibold"><i class="bi bi-whatsapp text-success me-1"></i>WhatsApp</label>
+            <div class="input-group input-group-sm">
+              <input type="text" name="whatsapp" class="form-control"
+                     value="{{ contact.whatsapp or '' }}" placeholder="5511999999999">
+              {% set wa_num = contact.whatsapp or contact.phone or '' %}
+              {% if wa_num %}
+              <a href="https://wa.me/{{ wa_num | replace(' ','') | replace('(','') | replace(')','') | replace('-','') | replace('+','') }}"
+                 target="_blank" class="btn btn-success" title="Abrir conversa no WhatsApp">
+                <i class="bi bi-whatsapp me-1"></i>Conversar
+              </a>
+              {% endif %}
+            </div>
+            <div class="form-text">Numero com DDI+DDD. Ex: 5511999999999</div>
           </div>
           <div class="mb-2">
             <label class="form-label small fw-semibold">Empresa</label>
@@ -105,6 +135,12 @@
             <label class="form-label small fw-semibold">Observacoes</label>
             <textarea name="notes" class="form-control form-control-sm" rows="3"
                       placeholder="Notas internas sobre o contato...">{{ contact.notes or '' }}</textarea>
+          </div>
+          <div class="mb-3">
+            <label class="form-label small fw-semibold"><i class="bi bi-whatsapp text-success me-1"></i>Notas de Conversas WhatsApp</label>
+            <textarea name="whatsapp_notes" class="form-control form-control-sm" rows="4"
+                      placeholder="Registre aqui o resumo das conversas pelo WhatsApp...">{{ contact.whatsapp_notes or '' }}</textarea>
+            <div class="form-text">Anote datas e resumos das conversas para manter o historico no CRM.</div>
           </div>
 
           <!-- Produtos Adquiridos -->
