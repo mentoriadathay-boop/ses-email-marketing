@@ -3906,32 +3906,42 @@ Kit de Marca — {kit['name']}:
             template_ref_clean, b64_reps_t = _strip_base64(template_ref)
         conteudo_usuario, b64_reps_c = _strip_base64(conteudo_usuario)
 
-        prompt = f"""Estruture o conteúdo do usuário em um email profissional HTML, usando o template como referência visual.
+        prompt = f"""Você é um formatador de emails HTML. Sua ÚNICA função é pegar o texto do usuário e colocá-lo dentro de um layout HTML profissional de email.
 
-REGRA FUNDAMENTAL: NÃO altere, resuma, corte, reescreva ou invente NENHUM texto. Mantenha CADA PALAVRA, frase, parágrafo, lista, link e imagem EXATAMENTE como o usuário escreveu, na mesma ordem.
+REGRA ABSOLUTA E INVIOLÁVEL:
+- Você é um COPISTA. Copie CADA PARÁGRAFO do texto original na íntegra, palavra por palavra.
+- NÃO resuma, NÃO reescreva, NÃO sintetize, NÃO omita, NÃO substitua sinônimos, NÃO mude a ordem.
+- Se o texto tem 20 parágrafos, o HTML deve ter 20 parágrafos com EXATAMENTE as mesmas palavras.
+- Se o usuário escreveu "provavelmente já sentiu isso", NÃO mude para "provavelmente já viveu essa frustração".
+- Se o usuário escreveu uma lista com 8 itens, coloque os 8 itens com as palavras originais.
+- Se o usuário escreveu "Eu escrevo esse email porque...", mantenha "Eu escrevo esse email porque...".
+- Cada frase do texto original DEVE aparecer no HTML final. Se faltar uma única frase, você falhou.
 
-Conteúdo do usuário (preserve 100% — cada palavra conta):
+TEXTO ORIGINAL DO USUÁRIO (copie 100%% — CADA PALAVRA, CADA FRASE, CADA PARÁGRAFO):
+--- INÍCIO DO TEXTO ---
 {conteudo_usuario}
+--- FIM DO TEXTO ---
 
-Template de referência visual (use APENAS como referência de layout, cores, fontes, cabeçalho e rodapé):
+TEMPLATE VISUAL DE REFERÊNCIA (use APENAS cores, fontes, layout — NUNCA o texto do template):
 {template_ref_clean if template_ref_clean else 'Nenhum — use layout padrão profissional'}
 
 {kit_info}{imagem_info}
 
-O que você DEVE fazer:
-1. Cabeçalho colorido com a cor primária {primary_color} e o tema "{dados.get('tema', '')}"
-2. Organizar o texto do usuário em seções visuais claras (títulos, subtítulos, parágrafos, listas) — mas SEM mudar o texto
-3. Aplicar formatação visual: negritos em palavras-chave, espaçamento entre seções, bordas decorativas
-4. Adicionar botão CTA com href="#LINK_CTA" se o texto mencionar alguma ação (inscrição, compra, link, etc.)
-5. Rodapé com nome da empresa e link de descadastrar
-6. Usar {{nome}} na saudação se não houver saudação no texto
+O QUE VOCÊ DEVE FAZER (apenas formatação visual, ZERO alteração de texto):
+1. Cabeçalho colorido com cor {primary_color} e o tema do email
+2. Envolver CADA parágrafo original em tags <p> ou <td> adequadas
+3. Quando o texto original tiver uma lista de itens, usar <ul><li> preservando o texto exato de cada item
+4. Quando o texto tiver subtítulos naturais (frases curtas seguidas de explicação), usar <h2> ou <h3> com o texto original
+5. Aplicar negrito (<strong>) em palavras-chave que o próprio autor já enfatizou
+6. Adicionar botão CTA estilizado para links que o autor incluiu no texto (preservar URL e texto do link)
+7. Rodapé com nome da empresa e link de descadastrar
+8. Manter {{nome}} ou [Nome] onde o autor colocou
 
-Instruções obrigatórias:
-- Retorne APENAS o código HTML, sem explicações, sem markdown, sem blocos ```
-- Email responsivo, máximo 600px de largura, centralizado
-- Use SOMENTE inline CSS (style="...") — nenhuma tag <style> ou <link>
-- TODO o texto do usuário DEVE aparecer no resultado final, sem exceção
-- Mantenha {{nome}} onde já estiver presente no conteúdo do usuário
+FORMATO DE SAÍDA:
+- Retorne APENAS HTML, sem explicações, sem markdown, sem ```
+- Email responsivo, max 600px, centralizado
+- SOMENTE inline CSS (style="...") — sem <style> ou <link>
+- O HTML final deve conter TODAS as frases do texto original, sem exceção
 """
     else:
         prompt = f"""Crie um email profissional de marketing em HTML, com conteúdo RICO, ESPECÍFICO e APROFUNDADO — nada de texto genérico ou raso.
