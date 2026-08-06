@@ -162,6 +162,60 @@
       </div>
     </div>
 
+    <!-- Mailings vinculados -->
+    <div class="card mb-4">
+      <div class="card-body">
+        <h6 class="fw-semibold mb-3"><i class="bi bi-collection me-2 text-primary"></i>Mailings Vinculados</h6>
+        {% if contact_mailings %}
+        <div class="mb-3">
+          {% for m in contact_mailings %}
+          <div class="d-flex justify-content-between align-items-center mb-2 pb-2 {% if not loop.last %}border-bottom{% endif %}">
+            <div>
+              <span class="fw-semibold small">{{ m.name }}</span>
+              <span class="badge ms-2" style="background:#dbeafe;color:#1e40af;font-size:.65rem">
+                <i class="bi bi-people me-1"></i>{{ m.contact_count }}
+              </span>
+            </div>
+            <form method="POST" action="{{ url_for('contato_remove_mailing', email=contact.email, mailing_id=m.id) }}"
+                  class="d-inline"
+                  onsubmit="return confirm('Remover contato do mailing {{ m.name }}?')">
+              <button type="submit" class="btn btn-outline-danger btn-sm py-0 px-2" title="Remover do mailing">
+                <i class="bi bi-x-lg"></i>
+              </button>
+            </form>
+          </div>
+          {% endfor %}
+        </div>
+        {% else %}
+        <p class="text-muted small mb-3">Nenhum mailing vinculado.</p>
+        {% endif %}
+
+        {% set linked_ids = contact_mailings | map(attribute='id') | list %}
+        {% set ns = namespace(has_available=false) %}
+        {% for m in all_mailings %}{% if m.id not in linked_ids %}{% set ns.has_available = true %}{% endif %}{% endfor %}
+
+        {% if ns.has_available %}
+        <form method="POST" action="{{ url_for('contato_add_mailing', email=contact.email) }}" class="d-flex gap-2">
+          <select name="mailing_id" class="form-select form-select-sm flex-fill" required>
+            <option value="">— Selecione um mailing —</option>
+            {% for m in all_mailings %}
+            {% if m.id not in linked_ids %}
+            <option value="{{ m.id }}">{{ m.name }} ({{ m.contact_count }} contatos)</option>
+            {% endif %}
+            {% endfor %}
+          </select>
+          <button type="submit" class="btn btn-sm btn-outline-primary px-3">
+            <i class="bi bi-plus-lg me-1"></i>Adicionar
+          </button>
+        </form>
+        {% elif not all_mailings %}
+        <p class="text-muted small mb-0">Nenhum mailing cadastrado. <a href="{{ url_for('lista_mailings') }}">Criar mailing</a></p>
+        {% else %}
+        <p class="text-muted small mb-0">Contato já vinculado a todos os mailings.</p>
+        {% endif %}
+      </div>
+    </div>
+
     <div class="row g-3">
       <!-- Smart send time -->
       {% if best_hour is not none %}
