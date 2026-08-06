@@ -3850,6 +3850,202 @@ def _restore_base64(html, reps):
         html = html.replace(k, v)
     return html
 
+
+def _extrair_cor_template(template_html):
+    """Extract the primary header color from a template's HTML."""
+    m = re.search(r'background:\s*(#[0-9a-fA-F]{3,8})', template_html[:1500]) if template_html else None
+    return m.group(1) if m else None
+
+
+def _texto_para_email_html(texto, template_html='', primary_color='#1a3a6b', tema='',
+                           kit=None, imagem_url=''):
+    """Convert plain text into a structured HTML email WITHOUT using AI.
+    Every word of the user's text is preserved verbatim."""
+    cor = _extrair_cor_template(template_html) or primary_color
+    # Lighter shade for section title borders
+    cor_light = cor + '22'
+
+    # --- Kit de marca info ---
+    empresa = 'Empresa'
+    assinatura_nome = ''
+    assinatura_cargo = ''
+    social_links = ''
+    if kit:
+        empresa = kit.get('name') or kit.get('signature_name') or 'Empresa'
+        assinatura_nome = kit.get('signature_name', '')
+        assinatura_cargo = kit.get('signature_role', '')
+        links = []
+        for rede, emoji in [('instagram','📸'), ('facebook','📘'), ('linkedin','💼'),
+                            ('whatsapp','📱'), ('website','🌐')]:
+            url = kit.get(rede, '')
+            if url:
+                if not url.startswith('http'):
+                    url = 'https://' + url
+                links.append(f'<a href="{url}" style="text-decoration:none;font-size:18px;margin:0 4px;">{emoji}</a>')
+        social_links = ' '.join(links)
+
+    # --- Parse text into blocks ---
+    texto = texto.strip()
+    # Normalize line endings
+    texto = texto.replace('\r\n', '\n').replace('\r', '\n')
+
+    # Extract subject line if present
+    assunto_extraido = ''
+    if texto.lower().startswith('assunto:'):
+        first_nl = texto.find('\n')
+        if first_nl > 0:
+            assunto_extraido = texto[len('assunto:'):first_nl].strip()
+            texto = texto[first_nl:].strip()
+    titulo_header = tema or assunto_extraido or empresa
+
+    # Split by double newlines into blocks
+    raw_blocks = re.split(r'\n\s*\n', texto)
+    blocks = [b.strip() for b in raw_blocks if b.strip()]
+
+    # --- Classify and render each block ---
+    content_parts = []
+    found_cta = False
+
+    for idx, block in enumerate(blocks):
+        lines = [l.strip() for l in block.split('\n') if l.strip()]
+        if not lines:
+            continue
+        first = lines[0]
+
+        # Detect markdown link — make it a CTA button
+        md_link = re.search(r'\[([^\]]+)\]\(([^)]+)\)', block)
+        if md_link and len(block) < 300 and block.count('\n') < 2:
+            link_text = md_link.group(1)
+            link_url = md_link.group(2)
+            # Any surrounding text
+            before = block[:md_link.start()].strip()
+            after = block[md_link.end():].strip()
+            if before:
+                content_parts.append(f'<p style="font-size:15px;color:#333;line-height:1.7;margin:0 0 12px;">{_esc(before)}</p>')
+            content_parts.append(
+                f'<div style="text-align:center;margin:24px 0;">'
+                f'<a href="{_esc(link_url)}" style="background:{cor};color:#fff;padding:14px 32px;'
+                f'border-radius:6px;text-decoration:none;font-weight:bold;display:inline-block;">'
+                f'{_esc(link_text)} &rarr;</a></div>')
+            if after:
+                content_parts.append(f'<p style="font-size:15px;color:#333;line-height:1.7;margin:12px 0 0;">{_esc(after)}</p>')
+            found_cta = True
+            continue
+
+        # Detect plain URL on its own line
+        if len(lines) == 1 and re.match(r'^https?://\S+$', first):
+            content_parts.append(
+                f'<div style="text-align:center;margin:24px 0;">'
+                f'<a href="{_esc(first)}" style="background:{cor};color:#fff;padding:14px 32px;'
+                f'border-radius:6px;text-decoration:none;font-weight:bold;display:inline-block;">'
+                f'Acessar &rarr;</a></div>')
+            found_cta = True
+            continue
+
+        # Detect greeting (first or second block)
+        if idx <= 1 and re.match(r'^(oi|olá|hey|hi|bom dia|boa tarde|boa noite)\b', first, re.I):
+            content_parts.append(
+                f'<p style="font-size:16px;color:#333;line-height:1.7;margin:0 0 16px;">'
+                + '<br>'.join(_esc(l) for l in lines) + '</p>')
+            continue
+
+        # Detect signature block (Um abraço, / Atenciosamente, etc.)
+        if re.match(r'^(um abraço|atenciosamente|abraços|cordialmente|att|com carinho|saudações)', first, re.I):
+            sig_html = '<br>'.join(f'<strong>{_esc(l)}</strong>' if i > 0 and len(l) < 80 else _esc(l)
+                                  for i, l in enumerate(lines))
+            content_parts.append(
+                f'<p style="font-size:15px;color:#333;line-height:1.7;margin:24px 0 0;">{sig_html}</p>')
+            continue
+
+        # Detect list: 3+ lines, each moderate length, pattern looks like list items
+        is_list = False
+        if len(lines) >= 3:
+            bullet_chars = ('-', '•', '*', '–', '✅', '📅', '⏰', '🌐', '📸', '📘', '💼', '📱')
+            has_bullets = all(any(l.startswith(b) for b in bullet_chars) for l in lines)
+            if has_bullets:
+                is_list = True
+            elif all(20 < len(l) < 200 for l in lines):
+                starts_with_verb = sum(1 for l in lines
+                                       if re.match(r'^(Como|Ferramentas|Plataformas|Aplicativos|'
+                                                   r'Landing|Chatbots|Calculadoras|Sistemas|Pequenos|'
+                                                   r'Acesso|Trinta|O eBook|O eBook|Acesso)', l))
+                if starts_with_verb >= len(lines) * 0.5:
+                    is_list = True
+                elif not any(l.endswith(('.', '!', '?')) for l in lines[:-1]):
+                    is_list = True
+
+        if is_list:
+            list_items = []
+            for l in lines:
+                for b in ('-', '•', '*', '–'):
+                    if l.startswith(b + ' '):
+                        l = l[2:].strip()
+                        break
+                list_items.append(f'<li style="margin-bottom:8px;">{_esc(l)}</li>')
+            content_parts.append(
+                f'<ul style="padding-left:20px;color:#333;font-size:15px;line-height:1.7;margin:12px 0 16px;">'
+                + ''.join(list_items) + '</ul>')
+            continue
+
+        # Detect heading: single line, shortish, doesn't end with sentence punctuation
+        if (len(lines) == 1 and len(first) < 120
+                and not first.endswith(('.', '!', '?', ',', ';'))
+                and not re.match(r'^(oi|olá|hey)\b', first, re.I)):
+            content_parts.append(
+                f'<h3 style="color:{cor};font-size:18px;margin:28px 0 8px;'
+                f'border-bottom:2px solid {cor_light};padding-bottom:8px;">'
+                f'{_esc(first)}</h3>')
+            continue
+
+        # Detect info block (Data: / Horário: / Formato: lines)
+        if all(':' in l and len(l) < 100 for l in lines):
+            info = '<br>'.join(f'<strong>{_esc(l.split(":",1)[0])}:</strong>{_esc(l.split(":",1)[1])}'
+                               for l in lines)
+            content_parts.append(
+                f'<div style="background:#f8f9fa;border-left:4px solid {cor};'
+                f'padding:16px;border-radius:4px;margin:12px 0;font-size:15px;line-height:1.8;">'
+                f'{info}</div>')
+            continue
+
+        # Default: paragraph(s)
+        for l in lines:
+            content_parts.append(
+                f'<p style="font-size:15px;color:#333;line-height:1.7;margin:0 0 14px;">{_esc(l)}</p>')
+
+    body_html = '\n'.join(content_parts)
+
+    # Image
+    img_tag = ''
+    if imagem_url:
+        img_tag = (f'<div style="text-align:center;margin:16px 0;">'
+                   f'<img src="{_esc(imagem_url)}" alt="imagem" '
+                   f'style="max-width:100%;border-radius:8px;"></div>')
+
+    # --- Build full email HTML ---
+    html = f'''<!DOCTYPE html><html><body style="margin:0;padding:20px;background:#f0f2f5;font-family:Arial,Helvetica,sans-serif;">
+<table width="100%" cellpadding="0" cellspacing="0"><tr><td align="center">
+<table width="560" cellpadding="0" cellspacing="0" style="background:#fff;border-radius:8px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,.08);">
+<tr><td style="background:{cor};padding:28px 32px;text-align:center;">
+  <h1 style="color:#fff;margin:0;font-size:22px;">{_esc(titulo_header)}</h1>
+</td></tr>
+<tr><td style="padding:32px 36px;color:#333;">
+  {img_tag}
+  {body_html}
+</td></tr>
+<tr><td style="background:#f8f9fa;padding:20px 32px;text-align:center;font-size:12px;color:#888;">
+  {social_links + '<br>' if social_links else ''}
+  &copy; 2025 {_esc(empresa)} &middot; <a href="#" style="color:#888;">Descadastrar</a>
+</td></tr>
+</table></td></tr></table></body></html>'''
+    return html
+
+
+def _esc(text):
+    """Escape HTML special characters in text."""
+    return (text.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
+                .replace('"', '&quot;'))
+
+
 @app.route('/ia/gerar-email', methods=['POST'])
 def ia_gerar_email():
     if not ANTHROPIC_OK:
@@ -3898,51 +4094,15 @@ Kit de Marca — {kit['name']}:
         conteudo_usuario = dados.get('contexto', '').strip()
         if not conteudo_usuario:
             return jsonify({'erro': 'Cole seu conteúdo no campo de texto.'}), 400
-
-        template_ref_clean = ''
-        b64_reps_c = {}
-        b64_reps_t = {}
-        if template_ref:
-            template_ref_clean, b64_reps_t = _strip_base64(template_ref)
-        conteudo_usuario, b64_reps_c = _strip_base64(conteudo_usuario)
-
-        prompt = f"""Você é um formatador de emails HTML. Sua ÚNICA função é pegar o texto do usuário e colocá-lo dentro de um layout HTML profissional de email.
-
-REGRA ABSOLUTA E INVIOLÁVEL:
-- Você é um COPISTA. Copie CADA PARÁGRAFO do texto original na íntegra, palavra por palavra.
-- NÃO resuma, NÃO reescreva, NÃO sintetize, NÃO omita, NÃO substitua sinônimos, NÃO mude a ordem.
-- Se o texto tem 20 parágrafos, o HTML deve ter 20 parágrafos com EXATAMENTE as mesmas palavras.
-- Se o usuário escreveu "provavelmente já sentiu isso", NÃO mude para "provavelmente já viveu essa frustração".
-- Se o usuário escreveu uma lista com 8 itens, coloque os 8 itens com as palavras originais.
-- Se o usuário escreveu "Eu escrevo esse email porque...", mantenha "Eu escrevo esse email porque...".
-- Cada frase do texto original DEVE aparecer no HTML final. Se faltar uma única frase, você falhou.
-
-TEXTO ORIGINAL DO USUÁRIO (copie 100%% — CADA PALAVRA, CADA FRASE, CADA PARÁGRAFO):
---- INÍCIO DO TEXTO ---
-{conteudo_usuario}
---- FIM DO TEXTO ---
-
-TEMPLATE VISUAL DE REFERÊNCIA (use APENAS cores, fontes, layout — NUNCA o texto do template):
-{template_ref_clean if template_ref_clean else 'Nenhum — use layout padrão profissional'}
-
-{kit_info}{imagem_info}
-
-O QUE VOCÊ DEVE FAZER (apenas formatação visual, ZERO alteração de texto):
-1. Cabeçalho colorido com cor {primary_color} e o tema do email
-2. Envolver CADA parágrafo original em tags <p> ou <td> adequadas
-3. Quando o texto original tiver uma lista de itens, usar <ul><li> preservando o texto exato de cada item
-4. Quando o texto tiver subtítulos naturais (frases curtas seguidas de explicação), usar <h2> ou <h3> com o texto original
-5. Aplicar negrito (<strong>) em palavras-chave que o próprio autor já enfatizou
-6. Adicionar botão CTA estilizado para links que o autor incluiu no texto (preservar URL e texto do link)
-7. Rodapé com nome da empresa e link de descadastrar
-8. Manter {{nome}} ou [Nome] onde o autor colocou
-
-FORMATO DE SAÍDA:
-- Retorne APENAS HTML, sem explicações, sem markdown, sem ```
-- Email responsivo, max 600px, centralizado
-- SOMENTE inline CSS (style="...") — sem <style> ou <link>
-- O HTML final deve conter TODAS as frases do texto original, sem exceção
-"""
+        html = _texto_para_email_html(
+            conteudo_usuario,
+            template_html=template_ref,
+            primary_color=primary_color,
+            tema=dados.get('tema', ''),
+            kit=dict(kit) if kit else None,
+            imagem_url=imagem_url,
+        )
+        return jsonify({'html': html})
     else:
         prompt = f"""Crie um email profissional de marketing em HTML, com conteúdo RICO, ESPECÍFICO e APROFUNDADO — nada de texto genérico ou raso.
 
@@ -3987,9 +4147,6 @@ Instruções obrigatórias:
         html = resp.content[0].text.strip()
         html = re.sub(r'^```[a-z]*\n?', '', html)
         html = re.sub(r'\n?```$', '', html).strip()
-        if modo == 'manter':
-            html = _restore_base64(html, b64_reps_c)
-            html = _restore_base64(html, b64_reps_t)
         if imagem_url:
             html = html.replace('__IMAGEM_PLACEHOLDER__', imagem_url)
         return jsonify({'html': html})
