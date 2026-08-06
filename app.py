@@ -1925,7 +1925,7 @@ IMPORTANTE: O conteúdo deve ser 100% relevante e específico para profissionais
 
 Estrutura obrigatória:
 1. Cabeçalho colorido ({primary_color}) com o tema
-2. Saudação com {{{{nome}}}}
+2. Saudação com {{nome}}
 3. 2+ parágrafos com conteúdo específico do nicho "{nicho}"
 4. Lista com 3-5 benefícios/dicas adaptados ao nicho
 5. Botão CTA com href="#LINK_CTA"
@@ -1934,7 +1934,7 @@ Estrutura obrigatória:
 Instruções:
 - Retorne APENAS HTML, sem markdown, sem ```
 - Email responsivo, máx 600px, inline CSS
-- Use {{{{nome}}}} para personalização
+- Use {{nome}} para personalização
 - 250-400 palavras de conteúdo específico para o nicho
 """
     try:
@@ -3891,7 +3891,50 @@ Kit de Marca — {kit['name']}:
     if imagem_url:
         imagem_info = '\nInserir uma imagem no corpo do email usando exatamente esta tag: <img src="__IMAGEM_PLACEHOLDER__" alt="imagem" style="max-width:100%;border-radius:8px;margin:16px 0;">'
 
-    prompt = f"""Crie um email profissional de marketing em HTML, com conteúdo RICO, ESPECÍFICO e APROFUNDADO — nada de texto genérico ou raso.
+    modo = dados.get('modo_texto', 'reescrever')
+    template_ref = dados.get('template_ref_html', '').strip()
+
+    if modo == 'manter':
+        conteudo_usuario = dados.get('contexto', '').strip()
+        if not conteudo_usuario:
+            return jsonify({'erro': 'Cole seu conteúdo no campo de texto.'}), 400
+
+        template_ref_clean = ''
+        b64_reps_c = {}
+        b64_reps_t = {}
+        if template_ref:
+            template_ref_clean, b64_reps_t = _strip_base64(template_ref)
+        conteudo_usuario, b64_reps_c = _strip_base64(conteudo_usuario)
+
+        prompt = f"""Estruture o conteúdo do usuário em um email profissional HTML, usando o template como referência visual.
+
+REGRA FUNDAMENTAL: NÃO altere, resuma, corte, reescreva ou invente NENHUM texto. Mantenha CADA PALAVRA, frase, parágrafo, lista, link e imagem EXATAMENTE como o usuário escreveu, na mesma ordem.
+
+Conteúdo do usuário (preserve 100% — cada palavra conta):
+{conteudo_usuario}
+
+Template de referência visual (use APENAS como referência de layout, cores, fontes, cabeçalho e rodapé):
+{template_ref_clean if template_ref_clean else 'Nenhum — use layout padrão profissional'}
+
+{kit_info}{imagem_info}
+
+O que você DEVE fazer:
+1. Cabeçalho colorido com a cor primária {primary_color} e o tema "{dados.get('tema', '')}"
+2. Organizar o texto do usuário em seções visuais claras (títulos, subtítulos, parágrafos, listas) — mas SEM mudar o texto
+3. Aplicar formatação visual: negritos em palavras-chave, espaçamento entre seções, bordas decorativas
+4. Adicionar botão CTA com href="#LINK_CTA" se o texto mencionar alguma ação (inscrição, compra, link, etc.)
+5. Rodapé com nome da empresa e link de descadastrar
+6. Usar {{nome}} na saudação se não houver saudação no texto
+
+Instruções obrigatórias:
+- Retorne APENAS o código HTML, sem explicações, sem markdown, sem blocos ```
+- Email responsivo, máximo 600px de largura, centralizado
+- Use SOMENTE inline CSS (style="...") — nenhuma tag <style> ou <link>
+- TODO o texto do usuário DEVE aparecer no resultado final, sem exceção
+- Mantenha {{nome}} onde já estiver presente no conteúdo do usuário
+"""
+    else:
+        prompt = f"""Crie um email profissional de marketing em HTML, com conteúdo RICO, ESPECÍFICO e APROFUNDADO — nada de texto genérico ou raso.
 
 Público-alvo: {dados.get('publico', '')}
 Faixa etária: {dados.get('faixa_etaria', '')}
@@ -3934,6 +3977,9 @@ Instruções obrigatórias:
         html = resp.content[0].text.strip()
         html = re.sub(r'^```[a-z]*\n?', '', html)
         html = re.sub(r'\n?```$', '', html).strip()
+        if modo == 'manter':
+            html = _restore_base64(html, b64_reps_c)
+            html = _restore_base64(html, b64_reps_t)
         if imagem_url:
             html = html.replace('__IMAGEM_PLACEHOLDER__', imagem_url)
         return jsonify({'html': html})

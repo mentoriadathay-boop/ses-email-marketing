@@ -124,6 +124,9 @@ function iamReset() {
   _iamStep = 1;
   _iamModo = null;
   _iamHtmlGerado = '';
+  _gtmModoTexto = null;
+  _gtmTemplateHtmlParaIA = null;
+  _ajustarStep3ParaModo('reescrever');
   document.getElementById('iamStep0').classList.remove('d-none');
   document.getElementById('iamStepMelhorar').classList.add('d-none');
   document.getElementById('iamWizardCriar').classList.add('d-none');
@@ -310,6 +313,8 @@ function iamColetarDados() {
     formato: formatoEl ? formatoEl.value : 'Texto corrido',
     kit_id: document.getElementById('iamKitId').value || null,
     imagem_url: document.getElementById('iamImagemUrl').value.trim(),
+    modo_texto: _gtmModoTexto || 'reescrever',
+    template_ref_html: _gtmTemplateHtmlParaIA || '',
   };
 }
 
@@ -537,73 +542,53 @@ function gtmUsarDireto(id) {
 }
 
 let _gtmPendingTemplate = null; // { html, nome }
+let _gtmModoTexto = null; // 'manter' | 'reescrever' | null
+let _gtmTemplateHtmlParaIA = null; // template HTML reference for IA
 
-function _wrapContentInTemplate(content, templateHtml) {
-  const marker = '<!-- CONTEUDO_USUARIO -->';
-  const endMarker = '<!-- /CONTEUDO_USUARIO -->';
-  const startIdx = templateHtml.indexOf(marker);
-  const endIdx = templateHtml.indexOf(endMarker);
-  if (startIdx !== -1 && endIdx !== -1) {
-    return templateHtml.substring(0, startIdx + marker.length) + '\n' + content + '\n' + templateHtml.substring(endIdx);
-  }
-  const parser = new DOMParser();
-  const doc = parser.parseFromString(templateHtml, 'text/html');
-  const tds = doc.querySelectorAll('td');
-  let mainTd = null;
-  let maxLen = 0;
-  tds.forEach(td => {
-    const style = td.getAttribute('style') || '';
-    if (style.includes('padding') && !style.includes('background:#f8f9fa') && !style.includes('text-align:center')) {
-      const textLen = td.textContent.length;
-      if (textLen > maxLen) { maxLen = textLen; mainTd = td; }
-    }
-  });
-  if (mainTd) {
-    mainTd.innerHTML = content;
-    return '<!DOCTYPE html>' + doc.documentElement.outerHTML;
-  }
-  return templateHtml.replace(/<td style="padding:3[0-9]px[^"]*"[^>]*>[\s\S]*?<\/td>(\s*<\/tr>\s*<tr><td style="background:#f8f9fa)/,
-    `<td style="padding:32px;color:#333;font-size:15px;line-height:1.7;">\n${content}\n</td>$1`);
-}
 
-async function gtmEscolherOpcao(opcao) {
+function gtmEscolherOpcao(opcao) {
   bootstrap.Modal.getInstance(document.getElementById('modalEscolhaTemplate'))?.hide();
   if (!_gtmPendingTemplate) return;
   const { html: templateHtml, nome } = _gtmPendingTemplate;
   _gtmPendingTemplate = null;
 
-  if (opcao === 'reescrever') {
-    const tema = nome;
-    openAIModalComTema(_aiTarget.containerId, _aiTarget.textareaId, _aiTarget.subjectId, tema);
-    return;
-  }
+  _gtmModoTexto = opcao; // 'manter' or 'reescrever'
+  _gtmTemplateHtmlParaIA = templateHtml;
 
-  // 'manter' — encaixa o texto original no layout do template via IA (ajuste visual apenas)
   const conteudoAtual = getEditorContent(_aiTarget.containerId, _aiTarget.textareaId);
-  const endpoint = '/ia/ajustar-visual';
+  openAIModalComTema(_aiTarget.containerId, _aiTarget.textareaId, _aiTarget.subjectId, nome);
 
-  showToast('Aplicando com IA, aguarde...', 'info');
-  try {
-    const res = await fetch(endpoint, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ conteudo_html: conteudoAtual, template_html: templateHtml })
-    });
-    const texto = await res.text();
-    let data;
-    try { data = JSON.parse(texto); } catch (parseErr) {
-      console.error('Resposta não-JSON de ' + endpoint + ':', res.status, texto);
-      alert('Erro ao aplicar template com IA (resposta inválida do servidor, status ' + res.status + '). Veja o console para detalhes.');
-      return;
+  setTimeout(() => {
+    _ajustarStep3ParaModo(opcao);
+    if (opcao === 'manter' && conteudoAtual.trim()) {
+      document.getElementById('iamContexto').value = conteudoAtual;
     }
-    if (!res.ok || data.erro) {
-      alert('Erro ao aplicar template com IA: ' + (data.erro || ('status ' + res.status)));
-      return;
+  }, 150);
+}
+
+function _ajustarStep3ParaModo(modo) {
+  const titulo = document.getElementById('iamStep3Titulo');
+  const label = document.getElementById('iamContextoLabel');
+  const textarea = document.getElementById('iamContexto');
+  const resultGroup = document.getElementById('iamResultadoGroup');
+  const btnGerar = document.getElementById('iamBtnGerar');
+  if (modo === 'manter') {
+    if (titulo) titulo.textContent = 'Cole ou revise seu conteúdo';
+    if (label) label.textContent = 'Seu conteúdo (a IA não vai alterar o texto)';
+    if (textarea) {
+      textarea.placeholder = 'Cole aqui o texto completo do seu email. A IA vai estruturar no layout do template sem mudar nenhuma palavra.';
+      textarea.rows = 10;
     }
-    showHtmlInEditor(_aiTarget.containerId, _aiTarget.textareaId, data.html, _aiTarget.subjectId, nome);
-    showToast('Template aplicado ao seu conteúdo!', 'success');
-  } catch (e) {
-    console.error('Erro de rede em ' + endpoint + ':', e);
-    alert('Erro ao aplicar template com IA: ' + e.message);
+    if (resultGroup) resultGroup.classList.add('d-none');
+    if (btnGerar) btnGerar.innerHTML = '<i class="bi bi-layout-text-window me-1"></i> Estruturar no Template';
+  } else {
+    if (titulo) titulo.textContent = 'Sobre o que é este email?';
+    if (label) label.textContent = 'Contexto adicional';
+    if (textarea) {
+      textarea.placeholder = 'Ex: estamos lançando um curso e quero preparar o público antes...';
+      textarea.rows = 3;
+    }
+    if (resultGroup) resultGroup.classList.remove('d-none');
+    if (btnGerar) btnGerar.innerHTML = '<i class="bi bi-stars me-1"></i> Gerar Email com IA';
   }
 }
