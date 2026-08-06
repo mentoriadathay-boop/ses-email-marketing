@@ -504,23 +504,23 @@ function gtmPersonalizarComIA() {
 
 function gtmUsarTemplate() {
   if (!_gtmTemplateAtivo || !_aiTarget) return;
-  _gtmAplicarTemplateAoConteudo(_gtmTemplateAtivo.html, _gtmTemplateAtivo.name);
+  _gtmAplicarTemplateAoConteudo(_gtmTemplateAtivo.html, _gtmTemplateAtivo.name, _gtmTemplateAtivo.wrapOnly);
   bootstrap.Modal.getInstance(document.getElementById('modalGtmPrevia'))?.hide();
 }
 
 function gtmUsarDireto(id) {
   const tpl = _TEMPLATES.find(t => t.id === id);
   if (!tpl || !_aiTarget) return;
-  _gtmAplicarTemplateAoConteudo(tpl.html, tpl.name);
+  _gtmAplicarTemplateAoConteudo(tpl.html, tpl.name, tpl.wrapOnly);
   bootstrap.Modal.getInstance(document.getElementById('modalGaleriaTemplates'))?.hide();
 }
 
 // Se o editor de destino já tem conteúdo (texto/imagens/links do usuário),
 // pergunta o que fazer com esse conteúdo em relação ao template escolhido.
 // Caso contrário, apenas insere o template.
-let _gtmPendingTemplate = null; // { html, nome }
+let _gtmPendingTemplate = null; // { html, nome, wrapOnly }
 
-async function _gtmAplicarTemplateAoConteudo(templateHtml, nome) {
+async function _gtmAplicarTemplateAoConteudo(templateHtml, nome, wrapOnly) {
   const conteudoAtual = getEditorContent(_aiTarget.containerId, _aiTarget.textareaId);
 
   if (!conteudoAtual.trim()) {
@@ -528,8 +528,43 @@ async function _gtmAplicarTemplateAoConteudo(templateHtml, nome) {
     return;
   }
 
+  if (wrapOnly) {
+    const wrapped = _wrapContentInTemplate(conteudoAtual, templateHtml);
+    showHtmlInEditor(_aiTarget.containerId, _aiTarget.textareaId, wrapped, _aiTarget.subjectId, nome);
+    showToast('Layout aplicado ao seu conteúdo (texto mantido na íntegra).', 'success');
+    return;
+  }
+
   _gtmPendingTemplate = { html: templateHtml, nome };
   new bootstrap.Modal(document.getElementById('modalEscolhaTemplate')).show();
+}
+
+function _wrapContentInTemplate(content, templateHtml) {
+  const marker = '<!-- CONTEUDO_USUARIO -->';
+  const endMarker = '<!-- /CONTEUDO_USUARIO -->';
+  const startIdx = templateHtml.indexOf(marker);
+  const endIdx = templateHtml.indexOf(endMarker);
+  if (startIdx !== -1 && endIdx !== -1) {
+    return templateHtml.substring(0, startIdx + marker.length) + '\n' + content + '\n' + templateHtml.substring(endIdx);
+  }
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(templateHtml, 'text/html');
+  const tds = doc.querySelectorAll('td');
+  let mainTd = null;
+  let maxLen = 0;
+  tds.forEach(td => {
+    const style = td.getAttribute('style') || '';
+    if (style.includes('padding') && !style.includes('background:#f8f9fa') && !style.includes('text-align:center')) {
+      const textLen = td.textContent.length;
+      if (textLen > maxLen) { maxLen = textLen; mainTd = td; }
+    }
+  });
+  if (mainTd) {
+    mainTd.innerHTML = content;
+    return '<!DOCTYPE html>' + doc.documentElement.outerHTML;
+  }
+  return templateHtml.replace(/<td style="padding:3[0-9]px[^"]*"[^>]*>[\s\S]*?<\/td>(\s*<\/tr>\s*<tr><td style="background:#f8f9fa)/,
+    `<td style="padding:32px;color:#333;font-size:15px;line-height:1.7;">\n${content}\n</td>$1`);
 }
 
 async function gtmEscolherOpcao(opcao) {
@@ -540,6 +575,14 @@ async function gtmEscolherOpcao(opcao) {
 
   if (opcao === 'substituir') {
     showHtmlInEditor(_aiTarget.containerId, _aiTarget.textareaId, templateHtml, _aiTarget.subjectId, nome);
+    return;
+  }
+
+  if (opcao === 'encaixar') {
+    const conteudoAtual = getEditorContent(_aiTarget.containerId, _aiTarget.textareaId);
+    const wrapped = _wrapContentInTemplate(conteudoAtual, templateHtml);
+    showHtmlInEditor(_aiTarget.containerId, _aiTarget.textareaId, wrapped, _aiTarget.subjectId, nome);
+    showToast('Layout aplicado (texto mantido na íntegra).', 'success');
     return;
   }
 
