@@ -3852,9 +3852,22 @@ def _restore_base64(html, reps):
 
 
 def _extrair_cor_template(template_html):
-    """Extract the primary header color from a template's HTML."""
-    m = re.search(r'background:\s*(#[0-9a-fA-F]{3,8})', template_html[:1500]) if template_html else None
-    return m.group(1) if m else None
+    """Extract the primary header color from a template's HTML.
+    Skips near-white/near-gray backgrounds (body, card) and returns
+    the first saturated color (the header bar)."""
+    if not template_html:
+        return None
+    for m in re.finditer(r'background:\s*(#[0-9a-fA-F]{3,8})', template_html[:2000]):
+        hexc = m.group(1).lstrip('#')
+        if len(hexc) == 3:
+            hexc = ''.join(c * 2 for c in hexc)
+        if len(hexc) < 6:
+            continue
+        r, g, b = int(hexc[0:2], 16), int(hexc[2:4], 16), int(hexc[4:6], 16)
+        luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255
+        if luminance < 0.75:
+            return m.group(1)
+    return None
 
 
 def _texto_para_email_html(texto, template_html='', primary_color='#1a3a6b', tema='',
