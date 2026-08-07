@@ -561,9 +561,24 @@ function gtmEscolherOpcao(opcao) {
   setTimeout(() => {
     _ajustarStep3ParaModo(opcao);
     if (opcao === 'manter' && conteudoAtual.trim()) {
-      document.getElementById('iamContexto').value = conteudoAtual;
+      const textoLimpo = _htmlParaTextoLimpo(conteudoAtual);
+      if (textoLimpo.trim().length > 10) {
+        document.getElementById('iamContexto').value = textoLimpo;
+      }
     }
   }, 150);
+}
+
+function _htmlParaTextoLimpo(html) {
+  const tmp = document.createElement('div');
+  tmp.innerHTML = html;
+  tmp.querySelectorAll('br').forEach(br => br.replaceWith('\n'));
+  tmp.querySelectorAll('p, div, tr, li, h1, h2, h3, h4, h5, h6').forEach(el => {
+    el.insertAdjacentText('afterend', '\n\n');
+  });
+  let text = tmp.textContent || '';
+  text = text.replace(/\n{3,}/g, '\n\n').trim();
+  return text;
 }
 
 function _ajustarStep3ParaModo(modo) {
