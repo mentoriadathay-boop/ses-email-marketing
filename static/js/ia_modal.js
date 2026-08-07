@@ -552,6 +552,10 @@ function gtmEscolherOpcao(opcao) {
   const { html: templateHtml, nome } = _gtmPendingTemplate;
   _gtmPendingTemplate = null;
 
+  // Capture kit from gallery preview BEFORE iamReset clears it
+  const previaKitSel = document.getElementById('gtmKitAplicar');
+  const kitIdPrevia = previaKitSel ? previaKitSel.value : '';
+
   const conteudoAtual = getEditorContent(_aiTarget.containerId, _aiTarget.textareaId);
   openAIModalComTema(_aiTarget.containerId, _aiTarget.textareaId, _aiTarget.subjectId, nome);
 
@@ -560,6 +564,8 @@ function gtmEscolherOpcao(opcao) {
     _gtmModoTexto = opcao;
     _gtmTemplateHtmlParaIA = templateHtml;
     _ajustarStep3ParaModo(opcao);
+    // Restore the kit from gallery preview into the wizard selector
+    if (kitIdPrevia) _gtmRestaurarKit(kitIdPrevia);
     if (opcao === 'manter' && conteudoAtual.trim()) {
       const textoLimpo = _htmlParaTextoLimpo(conteudoAtual);
       if (textoLimpo.trim().length > 10) {
@@ -567,6 +573,19 @@ function gtmEscolherOpcao(opcao) {
       }
     }
   }, 150);
+}
+
+function _gtmRestaurarKit(kitId) {
+  const sel = document.getElementById('iamKitId');
+  if (!sel) return;
+  const trySet = () => {
+    const opt = [...sel.options].find(o => o.value === String(kitId));
+    if (opt) { sel.value = String(kitId); return true; }
+    return false;
+  };
+  if (trySet()) return;
+  // _iamCarregarKits is async; retry after it likely completed
+  setTimeout(() => { if (!trySet()) setTimeout(trySet, 500); }, 300);
 }
 
 function _htmlParaTextoLimpo(html) {
