@@ -3884,6 +3884,14 @@ def _texto_para_email_html(texto, template_html='', primary_color='#1a3a6b', tem
                 links.append(f'<a href="{url}" style="text-decoration:none;font-size:18px;margin:0 4px;">{emoji}</a>')
         social_links = ' '.join(links)
 
+    # --- Strip HTML tags if content came from rich editor ---
+    if '<' in texto and '>' in texto:
+        texto = re.sub(r'<br\s*/?>', '\n', texto, flags=re.I)
+        texto = re.sub(r'</(p|div|tr|li|h[1-6])>', '\n\n', texto, flags=re.I)
+        texto = re.sub(r'<[^>]+>', '', texto)
+        import html as _html_mod
+        texto = _html_mod.unescape(texto)
+
     # --- Parse text into blocks ---
     texto = texto.strip()
     # Normalize line endings
