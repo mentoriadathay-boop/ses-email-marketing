@@ -7,7 +7,7 @@ const _TEMPLATES = [
     cor: '#2c3e50', icone: '✉️',
     html: `<!DOCTYPE html><html><body style="margin:0;padding:20px;background:#f5f5f5;font-family:Georgia,serif;">
 <table width="100%" cellpadding="0" cellspacing="0"><tr><td align="center">
-<table width="560" cellpadding="0" cellspacing="0" style="background:#fff;border-radius:8px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,.1);">
+<table cellpadding="0" cellspacing="0" style="width:100%;max-width:560px;background:#fff;border-radius:8px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,.1);">
 <tr><td style="background:#2c3e50;padding:32px;text-align:center;">
   <h1 style="color:#fff;margin:0;font-size:22px;font-weight:normal;letter-spacing:1px;">Empresa</h1>
 </td></tr>
@@ -35,7 +35,7 @@ const _TEMPLATES = [
     cor: '#1a3a6b', icone: '📰',
     html: `<!DOCTYPE html><html><body style="margin:0;padding:20px;background:#f0f2f5;font-family:Arial,sans-serif;">
 <table width="100%" cellpadding="0" cellspacing="0"><tr><td align="center">
-<table width="560" cellpadding="0" cellspacing="0" style="background:#fff;border-radius:8px;overflow:hidden;">
+<table cellpadding="0" cellspacing="0" style="width:100%;max-width:560px;background:#fff;border-radius:8px;overflow:hidden;">
 <tr><td style="background:#1a3a6b;padding:28px 32px;text-align:center;">
   <h1 style="color:#fff;margin:0;font-size:20px;">Newsletter — Edição #01</h1>
   <p style="color:#aac4ff;margin:6px 0 0;font-size:13px;">Empresa · Mês 2025</p>
@@ -64,7 +64,7 @@ const _TEMPLATES = [
     cor: '#e63946', icone: '🛍️',
     html: `<!DOCTYPE html><html><body style="margin:0;padding:20px;background:#f5f5f5;font-family:Arial,sans-serif;">
 <table width="100%" cellpadding="0" cellspacing="0"><tr><td align="center">
-<table width="560" cellpadding="0" cellspacing="0" style="background:#fff;border-radius:8px;overflow:hidden;">
+<table cellpadding="0" cellspacing="0" style="width:100%;max-width:560px;background:#fff;border-radius:8px;overflow:hidden;">
 <tr><td style="background:#e63946;padding:32px;text-align:center;">
   <h1 style="color:#fff;margin:0;font-size:24px;">🛍️ Conheça Nossa Solução</h1>
   <p style="color:#ffd6d9;margin:8px 0 0;">Feito para quem quer resultados reais</p>
@@ -100,7 +100,7 @@ const _TEMPLATES = [
     cor: '#f77f00', icone: '🔥',
     html: `<!DOCTYPE html><html><body style="margin:0;padding:20px;background:#fff8f0;font-family:Arial,sans-serif;">
 <table width="100%" cellpadding="0" cellspacing="0"><tr><td align="center">
-<table width="560" cellpadding="0" cellspacing="0" style="background:#fff;border-radius:8px;overflow:hidden;">
+<table cellpadding="0" cellspacing="0" style="width:100%;max-width:560px;background:#fff;border-radius:8px;overflow:hidden;">
 <tr><td style="background:linear-gradient(135deg,#f77f00,#d62828);padding:32px;text-align:center;">
   <p style="color:#ffe0b2;margin:0;font-size:13px;letter-spacing:2px;text-transform:uppercase;">Oferta por tempo limitado</p>
   <h1 style="color:#fff;margin:8px 0;font-size:32px;">🔥 50% OFF</h1>
@@ -135,7 +135,7 @@ const _TEMPLATES = [
     cor: '#3a0ca3', icone: '📊',
     html: `<!DOCTYPE html><html><body style="margin:0;padding:20px;background:#f5f5f5;font-family:Arial,sans-serif;">
 <table width="100%" cellpadding="0" cellspacing="0"><tr><td align="center">
-<table width="560" cellpadding="0" cellspacing="0" style="background:#fff;border-radius:8px;overflow:hidden;">
+<table cellpadding="0" cellspacing="0" style="width:100%;max-width:560px;background:#fff;border-radius:8px;overflow:hidden;">
 <tr><td style="background:#3a0ca3;padding:28px 32px;text-align:center;">
   <h1 style="color:#fff;margin:0;font-size:22px;">Escolha o Plano Ideal para Você</h1>
 </td></tr>
@@ -178,7 +178,7 @@ const _TEMPLATES = [
     cor: '#06d6a0', icone: '💡',
     html: `<!DOCTYPE html><html><body style="margin:0;padding:20px;background:#f0faf8;font-family:Arial,sans-serif;">
 <table width="100%" cellpadding="0" cellspacing="0"><tr><td align="center">
-<table width="560" cellpadding="0" cellspacing="0" style="background:#fff;border-radius:8px;overflow:hidden;">
+<table cellpadding="0" cellspacing="0" style="width:100%;max-width:560px;background:#fff;border-radius:8px;overflow:hidden;">
 <tr><td style="background:#06d6a0;padding:28px 32px;text-align:center;">
   <h1 style="color:#fff;margin:0;font-size:22px;">💡 3 Dicas para Transformar seus Resultados</h1>
 </td></tr>
@@ -236,7 +236,7 @@ const _TEMPLATES = [
     cor: '#4361ee', icone: '🏆',
     html: `<!DOCTYPE html><html><body style="margin:0;padding:20px;background:#f5f8ff;font-family:Arial,sans-serif;">
 <table width="100%" cellpadding="0" cellspacing="0"><tr><td align="center">
-<table width="560" cellpadding="0" cellspacing="0" style="background:#fff;border-radius:8px;overflow:hidden;">
+<table cellpadding="0" cellspacing="0" style="width:100%;max-width:560px;background:#fff;border-radius:8px;overflow:hidden;">
 <tr><td style="background:#4361ee;padding:28px 32px;text-align:center;">
   <h1 style="color:#fff;margin:0;font-size:22px;">🏆 Como [Cliente] Conseguiu [Resultado]</h1>
 </td></tr>
@@ -272,7 +272,7 @@ const _TEMPLATES = [
     cor: '#7209b7', icone: '✅',
     html: `<!DOCTYPE html><html><body style="margin:0;padding:20px;background:#f9f5ff;font-family:Arial,sans-serif;">
 <table width="100%" cellpadding="0" cellspacing="0"><tr><td align="center">
-<table width="560" cellpadding="0" cellspacing="0" style="background:#fff;border-radius:8px;overflow:hidden;">
+<table cellpadding="0" cellspacing="0" style="width:100%;max-width:560px;background:#fff;border-radius:8px;overflow:hidden;">
 <tr><td style="background:#7209b7;padding:28px 32px;text-align:center;">
   <h1 style="color:#fff;margin:0;font-size:22px;">✅ Checklist: [Título do Checklist]</h1>
   <p style="color:#e0b3ff;margin:6px 0 0;font-size:14px;">Tudo que você precisa fazer para [objetivo]</p>
@@ -322,7 +322,7 @@ const _TEMPLATES = [
     cor: '#d4af37', icone: '📅',
     html: `<!DOCTYPE html><html><body style="margin:0;padding:20px;background:#fffdf0;font-family:Georgia,serif;">
 <table width="100%" cellpadding="0" cellspacing="0"><tr><td align="center">
-<table width="560" cellpadding="0" cellspacing="0" style="background:#fff;border-radius:8px;overflow:hidden;border:1px solid #f0e6c0;">
+<table cellpadding="0" cellspacing="0" style="width:100%;max-width:560px;background:#fff;border-radius:8px;overflow:hidden;border:1px solid #f0e6c0;">
 <tr><td style="background:linear-gradient(135deg,#1a3a6b,#2d5a8e);padding:36px 32px;text-align:center;">
   <p style="color:#D4AF37;margin:0 0 8px;font-size:13px;letter-spacing:3px;text-transform:uppercase;">Você está convidado</p>
   <h1 style="color:#fff;margin:0;font-size:28px;font-weight:normal;">[Nome do Evento]</h1>
@@ -366,7 +366,7 @@ const _TEMPLATES = [
     cor: '#480ca8', icone: '🎥',
     html: `<!DOCTYPE html><html><body style="margin:0;padding:20px;background:#f0f0ff;font-family:Arial,sans-serif;">
 <table width="100%" cellpadding="0" cellspacing="0"><tr><td align="center">
-<table width="560" cellpadding="0" cellspacing="0" style="background:#fff;border-radius:8px;overflow:hidden;">
+<table cellpadding="0" cellspacing="0" style="width:100%;max-width:560px;background:#fff;border-radius:8px;overflow:hidden;">
 <tr><td style="background:linear-gradient(135deg,#480ca8,#7209b7);padding:32px;text-align:center;">
   <p style="color:#c8b8ff;margin:0 0 6px;font-size:13px;letter-spacing:2px;">AULA GRATUITA AO VIVO</p>
   <h1 style="color:#fff;margin:0;font-size:24px;">[Título do Webinar]</h1>
@@ -406,7 +406,7 @@ const _TEMPLATES = [
     cor: '#ef476f', icone: '💔',
     html: `<!DOCTYPE html><html><body style="margin:0;padding:20px;background:#fff5f7;font-family:Arial,sans-serif;">
 <table width="100%" cellpadding="0" cellspacing="0"><tr><td align="center">
-<table width="560" cellpadding="0" cellspacing="0" style="background:#fff;border-radius:8px;overflow:hidden;">
+<table cellpadding="0" cellspacing="0" style="width:100%;max-width:560px;background:#fff;border-radius:8px;overflow:hidden;">
 <tr><td style="background:#ef476f;padding:32px;text-align:center;">
   <div style="font-size:48px;">💔</div>
   <h1 style="color:#fff;margin:8px 0 0;font-size:22px;">Sentimos sua falta, {nome}!</h1>
@@ -434,7 +434,7 @@ const _TEMPLATES = [
     cor: '#118ab2', icone: '📊',
     html: `<!DOCTYPE html><html><body style="margin:0;padding:20px;background:#f0f8ff;font-family:Arial,sans-serif;">
 <table width="100%" cellpadding="0" cellspacing="0"><tr><td align="center">
-<table width="560" cellpadding="0" cellspacing="0" style="background:#fff;border-radius:8px;overflow:hidden;">
+<table cellpadding="0" cellspacing="0" style="width:100%;max-width:560px;background:#fff;border-radius:8px;overflow:hidden;">
 <tr><td style="background:#118ab2;padding:28px 32px;text-align:center;">
   <h1 style="color:#fff;margin:0;font-size:22px;">📊 Uma pergunta rápida para você</h1>
 </td></tr>
