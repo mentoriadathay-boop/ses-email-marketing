@@ -4032,11 +4032,11 @@ def _texto_para_email_html(texto, template_html='', primary_color='#1a3a6b', tem
     # --- Build full email HTML ---
     html = f'''<!DOCTYPE html><html><body style="margin:0;padding:20px;background:#f0f2f5;font-family:Arial,Helvetica,sans-serif;">
 <table width="100%" cellpadding="0" cellspacing="0"><tr><td align="center">
-<table width="560" cellpadding="0" cellspacing="0" style="background:#fff;border-radius:8px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,.08);">
+<table cellpadding="0" cellspacing="0" style="width:100%;max-width:560px;background:#fff;border-radius:8px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,.08);">
 <tr><td style="background:{cor};padding:28px 32px;text-align:center;">
-  <h1 style="color:#fff;margin:0;font-size:22px;">{_esc(titulo_header)}</h1>
+  <h1 style="color:#fff;margin:0;font-size:22px;word-wrap:break-word;">{_esc(titulo_header)}</h1>
 </td></tr>
-<tr><td style="padding:32px 36px;color:#333;">
+<tr><td style="padding:32px 36px;color:#333;word-wrap:break-word;overflow-wrap:break-word;">
   {img_tag}
   {body_html}
 </td></tr>
@@ -4137,7 +4137,7 @@ Estrutura de conteúdo obrigatória (adapte a redação ao tema e ao tom de voz,
 
 Instruções obrigatórias:
 - Retorne APENAS o código HTML, sem explicações, sem markdown, sem blocos ```
-- Email responsivo, máximo 600px de largura, centralizado
+- Email responsivo, largura 100%% com max-width 560px, centralizado (use style="width:100%%;max-width:560px" em vez de width="560")
 - Use SOMENTE inline CSS (style="...") — nenhuma tag <style> ou <link>
 - Cabeçalho colorido com a cor primária {primary_color}
 - Use {{nome}} onde o destinatário deve ser personalizado
