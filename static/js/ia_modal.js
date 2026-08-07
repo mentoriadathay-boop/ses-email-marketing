@@ -552,13 +552,13 @@ function gtmEscolherOpcao(opcao) {
   const { html: templateHtml, nome } = _gtmPendingTemplate;
   _gtmPendingTemplate = null;
 
-  _gtmModoTexto = opcao; // 'manter' or 'reescrever'
-  _gtmTemplateHtmlParaIA = templateHtml;
-
   const conteudoAtual = getEditorContent(_aiTarget.containerId, _aiTarget.textareaId);
   openAIModalComTema(_aiTarget.containerId, _aiTarget.textareaId, _aiTarget.subjectId, nome);
 
+  // Set AFTER openAIModalComTema (which calls iamReset and clears these vars)
   setTimeout(() => {
+    _gtmModoTexto = opcao;
+    _gtmTemplateHtmlParaIA = templateHtml;
     _ajustarStep3ParaModo(opcao);
     if (opcao === 'manter' && conteudoAtual.trim()) {
       const textoLimpo = _htmlParaTextoLimpo(conteudoAtual);
