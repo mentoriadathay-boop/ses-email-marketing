@@ -3874,18 +3874,34 @@ def _texto_para_email_html(texto, template_html='', primary_color='#1a3a6b', tem
                            kit=None, imagem_url=''):
     """Convert plain text into a structured HTML email WITHOUT using AI.
     Every word of the user's text is preserved verbatim."""
-    cor = _extrair_cor_template(template_html) or primary_color
+
+    # --- Color precedence: kit > primary_color param > template extraction > default ---
+    if kit and kit.get('primary_color'):
+        cor = kit['primary_color']
+    elif primary_color and primary_color != '#1a3a6b':
+        cor = primary_color
+    else:
+        cor = _extrair_cor_template(template_html) or primary_color
+
+    # Kit colors with fallbacks
+    cor_texto = (kit.get('text_color') if kit else None) or '#333333'
+    cor_fundo = (kit.get('bg_color') if kit else None) or '#f0f2f5'
+    cor_accent = (kit.get('accent_color') if kit else None) or cor
+    fonte_principal = (kit.get('font_primary') if kit else None) or 'Arial'
+    fonte_stack = f'{fonte_principal},Helvetica,sans-serif'
 
     # Compute tinted backgrounds from the primary color
-    try:
-        _r, _g, _b = int(cor[1:3], 16), int(cor[3:5], 16), int(cor[5:7], 16)
-        cor_bg = f'#{int(_r+(.93)*(255-_r)):02x}{int(_g+(.93)*(255-_g)):02x}{int(_b+(.93)*(255-_b)):02x}'
-        cor_border_light = f'#{int(_r+(.7)*(255-_r)):02x}{int(_g+(.7)*(255-_g)):02x}{int(_b+(.7)*(255-_b)):02x}'
-        cor_subtle = f'#{int(_r+(.85)*(255-_r)):02x}{int(_g+(.85)*(255-_g)):02x}{int(_b+(.85)*(255-_b)):02x}'
-    except (ValueError, IndexError):
-        cor_bg = '#f0f4f8'
-        cor_border_light = '#c0d0e0'
-        cor_subtle = '#e0e8f0'
+    def _tint(hex_color, factor):
+        try:
+            h = hex_color.lstrip('#')
+            r, g, b = int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16)
+            return f'#{int(r+factor*(255-r)):02x}{int(g+factor*(255-g)):02x}{int(b+factor*(255-b)):02x}'
+        except (ValueError, IndexError):
+            return '#eeeeee'
+
+    cor_bg = _tint(cor, 0.93)
+    cor_border_light = _tint(cor, 0.70)
+    cor_subtle = _tint(cor, 0.85)
 
     # --- Kit de marca info ---
     empresa = 'Empresa'
@@ -3948,15 +3964,15 @@ def _texto_para_email_html(texto, template_html='', primary_color='#1a3a6b', tem
             before = block[:md_link.start()].strip()
             after = block[md_link.end():].strip()
             if before:
-                content_parts.append(f'<p style="font-size:15px;color:#333;line-height:1.7;margin:0 0 12px;">{_esc(before)}</p>')
+                content_parts.append(f'<p style="font-size:15px;color:{cor_texto};line-height:1.7;margin:0 0 12px;">{_esc(before)}</p>')
             content_parts.append(
                 f'<div style="text-align:center;margin:28px 0;">'
-                f'<a href="{_esc(link_url)}" style="background:{cor};color:#fff;padding:14px 36px;'
+                f'<a href="{_esc(link_url)}" style="background:{cor_accent};color:#fff;padding:14px 36px;'
                 f'border-radius:8px;text-decoration:none;font-weight:bold;font-size:16px;'
-                f'display:inline-block;box-shadow:0 3px 8px {cor}44;">'
+                f'display:inline-block;box-shadow:0 3px 8px {cor_accent}44;">'
                 f'{_esc(link_text)} &rarr;</a></div>')
             if after:
-                content_parts.append(f'<p style="font-size:15px;color:#333;line-height:1.7;margin:12px 0 0;">{_esc(after)}</p>')
+                content_parts.append(f'<p style="font-size:15px;color:{cor_texto};line-height:1.7;margin:12px 0 0;">{_esc(after)}</p>')
             found_cta = True
             continue
 
@@ -3964,9 +3980,9 @@ def _texto_para_email_html(texto, template_html='', primary_color='#1a3a6b', tem
         if len(lines) == 1 and re.match(r'^https?://\S+$', first):
             content_parts.append(
                 f'<div style="text-align:center;margin:28px 0;">'
-                f'<a href="{_esc(first)}" style="background:{cor};color:#fff;padding:14px 36px;'
+                f'<a href="{_esc(first)}" style="background:{cor_accent};color:#fff;padding:14px 36px;'
                 f'border-radius:8px;text-decoration:none;font-weight:bold;font-size:16px;'
-                f'display:inline-block;box-shadow:0 3px 8px {cor}44;">'
+                f'display:inline-block;box-shadow:0 3px 8px {cor_accent}44;">'
                 f'Acessar &rarr;</a></div>')
             found_cta = True
             continue
@@ -3974,7 +3990,7 @@ def _texto_para_email_html(texto, template_html='', primary_color='#1a3a6b', tem
         # Detect greeting (first or second block)
         if idx <= 1 and re.match(r'^(oi|olá|hey|hi|bom dia|boa tarde|boa noite)\b', first, re.I):
             content_parts.append(
-                f'<p style="font-size:16px;color:#333;line-height:1.7;margin:0 0 18px;">'
+                f'<p style="font-size:16px;color:{cor_texto};line-height:1.7;margin:0 0 18px;">'
                 + '<br>'.join(_esc(l) for l in lines) + '</p>')
             continue
 
@@ -3985,7 +4001,7 @@ def _texto_para_email_html(texto, template_html='', primary_color='#1a3a6b', tem
                 for i, l in enumerate(lines))
             content_parts.append(
                 f'<div style="border-top:2px solid {cor_border_light};padding-top:20px;margin-top:28px;">'
-                f'<p style="font-size:15px;color:#333;line-height:1.7;margin:0;">{sig_html}</p></div>')
+                f'<p style="font-size:15px;color:{cor_texto};line-height:1.7;margin:0;">{sig_html}</p></div>')
             continue
 
         # Detect list: 3+ lines, each moderate length
@@ -4019,7 +4035,7 @@ def _texto_para_email_html(texto, template_html='', primary_color='#1a3a6b', tem
             content_parts.append(
                 f'<div style="background:{cor_bg};border-left:4px solid {cor};'
                 f'border-radius:0 8px 8px 0;padding:18px 18px 8px 10px;margin:16px 0 20px;">'
-                f'<ul style="padding-left:16px;color:#333;font-size:15px;line-height:1.7;'
+                f'<ul style="padding-left:16px;color:{cor_texto};font-size:15px;line-height:1.7;'
                 f'margin:0;list-style:none;">'
                 + ''.join(list_items) + '</ul></div>')
             continue
@@ -4049,7 +4065,7 @@ def _texto_para_email_html(texto, template_html='', primary_color='#1a3a6b', tem
         # Default: paragraph(s)
         for l in lines:
             content_parts.append(
-                f'<p style="font-size:15px;color:#333;line-height:1.7;margin:0 0 14px;">{_esc(l)}</p>')
+                f'<p style="font-size:15px;color:{cor_texto};line-height:1.7;margin:0 0 14px;">{_esc(l)}</p>')
 
     body_html = '\n'.join(content_parts)
 
@@ -4063,14 +4079,14 @@ def _texto_para_email_html(texto, template_html='', primary_color='#1a3a6b', tem
     if assunto_extraido and tema:
         subtitle_html = f'<p style="color:{cor_border_light};margin:8px 0 0;font-size:13px;">{_esc(assunto_extraido)}</p>'
 
-    html = f'''<!DOCTYPE html><html><body style="margin:0;padding:20px;background:#f0f2f5;font-family:Arial,Helvetica,sans-serif;">
+    html = f'''<!DOCTYPE html><html><body style="margin:0;padding:20px;background:{cor_fundo};font-family:{fonte_stack};">
 <table width="100%" cellpadding="0" cellspacing="0"><tr><td align="center">
 <table cellpadding="0" cellspacing="0" style="width:100%;max-width:560px;background:#fff;border-radius:8px;overflow:hidden;box-shadow:0 4px 12px rgba(0,0,0,.1);">
 <tr><td style="background:{cor};padding:32px 32px 28px;text-align:center;">
   <h1 style="color:#fff;margin:0;font-size:22px;font-weight:bold;word-wrap:break-word;">{_esc(titulo_header)}</h1>
   {subtitle_html}
 </td></tr>
-<tr><td style="padding:32px 32px;color:#333;word-wrap:break-word;overflow-wrap:break-word;">
+<tr><td style="padding:32px 32px;color:{cor_texto};word-wrap:break-word;overflow-wrap:break-word;font-family:{fonte_stack};">
   {img_tag}
   {body_html}
 </td></tr>
