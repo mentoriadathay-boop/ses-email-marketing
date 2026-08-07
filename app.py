@@ -3862,8 +3862,17 @@ def _texto_para_email_html(texto, template_html='', primary_color='#1a3a6b', tem
     """Convert plain text into a structured HTML email WITHOUT using AI.
     Every word of the user's text is preserved verbatim."""
     cor = _extrair_cor_template(template_html) or primary_color
-    # Lighter shade for section title borders
-    cor_light = cor + '22'
+
+    # Compute tinted backgrounds from the primary color
+    try:
+        _r, _g, _b = int(cor[1:3], 16), int(cor[3:5], 16), int(cor[5:7], 16)
+        cor_bg = f'#{int(_r+(.93)*(255-_r)):02x}{int(_g+(.93)*(255-_g)):02x}{int(_b+(.93)*(255-_b)):02x}'
+        cor_border_light = f'#{int(_r+(.7)*(255-_r)):02x}{int(_g+(.7)*(255-_g)):02x}{int(_b+(.7)*(255-_b)):02x}'
+        cor_subtle = f'#{int(_r+(.85)*(255-_r)):02x}{int(_g+(.85)*(255-_g)):02x}{int(_b+(.85)*(255-_b)):02x}'
+    except (ValueError, IndexError):
+        cor_bg = '#f0f4f8'
+        cor_border_light = '#c0d0e0'
+        cor_subtle = '#e0e8f0'
 
     # --- Kit de marca info ---
     empresa = 'Empresa'
@@ -3894,10 +3903,8 @@ def _texto_para_email_html(texto, template_html='', primary_color='#1a3a6b', tem
 
     # --- Parse text into blocks ---
     texto = texto.strip()
-    # Normalize line endings
     texto = texto.replace('\r\n', '\n').replace('\r', '\n')
 
-    # Extract subject line if present
     assunto_extraido = ''
     if texto.lower().startswith('assunto:'):
         first_nl = texto.find('\n')
@@ -3906,13 +3913,13 @@ def _texto_para_email_html(texto, template_html='', primary_color='#1a3a6b', tem
             texto = texto[first_nl:].strip()
     titulo_header = tema or assunto_extraido or empresa
 
-    # Split by double newlines into blocks
     raw_blocks = re.split(r'\n\s*\n', texto)
     blocks = [b.strip() for b in raw_blocks if b.strip()]
 
     # --- Classify and render each block ---
     content_parts = []
     found_cta = False
+    heading_count = 0
 
     for idx, block in enumerate(blocks):
         lines = [l.strip() for l in block.split('\n') if l.strip()]
@@ -3920,20 +3927,20 @@ def _texto_para_email_html(texto, template_html='', primary_color='#1a3a6b', tem
             continue
         first = lines[0]
 
-        # Detect markdown link — make it a CTA button
+        # Detect markdown link — CTA button
         md_link = re.search(r'\[([^\]]+)\]\(([^)]+)\)', block)
         if md_link and len(block) < 300 and block.count('\n') < 2:
             link_text = md_link.group(1)
             link_url = md_link.group(2)
-            # Any surrounding text
             before = block[:md_link.start()].strip()
             after = block[md_link.end():].strip()
             if before:
                 content_parts.append(f'<p style="font-size:15px;color:#333;line-height:1.7;margin:0 0 12px;">{_esc(before)}</p>')
             content_parts.append(
-                f'<div style="text-align:center;margin:24px 0;">'
-                f'<a href="{_esc(link_url)}" style="background:{cor};color:#fff;padding:14px 32px;'
-                f'border-radius:6px;text-decoration:none;font-weight:bold;display:inline-block;">'
+                f'<div style="text-align:center;margin:28px 0;">'
+                f'<a href="{_esc(link_url)}" style="background:{cor};color:#fff;padding:14px 36px;'
+                f'border-radius:8px;text-decoration:none;font-weight:bold;font-size:16px;'
+                f'display:inline-block;box-shadow:0 3px 8px {cor}44;">'
                 f'{_esc(link_text)} &rarr;</a></div>')
             if after:
                 content_parts.append(f'<p style="font-size:15px;color:#333;line-height:1.7;margin:12px 0 0;">{_esc(after)}</p>')
@@ -3943,9 +3950,10 @@ def _texto_para_email_html(texto, template_html='', primary_color='#1a3a6b', tem
         # Detect plain URL on its own line
         if len(lines) == 1 and re.match(r'^https?://\S+$', first):
             content_parts.append(
-                f'<div style="text-align:center;margin:24px 0;">'
-                f'<a href="{_esc(first)}" style="background:{cor};color:#fff;padding:14px 32px;'
-                f'border-radius:6px;text-decoration:none;font-weight:bold;display:inline-block;">'
+                f'<div style="text-align:center;margin:28px 0;">'
+                f'<a href="{_esc(first)}" style="background:{cor};color:#fff;padding:14px 36px;'
+                f'border-radius:8px;text-decoration:none;font-weight:bold;font-size:16px;'
+                f'display:inline-block;box-shadow:0 3px 8px {cor}44;">'
                 f'Acessar &rarr;</a></div>')
             found_cta = True
             continue
@@ -3953,19 +3961,21 @@ def _texto_para_email_html(texto, template_html='', primary_color='#1a3a6b', tem
         # Detect greeting (first or second block)
         if idx <= 1 and re.match(r'^(oi|olá|hey|hi|bom dia|boa tarde|boa noite)\b', first, re.I):
             content_parts.append(
-                f'<p style="font-size:16px;color:#333;line-height:1.7;margin:0 0 16px;">'
+                f'<p style="font-size:16px;color:#333;line-height:1.7;margin:0 0 18px;">'
                 + '<br>'.join(_esc(l) for l in lines) + '</p>')
             continue
 
-        # Detect signature block (Um abraço, / Atenciosamente, etc.)
+        # Detect signature block
         if re.match(r'^(um abraço|atenciosamente|abraços|cordialmente|att|com carinho|saudações)', first, re.I):
-            sig_html = '<br>'.join(f'<strong>{_esc(l)}</strong>' if i > 0 and len(l) < 80 else _esc(l)
-                                  for i, l in enumerate(lines))
+            sig_html = '<br>'.join(
+                f'<strong>{_esc(l)}</strong>' if i > 0 and len(l) < 80 else _esc(l)
+                for i, l in enumerate(lines))
             content_parts.append(
-                f'<p style="font-size:15px;color:#333;line-height:1.7;margin:24px 0 0;">{sig_html}</p>')
+                f'<div style="border-top:2px solid {cor_border_light};padding-top:20px;margin-top:28px;">'
+                f'<p style="font-size:15px;color:#333;line-height:1.7;margin:0;">{sig_html}</p></div>')
             continue
 
-        # Detect list: 3+ lines, each moderate length, pattern looks like list items
+        # Detect list: 3+ lines, each moderate length
         is_list = False
         if len(lines) >= 3:
             bullet_chars = ('-', '•', '*', '–', '✅', '📅', '⏰', '🌐', '📸', '📘', '💼', '📱')
@@ -3989,20 +3999,28 @@ def _texto_para_email_html(texto, template_html='', primary_color='#1a3a6b', tem
                     if l.startswith(b + ' '):
                         l = l[2:].strip()
                         break
-                list_items.append(f'<li style="margin-bottom:8px;">{_esc(l)}</li>')
+                list_items.append(
+                    f'<li style="margin-bottom:10px;padding-left:4px;">'
+                    f'<span style="color:{cor};font-weight:bold;margin-right:6px;">&#10003;</span>'
+                    f'{_esc(l)}</li>')
             content_parts.append(
-                f'<ul style="padding-left:20px;color:#333;font-size:15px;line-height:1.7;margin:12px 0 16px;">'
-                + ''.join(list_items) + '</ul>')
+                f'<div style="background:{cor_bg};border-left:4px solid {cor};'
+                f'border-radius:0 8px 8px 0;padding:18px 18px 8px 10px;margin:16px 0 20px;">'
+                f'<ul style="padding-left:16px;color:#333;font-size:15px;line-height:1.7;'
+                f'margin:0;list-style:none;">'
+                + ''.join(list_items) + '</ul></div>')
             continue
 
-        # Detect heading: single line, shortish, doesn't end with sentence punctuation
+        # Detect heading: single short line without sentence-ending punctuation
         if (len(lines) == 1 and len(first) < 120
                 and not first.endswith(('.', '!', '?', ',', ';'))
                 and not re.match(r'^(oi|olá|hey)\b', first, re.I)):
+            heading_count += 1
             content_parts.append(
-                f'<h3 style="color:{cor};font-size:18px;margin:28px 0 8px;'
-                f'border-bottom:2px solid {cor_light};padding-bottom:8px;">'
-                f'{_esc(first)}</h3>')
+                f'<div style="background:{cor_bg};border-left:4px solid {cor};'
+                f'border-radius:0 8px 8px 0;padding:12px 18px;margin:28px 0 14px;">'
+                f'<h3 style="color:{cor};font-size:17px;margin:0;font-weight:bold;">'
+                f'{_esc(first)}</h3></div>')
             continue
 
         # Detect info block (Data: / Horário: / Formato: lines)
@@ -4010,9 +4028,9 @@ def _texto_para_email_html(texto, template_html='', primary_color='#1a3a6b', tem
             info = '<br>'.join(f'<strong>{_esc(l.split(":",1)[0])}:</strong>{_esc(l.split(":",1)[1])}'
                                for l in lines)
             content_parts.append(
-                f'<div style="background:#f8f9fa;border-left:4px solid {cor};'
-                f'padding:16px;border-radius:4px;margin:12px 0;font-size:15px;line-height:1.8;">'
-                f'{info}</div>')
+                f'<div style="background:{cor_subtle};border-left:4px solid {cor};'
+                f'padding:18px 20px;border-radius:0 8px 8px 0;margin:16px 0;font-size:15px;'
+                f'line-height:1.8;">{info}</div>')
             continue
 
         # Default: paragraph(s)
@@ -4022,25 +4040,28 @@ def _texto_para_email_html(texto, template_html='', primary_color='#1a3a6b', tem
 
     body_html = '\n'.join(content_parts)
 
-    # Image
     img_tag = ''
     if imagem_url:
         img_tag = (f'<div style="text-align:center;margin:16px 0;">'
                    f'<img src="{_esc(imagem_url)}" alt="imagem" '
                    f'style="max-width:100%;border-radius:8px;"></div>')
 
-    # --- Build full email HTML ---
+    subtitle_html = ''
+    if assunto_extraido and tema:
+        subtitle_html = f'<p style="color:{cor_border_light};margin:8px 0 0;font-size:13px;">{_esc(assunto_extraido)}</p>'
+
     html = f'''<!DOCTYPE html><html><body style="margin:0;padding:20px;background:#f0f2f5;font-family:Arial,Helvetica,sans-serif;">
 <table width="100%" cellpadding="0" cellspacing="0"><tr><td align="center">
-<table cellpadding="0" cellspacing="0" style="width:100%;max-width:560px;background:#fff;border-radius:8px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,.08);">
-<tr><td style="background:{cor};padding:28px 32px;text-align:center;">
-  <h1 style="color:#fff;margin:0;font-size:22px;word-wrap:break-word;">{_esc(titulo_header)}</h1>
+<table cellpadding="0" cellspacing="0" style="width:100%;max-width:560px;background:#fff;border-radius:8px;overflow:hidden;box-shadow:0 4px 12px rgba(0,0,0,.1);">
+<tr><td style="background:{cor};padding:32px 32px 28px;text-align:center;">
+  <h1 style="color:#fff;margin:0;font-size:22px;font-weight:bold;word-wrap:break-word;">{_esc(titulo_header)}</h1>
+  {subtitle_html}
 </td></tr>
-<tr><td style="padding:32px 36px;color:#333;word-wrap:break-word;overflow-wrap:break-word;">
+<tr><td style="padding:32px 32px;color:#333;word-wrap:break-word;overflow-wrap:break-word;">
   {img_tag}
   {body_html}
 </td></tr>
-<tr><td style="background:#f8f9fa;padding:20px 32px;text-align:center;font-size:12px;color:#888;">
+<tr><td style="background:{cor_bg};padding:20px 32px;text-align:center;font-size:12px;color:#888;">
   {social_links + '<br>' if social_links else ''}
   &copy; 2025 {_esc(empresa)} &middot; <a href="#" style="color:#888;">Descadastrar</a>
 </td></tr>
