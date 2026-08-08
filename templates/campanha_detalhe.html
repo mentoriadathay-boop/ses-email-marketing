@@ -114,6 +114,65 @@
   </div>
 </div>
 
+<!-- Quem abriu -->
+{% if openers %}
+<div class="card mb-4">
+  <div class="card-header bg-white fw-semibold border-0 pt-4 pb-0 px-4 d-flex justify-content-between align-items-center">
+    <span><i class="bi bi-envelope-open me-2 text-success"></i>Quem Abriu <span class="badge bg-success ms-1">{{ openers|length }}</span></span>
+    <div class="d-flex gap-2">
+      <a href="{{ url_for('campanha_para_abridores', campaign_id=campaign.id) }}"
+         class="btn btn-sm btn-success">
+        <i class="bi bi-send me-1"></i> Nova Campanha para Abridores
+      </a>
+      <button class="btn btn-sm btn-outline-secondary" type="button" id="btn-toggle-openers"
+              onclick="document.getElementById('openers-table').classList.toggle('d-none');this.textContent=this.textContent==='Ocultar'?'Mostrar':'Ocultar'">
+        Mostrar
+      </button>
+    </div>
+  </div>
+  <div class="card-body p-0 d-none" id="openers-table">
+    <div style="max-height:400px;overflow-y:auto">
+      <table class="table table-sm table-hover mb-0 align-middle">
+        <thead class="table-light sticky-top">
+          <tr>
+            <th class="ps-4">Contato</th>
+            <th>Primeira Abertura</th>
+            <th>Última Abertura</th>
+            <th class="text-center">Vezes</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for op in openers %}
+          <tr>
+            <td class="ps-4">
+              <a href="{{ url_for('contato_perfil', email=op.email) }}"
+                 class="text-decoration-none fw-semibold small">
+                {{ op.name or op.email }}
+              </a>
+              {% if op.name %}
+              <div class="text-muted" style="font-size:.75rem">{{ op.email }}</div>
+              {% endif %}
+            </td>
+            <td class="small text-muted">
+              {{ op.first_open.strftime('%d/%m/%Y %H:%M') if op.first_open else '—' }}
+            </td>
+            <td class="small text-muted">
+              {{ op.last_open.strftime('%d/%m/%Y %H:%M') if op.last_open else '—' }}
+            </td>
+            <td class="text-center">
+              <span class="badge {{ 'bg-warning text-dark' if op.total_opens > 1 else 'bg-light text-dark' }}">
+                {{ op.total_opens }}x
+              </span>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endif %}
+
 <!-- Preview do email (para rascunhos e campanhas com corpo) -->
 {% if campaign.body and campaign.body|length > 10 %}
 <div class="card mb-4">

@@ -1660,13 +1660,37 @@ def campanha_detalhe(campaign_id):
             blacklisted_in_campaign = conn.execute(
                 f'SELECT COUNT(*) as n FROM blacklist WHERE email IN ({placeholders})', tuple(log_emails)
             ).fetchone()['n']
+    openers = conn.execute(
+        "SELECT contact_email, COUNT(*) as total_opens, "
+        "MIN(opened_at) as first_open, MAX(opened_at) as last_open "
+        "FROM email_opens WHERE campaign_id=%s "
+        "GROUP BY contact_email ORDER BY first_open DESC",
+        (campaign_id,)).fetchall()
+    openers_with_names = []
+    for op in openers:
+        contact = conn.execute(
+            "SELECT name FROM contacts WHERE email=%s", (op['contact_email'],)).fetchone()
+        name = contact['name'] if contact and contact['name'] else None
+        if not name:
+            log_entry = conn.execute(
+                "SELECT contact_name FROM campaign_logs WHERE campaign_id=%s AND contact_email=%s LIMIT 1",
+                (campaign_id, op['contact_email'])).fetchone()
+            name = log_entry['contact_name'] if log_entry and log_entry['contact_name'] else None
+        openers_with_names.append({
+            'email': op['contact_email'],
+            'name': name,
+            'total_opens': op['total_opens'],
+            'first_open': op['first_open'],
+            'last_open': op['last_open'],
+        })
     conn.close()
     if not campaign:
         flash('Campanha não encontrada.', 'danger')
         return redirect(url_for('index'))
     return render_template('campanha_detalhe.html', campaign=campaign, logs=logs,
                            camp_open_rate=camp_open_rate, camp_opens=camp_opens,
-                           blacklisted_in_campaign=blacklisted_in_campaign)
+                           blacklisted_in_campaign=blacklisted_in_campaign,
+                           openers=openers_with_names)
 
 @app.route('/campanha/<int:campaign_id>/reutilizar')
 def campanha_reutilizar(campaign_id):
@@ -1693,6 +1717,51 @@ def campanha_editar(campaign_id):
     sequences = conn.execute("SELECT id, name FROM sequences WHERE status='active' ORDER BY name").fetchall()
     conn.close()
     return render_template('nova_campanha.html', mailings=mailings, sequences=sequences, reutilizar=None, editar=campaign)
+
+@app.route('/campanha/<int:campaign_id>/campanha-abridores')
+def campanha_para_abridores(campaign_id):
+    conn = get_db()
+    campaign = conn.execute('SELECT * FROM campaigns WHERE id=%s', (campaign_id,)).fetchone()
+    if not campaign:
+        conn.close()
+        flash('Campanha não encontrada.', 'danger')
+        return redirect(url_for('index'))
+    openers = conn.execute(
+        "SELECT DISTINCT eo.contact_email, "
+        "COALESCE(c.name, cl.contact_name, '') as name "
+        "FROM email_opens eo "
+        "LEFT JOIN contacts c ON LOWER(c.email)=LOWER(eo.contact_email) "
+        "LEFT JOIN campaign_logs cl ON cl.campaign_id=eo.campaign_id AND cl.contact_email=eo.contact_email "
+        "WHERE eo.campaign_id=%s",
+        (campaign_id,)).fetchall()
+    if not openers:
+        conn.close()
+        flash('Nenhum contato abriu esta campanha ainda.', 'warning')
+        return redirect(url_for('campanha_detalhe', campaign_id=campaign_id))
+    mailing_name = f"Abridores — {campaign['name']}"
+    cur = conn.execute(
+        "INSERT INTO mailings (name, filename, contact_count) VALUES (%s, %s, %s) RETURNING id",
+        (mailing_name, '', len(openers)))
+    mailing_id = cur.fetchone()['id']
+    for op in openers:
+        conn.execute(
+            "INSERT INTO mailing_contacts (mailing_id, email, name) VALUES (%s, %s, %s)",
+            (mailing_id, op['contact_email'], op['name']))
+    conn.commit()
+    mailings = conn.execute('SELECT * FROM mailings ORDER BY created_at DESC').fetchall()
+    sequences = conn.execute("SELECT id, name FROM sequences WHERE status='active' ORDER BY name").fetchall()
+    conn.close()
+    reutilizar_data = {
+        'name': f"Re: {campaign['name']} (abridores)",
+        'sender_email': campaign['sender_email'],
+        'subject': '',
+        'body': '',
+        'mailing_id': mailing_id,
+        'sequence_id': campaign.get('sequence_id'),
+    }
+    flash(f'Mailing "{mailing_name}" criado com {len(openers)} contato(s) que abriram.', 'success')
+    return render_template('nova_campanha.html', mailings=mailings, sequences=sequences,
+                           reutilizar=reutilizar_data, editar=None)
 
 @app.route('/nichos')
 def pagina_nichos():
