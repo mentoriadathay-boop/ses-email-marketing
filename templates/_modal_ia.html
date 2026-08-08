@@ -168,6 +168,14 @@
                 <label class="form-check-label" for="iamToggleImagem">Incluir imagem no email</label>
               </div>
               <div id="iamImagemSection" class="d-none">
+                <div class="mb-3">
+                  <label class="form-label small fw-semibold">Posição da imagem</label>
+                  <select id="iamImagemPosicao" class="form-select form-select-sm">
+                    <option value="top">Topo (antes do texto)</option>
+                    <option value="after_first">Após o primeiro parágrafo</option>
+                    <option value="bottom">Final (após o texto)</option>
+                  </select>
+                </div>
                 <ul class="nav nav-tabs nav-sm mb-3" id="iamImgTabs">
                   <li class="nav-item">
                     <button type="button" class="nav-link active py-1 small" onclick="iamSwitchImgTab('upload',this)">Upload</button>

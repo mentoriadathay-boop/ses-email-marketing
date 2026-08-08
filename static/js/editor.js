@@ -401,16 +401,40 @@ async function melhorarTextoIA(containerId, textareaId, btnEl) {
 // ─────────────────────────────────────────────
 let _editTextsTarget = null;
 
-const _NAO_EDITAVEIS = ['SCRIPT', 'STYLE', 'BR', 'IMG', 'HR', 'INPUT', 'SELECT', 'OPTION', 'HEAD', 'TITLE', 'META', 'LINK'];
+const _INLINE_TAGS = new Set([
+  'SPAN','STRONG','EM','B','I','U','A','BR','SUB','SUP','SMALL','MARK','CODE','S','ABBR','CITE','TIME','FONT'
+]);
+
+const _TAG_LABELS = {
+  'P':'Parágrafo', 'H1':'Título', 'H2':'Subtítulo', 'H3':'Subtítulo',
+  'H4':'Subtítulo', 'H5':'Subtítulo', 'H6':'Subtítulo',
+  'LI':'Item da lista', 'A':'Link / Botão', 'DIV':'Bloco de info'
+};
 
 function _getEditableTextEls(doc) {
-  return Array.from(doc.body.querySelectorAll('*')).filter(el => {
-    if (_NAO_EDITAVEIS.includes(el.tagName)) return false;
-    const hasElementChild = Array.from(el.childNodes).some(n => n.nodeType === 1);
-    if (hasElementChild) return false;
+  const els = [];
+  const seen = new Set();
+  doc.body.querySelectorAll('p, h1, h2, h3, h4, h5, h6, li, a[href]').forEach(el => {
+    if (seen.has(el)) return;
     const text = (el.textContent || '').trim();
-    return text.length > 0;
+    if (text.length < 2) return;
+    const hasBlockChild = Array.from(el.querySelectorAll('*')).some(c => !_INLINE_TAGS.has(c.tagName));
+    if (hasBlockChild) return;
+    if (el.tagName === 'A') {
+      let p = el.parentElement;
+      while (p && p !== doc.body) { if (seen.has(p)) return; p = p.parentElement; }
+    }
+    els.push(el);
+    seen.add(el);
+    el.querySelectorAll('*').forEach(c => seen.add(c));
   });
+  return els;
+}
+
+function _getBlockText(el) {
+  let text = (el.innerText || el.textContent || '').trim();
+  if (el.tagName === 'LI') text = text.replace(/^[✓✔☑✅]\s*/, '');
+  return text;
 }
 
 function editTextsModal(containerId, textareaId) {
@@ -427,12 +451,12 @@ function editTextsModal(containerId, textareaId) {
 
   const list = document.getElementById('editTextsList');
   list.innerHTML = els.map((el, i) => {
-    const tag = el.tagName.toLowerCase();
-    const text = el.textContent.trim();
-    const rows = text.length > 100 ? 4 : (text.length > 40 ? 2 : 1);
+    const label = _TAG_LABELS[el.tagName] || el.tagName.toLowerCase();
+    const text = _getBlockText(el);
+    const rows = text.length > 200 ? 5 : (text.length > 80 ? 3 : (text.length > 30 ? 2 : 1));
     return `
-      <div class="mb-2">
-        <label class="form-label small text-muted mb-1">&lt;${tag}&gt;</label>
+      <div class="mb-3 p-2 border rounded">
+        <label class="form-label small fw-semibold text-primary mb-1">${label}</label>
         <textarea class="form-control form-control-sm edit-text-value" data-idx="${i}" rows="${rows}">${_escapeHtml(text)}</textarea>
       </div>`;
   }).join('');
@@ -450,7 +474,23 @@ function applyEditTexts() {
 
   document.querySelectorAll('#editTextsList .edit-text-value').forEach(ta => {
     const idx = parseInt(ta.dataset.idx, 10);
-    if (els[idx]) els[idx].textContent = ta.value;
+    if (!els[idx]) return;
+    const el = els[idx];
+    const newText = ta.value;
+
+    if (el.tagName === 'LI') {
+      const decorSpan = el.querySelector('span');
+      if (decorSpan && decorSpan.textContent.trim().length <= 2) {
+        const spanHtml = decorSpan.outerHTML;
+        el.innerHTML = spanHtml + _escapeHtml(newText);
+      } else {
+        el.textContent = newText;
+      }
+    } else if (el.querySelector('br')) {
+      el.innerHTML = _escapeHtml(newText).replace(/\n/g, '<br>');
+    } else {
+      el.textContent = newText;
+    }
   });
 
   let newHtml;

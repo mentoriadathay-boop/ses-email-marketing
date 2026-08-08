@@ -3914,7 +3914,7 @@ def _extrair_cor_template(template_html):
 
 
 def _texto_para_email_html(texto, template_html='', primary_color='#1a3a6b', tema='',
-                           kit=None, imagem_url=''):
+                           kit=None, imagem_url='', imagem_posicao='top'):
     """Convert plain text into a structured HTML email WITHOUT using AI.
     Every word of the user's text is preserved verbatim."""
 
@@ -4110,13 +4110,20 @@ def _texto_para_email_html(texto, template_html='', primary_color='#1a3a6b', tem
             content_parts.append(
                 f'<p style="font-size:15px;color:{cor_texto};line-height:1.7;margin:0 0 14px;">{_esc(l)}</p>')
 
-    body_html = '\n'.join(content_parts)
-
     img_tag = ''
     if imagem_url:
         img_tag = (f'<div style="text-align:center;margin:16px 0;">'
                    f'<img src="{_esc(imagem_url)}" alt="imagem" '
                    f'style="max-width:100%;border-radius:8px;"></div>')
+
+    if img_tag and imagem_posicao == 'after_first' and len(content_parts) > 0:
+        content_parts.insert(1, img_tag)
+        img_tag = ''
+    elif img_tag and imagem_posicao == 'bottom':
+        content_parts.append(img_tag)
+        img_tag = ''
+
+    body_html = '\n'.join(content_parts)
 
     subtitle_html = ''
     if assunto_extraido and tema:
@@ -4185,8 +4192,10 @@ Kit de Marca — {kit['name']}:
 
     imagem_info = ''
     imagem_url = dados.get('imagem_url', '').strip()
+    imagem_posicao = dados.get('imagem_posicao', 'top')
     if imagem_url:
-        imagem_info = '\nInserir uma imagem no corpo do email usando exatamente esta tag: <img src="__IMAGEM_PLACEHOLDER__" alt="imagem" style="max-width:100%;border-radius:8px;margin:16px 0;">'
+        pos_label = {'top': 'no topo, antes do texto', 'after_first': 'após o primeiro parágrafo', 'bottom': 'no final, após o texto'}.get(imagem_posicao, 'no topo')
+        imagem_info = f'\nInserir uma imagem {pos_label} do email usando exatamente esta tag: <img src="__IMAGEM_PLACEHOLDER__" alt="imagem" style="max-width:100%;border-radius:8px;margin:16px 0;">'
 
     modo = dados.get('modo_texto', 'reescrever')
     template_ref = dados.get('template_ref_html', '').strip()
@@ -4202,6 +4211,7 @@ Kit de Marca — {kit['name']}:
             tema=dados.get('tema', ''),
             kit=dict(kit) if kit else None,
             imagem_url=imagem_url,
+            imagem_posicao=dados.get('imagem_posicao', 'top'),
         )
         return jsonify({'html': html})
     else:
