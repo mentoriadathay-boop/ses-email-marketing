@@ -1599,13 +1599,29 @@ def nova_campanha():
                 return redirect(url_for('nova_campanha'))
 
         conn = get_db()
-        cur = conn.execute(
-            "INSERT INTO campaigns (name,subject,body,sender_email,total_contacts,status,mailing_id,sequence_id,scheduled_at,csv_filename) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id",
-            (name, subject, body_html, sender,
-             0 if is_scheduled else len(contacts),
-             campaign_status, mailing_id, sequence_id, parsed_scheduled_at, csv_filename))
-        campaign_id = cur.fetchone()['id']
-        conn.commit()
+        draft_id = request.form.get('draft_id', '').strip() or None
+        if draft_id:
+            existing = conn.execute("SELECT id FROM campaigns WHERE id=%s AND status='draft'", (draft_id,)).fetchone()
+            if existing:
+                conn.execute(
+                    "UPDATE campaigns SET name=%s,subject=%s,body=%s,sender_email=%s,"
+                    "total_contacts=%s,status=%s,mailing_id=%s,sequence_id=%s,"
+                    "scheduled_at=%s,csv_filename=%s WHERE id=%s",
+                    (name, subject, body_html, sender,
+                     0 if is_scheduled else len(contacts),
+                     campaign_status, mailing_id, sequence_id, parsed_scheduled_at, csv_filename, draft_id))
+                campaign_id = int(draft_id)
+                conn.commit()
+            else:
+                draft_id = None
+        if not draft_id:
+            cur = conn.execute(
+                "INSERT INTO campaigns (name,subject,body,sender_email,total_contacts,status,mailing_id,sequence_id,scheduled_at,csv_filename) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id",
+                (name, subject, body_html, sender,
+                 0 if is_scheduled else len(contacts),
+                 campaign_status, mailing_id, sequence_id, parsed_scheduled_at, csv_filename))
+            campaign_id = cur.fetchone()['id']
+            conn.commit()
         conn.close()
 
         if is_scheduled:
@@ -1621,7 +1637,7 @@ def nova_campanha():
     mailings = conn.execute('SELECT * FROM mailings ORDER BY created_at DESC').fetchall()
     sequences = conn.execute("SELECT id, name FROM sequences WHERE status='active' ORDER BY name").fetchall()
     conn.close()
-    return render_template('nova_campanha.html', mailings=mailings, sequences=sequences, reutilizar=None)
+    return render_template('nova_campanha.html', mailings=mailings, sequences=sequences, reutilizar=None, editar=None)
 
 @app.route('/campanha/<int:campaign_id>')
 def campanha_detalhe(campaign_id):
@@ -1663,7 +1679,20 @@ def campanha_reutilizar(campaign_id):
     mailings = conn.execute('SELECT * FROM mailings ORDER BY created_at DESC').fetchall()
     sequences = conn.execute("SELECT id, name FROM sequences WHERE status='active' ORDER BY name").fetchall()
     conn.close()
-    return render_template('nova_campanha.html', mailings=mailings, sequences=sequences, reutilizar=campaign)
+    return render_template('nova_campanha.html', mailings=mailings, sequences=sequences, reutilizar=campaign, editar=None)
+
+@app.route('/campanha/<int:campaign_id>/editar')
+def campanha_editar(campaign_id):
+    conn = get_db()
+    campaign = conn.execute("SELECT * FROM campaigns WHERE id=%s AND status='draft'", (campaign_id,)).fetchone()
+    if not campaign:
+        conn.close()
+        flash('Rascunho não encontrado ou já foi enviado.', 'danger')
+        return redirect(url_for('index'))
+    mailings = conn.execute('SELECT * FROM mailings ORDER BY created_at DESC').fetchall()
+    sequences = conn.execute("SELECT id, name FROM sequences WHERE status='active' ORDER BY name").fetchall()
+    conn.close()
+    return render_template('nova_campanha.html', mailings=mailings, sequences=sequences, reutilizar=None, editar=campaign)
 
 @app.route('/nichos')
 def pagina_nichos():
@@ -1786,6 +1815,7 @@ def campanha_rascunho():
     body_html = data.get('body_html', '')
     mailing_ids_raw = data.get('mailing_ids', '')
     sequence_id = data.get('sequence_id') or None
+    draft_id = data.get('draft_id') or None
 
     if not nome:
         return jsonify({'error': 'Preencha o nome da campanha.'}), 400
@@ -1800,11 +1830,24 @@ def campanha_rascunho():
         row = conn.execute(f"SELECT COUNT(DISTINCT email) as cnt FROM mailing_contacts WHERE mailing_id IN ({placeholders})", mailing_id_list).fetchone()
         total_contacts = row['cnt'] if row else 0
 
-    cur = conn.execute(
-        "INSERT INTO campaigns (name,subject,body,sender_email,total_contacts,status,mailing_id,sequence_id) "
-        "VALUES (%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id",
-        (nome, subject, body_html, sender or '', total_contacts, 'draft', mailing_id, sequence_id))
-    campaign_id = cur.fetchone()['id']
+    if draft_id:
+        existing = conn.execute("SELECT id FROM campaigns WHERE id=%s AND status='draft'", (draft_id,)).fetchone()
+        if existing:
+            conn.execute(
+                "UPDATE campaigns SET name=%s,subject=%s,body=%s,sender_email=%s,"
+                "total_contacts=%s,mailing_id=%s,sequence_id=%s WHERE id=%s",
+                (nome, subject, body_html, sender or '', total_contacts, mailing_id, sequence_id, draft_id))
+            campaign_id = int(draft_id)
+        else:
+            draft_id = None
+
+    if not draft_id:
+        cur = conn.execute(
+            "INSERT INTO campaigns (name,subject,body,sender_email,total_contacts,status,mailing_id,sequence_id) "
+            "VALUES (%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id",
+            (nome, subject, body_html, sender or '', total_contacts, 'draft', mailing_id, sequence_id))
+        campaign_id = cur.fetchone()['id']
+
     conn.commit()
     conn.close()
     return jsonify({'ok': True, 'campaign_id': campaign_id, 'url': url_for('campanha_detalhe', campaign_id=campaign_id)})
