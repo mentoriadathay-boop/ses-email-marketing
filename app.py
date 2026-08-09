@@ -2194,6 +2194,7 @@ def api_nichos():
     return jsonify([{'nicho': r['nicho'], 'qtd': r['qtd']} for r in rows])
 
 @app.route('/campanha/rascunho', methods=['POST'])
+@login_required
 def campanha_rascunho():
     data = request.get_json() or {}
     nome = data.get('campaign_name', '').strip()
@@ -2240,6 +2241,7 @@ def campanha_rascunho():
     return jsonify({'ok': True, 'campaign_id': campaign_id, 'url': url_for('campanha_detalhe', campaign_id=campaign_id)})
 
 @app.route('/campanha/segmentada', methods=['POST'])
+@login_required
 def campanha_segmentada():
     data = request.get_json() or {}
     nome_base = data.get('campaign_name', '').strip()
@@ -3333,7 +3335,9 @@ def cadencia_detalhe(seq_id):
 
 
 @app.route('/api/cadencias/<int:seq_id>/contato/<path:email>/historico')
+@login_required
 def api_contato_historico(seq_id, email):
+    _check_owner('sequences', seq_id)
     conn = get_db()
     logs = conn.execute(
         'SELECT sl.*, ss.subject as step_subject FROM sequence_logs sl'
@@ -3453,7 +3457,9 @@ def editar_cadencia(seq_id):
     return render_template('nova_cadencia.html', seq=seq, steps=steps, editing=True)
 
 @app.route('/cadencias/<int:seq_id>/adicionar-contatos', methods=['POST'])
+@login_required
 def adicionar_contatos_cadencia(seq_id):
+    _check_owner('sequences', seq_id)
     conn = get_db()
     seq = conn.execute('SELECT * FROM sequences WHERE id=%s', (seq_id,)).fetchone()
     if not seq:
@@ -3563,14 +3569,18 @@ def adicionar_contatos_cadencia(seq_id):
     return redirect(url_for('cadencia_detalhe', seq_id=seq_id))
 
 @app.route('/cadencias/<int:seq_id>/processar-agora', methods=['POST'])
+@login_required
 def processar_cadencia_agora(seq_id):
+    _check_owner('sequences', seq_id)
     t = threading.Thread(target=processar_cadencias, daemon=True)
     t.start()
     flash('Processamento de emails disparado — aguarde alguns segundos e recarregue.', 'info')
     return redirect(url_for('cadencia_detalhe', seq_id=seq_id))
 
 @app.route('/cadencias/<int:seq_id>/pausar', methods=['POST'])
+@login_required
 def pausar_cadencia(seq_id):
+    _check_owner('sequences', seq_id)
     conn = get_db()
     conn.execute("UPDATE sequence_contacts SET status='paused' WHERE sequence_id=%s AND status='active'", (seq_id,))
     conn.execute("UPDATE sequences SET status='paused' WHERE id=%s", (seq_id,))
@@ -3579,7 +3589,9 @@ def pausar_cadencia(seq_id):
     return redirect(url_for('cadencia_detalhe', seq_id=seq_id))
 
 @app.route('/cadencias/<int:seq_id>/retomar', methods=['POST'])
+@login_required
 def retomar_cadencia(seq_id):
+    _check_owner('sequences', seq_id)
     conn = get_db()
     conn.execute("UPDATE sequence_contacts SET status='active' WHERE sequence_id=%s AND status='paused'", (seq_id,))
     conn.execute("UPDATE sequences SET status='active' WHERE id=%s", (seq_id,))
@@ -3588,7 +3600,9 @@ def retomar_cadencia(seq_id):
     return redirect(url_for('cadencia_detalhe', seq_id=seq_id))
 
 @app.route('/cadencias/<int:seq_id>/enviar-teste', methods=['POST'])
+@login_required
 def enviar_teste_cadencia(seq_id):
+    _check_owner('sequences', seq_id)
     conn = get_db()
     seq = conn.execute('SELECT * FROM sequences WHERE id=%s', (seq_id,)).fetchone()
     if not seq:
@@ -3619,7 +3633,9 @@ def enviar_teste_cadencia(seq_id):
     return redirect(url_for('cadencia_detalhe', seq_id=seq_id))
 
 @app.route('/cadencias/<int:seq_id>/reiniciar', methods=['POST'])
+@login_required
 def reiniciar_cadencia(seq_id):
+    _check_owner('sequences', seq_id)
     conn = get_db()
     seq = conn.execute('SELECT * FROM sequences WHERE id=%s', (seq_id,)).fetchone()
     if not seq:
@@ -3650,7 +3666,9 @@ def reiniciar_cadencia(seq_id):
     return redirect(url_for('cadencia_detalhe', seq_id=seq_id))
 
 @app.route('/cadencias/<int:seq_id>/contato/<path:email>/parar', methods=['POST'])
+@login_required
 def parar_contato_cadencia(seq_id, email):
+    _check_owner('sequences', seq_id)
     conn = get_db()
     conn.execute("UPDATE sequence_contacts SET status='stopped' WHERE sequence_id=%s AND contact_email=%s", (seq_id, email))
     conn.commit(); conn.close()
@@ -3658,7 +3676,9 @@ def parar_contato_cadencia(seq_id, email):
     return redirect(url_for('cadencia_detalhe', seq_id=seq_id))
 
 @app.route('/api/cadencias/<int:seq_id>/metricas')
+@login_required
 def api_cadencia_metricas(seq_id):
+    _check_owner('sequences', seq_id)
     conn = get_db()
     steps = conn.execute('SELECT * FROM sequence_steps WHERE sequence_id=%s ORDER BY step_number', (seq_id,)).fetchall()
     result = []
@@ -3966,14 +3986,16 @@ def upload_mailing():
     return redirect(url_for('lista_mailings'))
 
 @app.route('/mailings/atribuir-nicho', methods=['POST'])
+@login_required
 def atribuir_nicho_mailing():
-    mailing_id = request.form.get('mailing_id')
+    mailing_id = request.form.get('mailing_id', type=int)
     nicho = request.form.get('nicho', '').strip()
     sobrescrever = request.form.get('sobrescrever') == 'on'
     if not mailing_id or not nicho:
         flash('Selecione um mailing e um nicho.', 'danger')
         return redirect(url_for('lista_mailings'))
     conn = get_db()
+    _check_owner('mailings', mailing_id, conn)
     if sobrescrever:
         updated_mc = conn.execute(
             "UPDATE mailing_contacts SET nicho=%s WHERE mailing_id=%s RETURNING email",
@@ -4020,17 +4042,23 @@ def _csv_response(rows, headers, filename):
                     headers={'Content-Disposition': f'attachment;filename={filename}'})
 
 @app.route('/exportar/campanhas')
+@login_required
 def exportar_campanhas():
+    uid = _uid()
     conn = get_db()
-    camps = conn.execute('SELECT * FROM campaigns ORDER BY created_at DESC').fetchall()
+    camps = conn.execute(
+        'SELECT * FROM campaigns WHERE user_id=%s ORDER BY created_at DESC', (uid,)
+    ).fetchall()
     conn.close()
     rows = [(c['id'], c['name'], c['subject'], c['sender_email'], c['total_contacts'],
              c['sent'], c['errors'], c['status'], c['created_at']) for c in camps]
     return _csv_response(rows, ['ID','Nome','Assunto','Remetente','Total','Enviados','Erros','Status','Criado em'], 'campanhas.csv')
 
 @app.route('/exportar/cadencia/<int:seq_id>')
+@login_required
 def exportar_cadencia(seq_id):
     conn = get_db()
+    _check_owner('sequences', seq_id, conn)
     contacts = conn.execute('''
         SELECT sc.contact_email, sc.contact_name, sc.current_step, sc.status,
                sc.next_send_at, sc.started_at, sc.finished_at, COALESCE(cs.score,0) as score
@@ -4043,10 +4071,13 @@ def exportar_cadencia(seq_id):
     return _csv_response(rows, ['Email','Nome','Passo Atual','Status','Próximo Envio','Iniciado em','Finalizado em','Score'], f'cadencia_{seq_id}.csv')
 
 @app.route('/exportar/contatos')
+@login_required
 def exportar_contatos():
+    uid = _uid()
     conn = get_db()
     contatos = conn.execute(
-        'SELECT c.*, COALESCE(cs.score,0) as current_score FROM contacts c LEFT JOIN contact_scores cs ON cs.email=c.email ORDER BY c.name'
+        'SELECT c.*, COALESCE(cs.score,0) as current_score FROM contacts c LEFT JOIN contact_scores cs ON cs.email=c.email WHERE c.user_id=%s ORDER BY c.name',
+        (uid,)
     ).fetchall()
     conn.close()
     rows = [(c['email'], c['name'], c['phone'], c['company'], c['position'],
@@ -4232,14 +4263,20 @@ def prospeccao_criar_mailing():
 # ── Kit de Marca ──────────────────────────────────────────────────────────────
 
 @app.route('/kit-marca')
+@login_required
 def kit_marca():
+    uid = _uid()
     conn = get_db()
-    kits = conn.execute('SELECT * FROM brand_kits ORDER BY created_at DESC').fetchall()
+    kits = conn.execute(
+        'SELECT * FROM brand_kits WHERE user_id=%s ORDER BY created_at DESC', (uid,)
+    ).fetchall()
     conn.close()
     return render_template('kit_marca.html', kits=kits)
 
 @app.route('/kit-marca/salvar', methods=['POST'])
+@login_required
 def salvar_kit_marca():
+    uid = _uid()
     kit_id = request.form.get('kit_id', '').strip()
     tone_items = request.form.getlist('tone_items')
     tone_custom = request.form.get('tone_custom', '').strip()
@@ -4271,35 +4308,42 @@ def salvar_kit_marca():
         return redirect(url_for('kit_marca'))
     conn = get_db()
     if kit_id:
+        _check_owner('brand_kits', kit_id, conn)
         conn.execute('''UPDATE brand_kits SET name=%s,logo_url=%s,slogan=%s,primary_color=%s,
             secondary_color=%s,accent_color=%s,text_color=%s,bg_color=%s,font_primary=%s,
             font_secondary=%s,tone_of_voice=%s,instagram=%s,facebook=%s,linkedin=%s,
             youtube=%s,whatsapp=%s,website=%s,signature_name=%s,signature_role=%s,signature_phone=%s
-            WHERE id=%s''', dados + (kit_id,))
+            WHERE id=%s AND user_id=%s''', dados + (kit_id, uid))
         flash('Kit de marca atualizado!', 'success')
     else:
         conn.execute('''INSERT INTO brand_kits (name,logo_url,slogan,primary_color,secondary_color,
             accent_color,text_color,bg_color,font_primary,font_secondary,tone_of_voice,instagram,
-            facebook,linkedin,youtube,whatsapp,website,signature_name,signature_role,signature_phone)
-            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)''', dados)
+            facebook,linkedin,youtube,whatsapp,website,signature_name,signature_role,signature_phone,user_id)
+            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)''', dados + (uid,))
         flash('Kit de marca criado!', 'success')
     conn.commit()
     conn.close()
     return redirect(url_for('kit_marca'))
 
 @app.route('/kit-marca/<int:kid>/deletar', methods=['POST'])
+@login_required
 def deletar_kit_marca(kid):
     conn = get_db()
-    conn.execute('DELETE FROM brand_kits WHERE id=%s', (kid,))
+    _check_owner('brand_kits', kid, conn)
+    conn.execute('DELETE FROM brand_kits WHERE id=%s AND user_id=%s', (kid, _uid()))
     conn.commit()
     conn.close()
     flash('Kit removido.', 'info')
     return redirect(url_for('kit_marca'))
 
 @app.route('/api/brand-kits')
+@login_required
 def api_brand_kits():
+    uid = _uid()
     conn = get_db()
-    kits = conn.execute('SELECT * FROM brand_kits ORDER BY name').fetchall()
+    kits = conn.execute(
+        'SELECT * FROM brand_kits WHERE user_id=%s ORDER BY name', (uid,)
+    ).fetchall()
     conn.close()
     return jsonify([dict(k) for k in kits])
 
@@ -5161,7 +5205,9 @@ Regras:
 # ── 1. Re-envio para não-abridores ────────────────────────────────────────────
 
 @app.route('/campanha/<int:campaign_id>/reenviar-nao-abridores', methods=['POST'])
+@login_required
 def reenviar_nao_abridores(campaign_id):
+    _check_owner('campaigns', campaign_id)
     conn = get_db()
     campaign = conn.execute('SELECT * FROM campaigns WHERE id=%s', (campaign_id,)).fetchone()
     if not campaign:
