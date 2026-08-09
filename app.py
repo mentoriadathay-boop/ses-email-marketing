@@ -1599,13 +1599,29 @@ def nova_campanha():
                 return redirect(url_for('nova_campanha'))
 
         conn = get_db()
-        cur = conn.execute(
-            "INSERT INTO campaigns (name,subject,body,sender_email,total_contacts,status,mailing_id,sequence_id,scheduled_at,csv_filename) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id",
-            (name, subject, body_html, sender,
-             0 if is_scheduled else len(contacts),
-             campaign_status, mailing_id, sequence_id, parsed_scheduled_at, csv_filename))
-        campaign_id = cur.fetchone()['id']
-        conn.commit()
+        draft_id = request.form.get('draft_id', '').strip() or None
+        if draft_id:
+            existing = conn.execute("SELECT id FROM campaigns WHERE id=%s AND status='draft'", (draft_id,)).fetchone()
+            if existing:
+                conn.execute(
+                    "UPDATE campaigns SET name=%s,subject=%s,body=%s,sender_email=%s,"
+                    "total_contacts=%s,status=%s,mailing_id=%s,sequence_id=%s,"
+                    "scheduled_at=%s,csv_filename=%s WHERE id=%s",
+                    (name, subject, body_html, sender,
+                     0 if is_scheduled else len(contacts),
+                     campaign_status, mailing_id, sequence_id, parsed_scheduled_at, csv_filename, draft_id))
+                campaign_id = int(draft_id)
+                conn.commit()
+            else:
+                draft_id = None
+        if not draft_id:
+            cur = conn.execute(
+                "INSERT INTO campaigns (name,subject,body,sender_email,total_contacts,status,mailing_id,sequence_id,scheduled_at,csv_filename) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id",
+                (name, subject, body_html, sender,
+                 0 if is_scheduled else len(contacts),
+                 campaign_status, mailing_id, sequence_id, parsed_scheduled_at, csv_filename))
+            campaign_id = cur.fetchone()['id']
+            conn.commit()
         conn.close()
 
         if is_scheduled:
@@ -1621,7 +1637,7 @@ def nova_campanha():
     mailings = conn.execute('SELECT * FROM mailings ORDER BY created_at DESC').fetchall()
     sequences = conn.execute("SELECT id, name FROM sequences WHERE status='active' ORDER BY name").fetchall()
     conn.close()
-    return render_template('nova_campanha.html', mailings=mailings, sequences=sequences, reutilizar=None)
+    return render_template('nova_campanha.html', mailings=mailings, sequences=sequences, reutilizar=None, editar=None)
 
 @app.route('/campanha/<int:campaign_id>')
 def campanha_detalhe(campaign_id):
@@ -1644,13 +1660,37 @@ def campanha_detalhe(campaign_id):
             blacklisted_in_campaign = conn.execute(
                 f'SELECT COUNT(*) as n FROM blacklist WHERE email IN ({placeholders})', tuple(log_emails)
             ).fetchone()['n']
+    openers = conn.execute(
+        "SELECT contact_email, COUNT(*) as total_opens, "
+        "MIN(opened_at) as first_open, MAX(opened_at) as last_open "
+        "FROM email_opens WHERE campaign_id=%s "
+        "GROUP BY contact_email ORDER BY first_open DESC",
+        (campaign_id,)).fetchall()
+    openers_with_names = []
+    for op in openers:
+        contact = conn.execute(
+            "SELECT name FROM contacts WHERE email=%s", (op['contact_email'],)).fetchone()
+        name = contact['name'] if contact and contact['name'] else None
+        if not name:
+            log_entry = conn.execute(
+                "SELECT contact_name FROM campaign_logs WHERE campaign_id=%s AND contact_email=%s LIMIT 1",
+                (campaign_id, op['contact_email'])).fetchone()
+            name = log_entry['contact_name'] if log_entry and log_entry['contact_name'] else None
+        openers_with_names.append({
+            'email': op['contact_email'],
+            'name': name,
+            'total_opens': op['total_opens'],
+            'first_open': op['first_open'],
+            'last_open': op['last_open'],
+        })
     conn.close()
     if not campaign:
         flash('Campanha não encontrada.', 'danger')
         return redirect(url_for('index'))
     return render_template('campanha_detalhe.html', campaign=campaign, logs=logs,
                            camp_open_rate=camp_open_rate, camp_opens=camp_opens,
-                           blacklisted_in_campaign=blacklisted_in_campaign)
+                           blacklisted_in_campaign=blacklisted_in_campaign,
+                           openers=openers_with_names)
 
 @app.route('/campanha/<int:campaign_id>/reutilizar')
 def campanha_reutilizar(campaign_id):
@@ -1663,7 +1703,65 @@ def campanha_reutilizar(campaign_id):
     mailings = conn.execute('SELECT * FROM mailings ORDER BY created_at DESC').fetchall()
     sequences = conn.execute("SELECT id, name FROM sequences WHERE status='active' ORDER BY name").fetchall()
     conn.close()
-    return render_template('nova_campanha.html', mailings=mailings, sequences=sequences, reutilizar=campaign)
+    return render_template('nova_campanha.html', mailings=mailings, sequences=sequences, reutilizar=campaign, editar=None)
+
+@app.route('/campanha/<int:campaign_id>/editar')
+def campanha_editar(campaign_id):
+    conn = get_db()
+    campaign = conn.execute("SELECT * FROM campaigns WHERE id=%s AND status='draft'", (campaign_id,)).fetchone()
+    if not campaign:
+        conn.close()
+        flash('Rascunho não encontrado ou já foi enviado.', 'danger')
+        return redirect(url_for('index'))
+    mailings = conn.execute('SELECT * FROM mailings ORDER BY created_at DESC').fetchall()
+    sequences = conn.execute("SELECT id, name FROM sequences WHERE status='active' ORDER BY name").fetchall()
+    conn.close()
+    return render_template('nova_campanha.html', mailings=mailings, sequences=sequences, reutilizar=None, editar=campaign)
+
+@app.route('/campanha/<int:campaign_id>/campanha-abridores')
+def campanha_para_abridores(campaign_id):
+    conn = get_db()
+    campaign = conn.execute('SELECT * FROM campaigns WHERE id=%s', (campaign_id,)).fetchone()
+    if not campaign:
+        conn.close()
+        flash('Campanha não encontrada.', 'danger')
+        return redirect(url_for('index'))
+    openers = conn.execute(
+        "SELECT DISTINCT eo.contact_email, "
+        "COALESCE(c.name, cl.contact_name, '') as name "
+        "FROM email_opens eo "
+        "LEFT JOIN contacts c ON LOWER(c.email)=LOWER(eo.contact_email) "
+        "LEFT JOIN campaign_logs cl ON cl.campaign_id=eo.campaign_id AND cl.contact_email=eo.contact_email "
+        "WHERE eo.campaign_id=%s",
+        (campaign_id,)).fetchall()
+    if not openers:
+        conn.close()
+        flash('Nenhum contato abriu esta campanha ainda.', 'warning')
+        return redirect(url_for('campanha_detalhe', campaign_id=campaign_id))
+    mailing_name = f"Abridores — {campaign['name']}"
+    cur = conn.execute(
+        "INSERT INTO mailings (name, filename, contact_count) VALUES (%s, %s, %s) RETURNING id",
+        (mailing_name, '', len(openers)))
+    mailing_id = cur.fetchone()['id']
+    for op in openers:
+        conn.execute(
+            "INSERT INTO mailing_contacts (mailing_id, email, name) VALUES (%s, %s, %s)",
+            (mailing_id, op['contact_email'], op['name']))
+    conn.commit()
+    mailings = conn.execute('SELECT * FROM mailings ORDER BY created_at DESC').fetchall()
+    sequences = conn.execute("SELECT id, name FROM sequences WHERE status='active' ORDER BY name").fetchall()
+    conn.close()
+    reutilizar_data = {
+        'name': f"Re: {campaign['name']} (abridores)",
+        'sender_email': campaign['sender_email'],
+        'subject': '',
+        'body': '',
+        'mailing_id': mailing_id,
+        'sequence_id': campaign.get('sequence_id'),
+    }
+    flash(f'Mailing "{mailing_name}" criado com {len(openers)} contato(s) que abriram.', 'success')
+    return render_template('nova_campanha.html', mailings=mailings, sequences=sequences,
+                           reutilizar=reutilizar_data, editar=None)
 
 @app.route('/nichos')
 def pagina_nichos():
@@ -1786,6 +1884,7 @@ def campanha_rascunho():
     body_html = data.get('body_html', '')
     mailing_ids_raw = data.get('mailing_ids', '')
     sequence_id = data.get('sequence_id') or None
+    draft_id = data.get('draft_id') or None
 
     if not nome:
         return jsonify({'error': 'Preencha o nome da campanha.'}), 400
@@ -1800,11 +1899,24 @@ def campanha_rascunho():
         row = conn.execute(f"SELECT COUNT(DISTINCT email) as cnt FROM mailing_contacts WHERE mailing_id IN ({placeholders})", mailing_id_list).fetchone()
         total_contacts = row['cnt'] if row else 0
 
-    cur = conn.execute(
-        "INSERT INTO campaigns (name,subject,body,sender_email,total_contacts,status,mailing_id,sequence_id) "
-        "VALUES (%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id",
-        (nome, subject, body_html, sender or '', total_contacts, 'draft', mailing_id, sequence_id))
-    campaign_id = cur.fetchone()['id']
+    if draft_id:
+        existing = conn.execute("SELECT id FROM campaigns WHERE id=%s AND status='draft'", (draft_id,)).fetchone()
+        if existing:
+            conn.execute(
+                "UPDATE campaigns SET name=%s,subject=%s,body=%s,sender_email=%s,"
+                "total_contacts=%s,mailing_id=%s,sequence_id=%s WHERE id=%s",
+                (nome, subject, body_html, sender or '', total_contacts, mailing_id, sequence_id, draft_id))
+            campaign_id = int(draft_id)
+        else:
+            draft_id = None
+
+    if not draft_id:
+        cur = conn.execute(
+            "INSERT INTO campaigns (name,subject,body,sender_email,total_contacts,status,mailing_id,sequence_id) "
+            "VALUES (%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id",
+            (nome, subject, body_html, sender or '', total_contacts, 'draft', mailing_id, sequence_id))
+        campaign_id = cur.fetchone()['id']
+
     conn.commit()
     conn.close()
     return jsonify({'ok': True, 'campaign_id': campaign_id, 'url': url_for('campanha_detalhe', campaign_id=campaign_id)})
@@ -3871,7 +3983,7 @@ def _extrair_cor_template(template_html):
 
 
 def _texto_para_email_html(texto, template_html='', primary_color='#1a3a6b', tema='',
-                           kit=None, imagem_url=''):
+                           kit=None, imagem_url='', imagem_posicao='top'):
     """Convert plain text into a structured HTML email WITHOUT using AI.
     Every word of the user's text is preserved verbatim."""
 
@@ -4067,13 +4179,20 @@ def _texto_para_email_html(texto, template_html='', primary_color='#1a3a6b', tem
             content_parts.append(
                 f'<p style="font-size:15px;color:{cor_texto};line-height:1.7;margin:0 0 14px;">{_esc(l)}</p>')
 
-    body_html = '\n'.join(content_parts)
-
     img_tag = ''
     if imagem_url:
         img_tag = (f'<div style="text-align:center;margin:16px 0;">'
                    f'<img src="{_esc(imagem_url)}" alt="imagem" '
                    f'style="max-width:100%;border-radius:8px;"></div>')
+
+    if img_tag and imagem_posicao == 'after_first' and len(content_parts) > 0:
+        content_parts.insert(1, img_tag)
+        img_tag = ''
+    elif img_tag and imagem_posicao == 'bottom':
+        content_parts.append(img_tag)
+        img_tag = ''
+
+    body_html = '\n'.join(content_parts)
 
     subtitle_html = ''
     if assunto_extraido and tema:
@@ -4142,8 +4261,10 @@ Kit de Marca — {kit['name']}:
 
     imagem_info = ''
     imagem_url = dados.get('imagem_url', '').strip()
+    imagem_posicao = dados.get('imagem_posicao', 'top')
     if imagem_url:
-        imagem_info = '\nInserir uma imagem no corpo do email usando exatamente esta tag: <img src="__IMAGEM_PLACEHOLDER__" alt="imagem" style="max-width:100%;border-radius:8px;margin:16px 0;">'
+        pos_label = {'top': 'no topo, antes do texto', 'after_first': 'após o primeiro parágrafo', 'bottom': 'no final, após o texto'}.get(imagem_posicao, 'no topo')
+        imagem_info = f'\nInserir uma imagem {pos_label} do email usando exatamente esta tag: <img src="__IMAGEM_PLACEHOLDER__" alt="imagem" style="max-width:100%;border-radius:8px;margin:16px 0;">'
 
     modo = dados.get('modo_texto', 'reescrever')
     template_ref = dados.get('template_ref_html', '').strip()
@@ -4159,6 +4280,7 @@ Kit de Marca — {kit['name']}:
             tema=dados.get('tema', ''),
             kit=dict(kit) if kit else None,
             imagem_url=imagem_url,
+            imagem_posicao=dados.get('imagem_posicao', 'top'),
         )
         return jsonify({'html': html})
     else:

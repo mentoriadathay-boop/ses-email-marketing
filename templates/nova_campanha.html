@@ -5,9 +5,11 @@
     <i class="bi bi-arrow-left"></i>
   </a>
   <div>
-    <h4 class="fw-bold mb-0">{{ 'Reutilizar Campanha' if reutilizar else 'Nova Campanha' }}</h4>
+    <h4 class="fw-bold mb-0">{{ 'Editar Rascunho' if editar else ('Reutilizar Campanha' if reutilizar else 'Nova Campanha') }}</h4>
     <small class="text-muted">
-      {% if reutilizar %}
+      {% if editar %}
+        Editando: <strong>{{ editar.name }}</strong> — altere o que quiser e dispare ou salve novamente
+      {% elif reutilizar %}
         Baseada em: <strong>{{ reutilizar.name }}</strong> — edite o que quiser e dispare novamente
       {% else %}
         Configure e dispare sua campanha de e-mail
@@ -45,6 +47,9 @@
 
 <form method="POST" action="{{ url_for('nova_campanha') }}" enctype="multipart/form-data" id="campaign-form" onsubmit="return syncAllEditors()">
   <input type="hidden" name="send_mode" id="send_mode" value="csv">
+  {% if editar %}
+  <input type="hidden" name="draft_id" id="draft_id" value="{{ editar.id }}">
+  {% endif %}
 
   <div class="row g-4">
     <!-- Coluna esquerda -->
@@ -58,20 +63,20 @@
             <label class="form-label fw-semibold">Nome da Campanha *</label>
             <input type="text" name="campaign_name" class="form-control"
               placeholder="Ex: Promos Abril 2025"
-              value="{{ reutilizar.name + ' (cópia)' if reutilizar else '' }}" required>
+              value="{{ editar.name if editar else (reutilizar.name + ' (cópia)' if reutilizar else '') }}" required>
           </div>
           <div class="mb-3">
             <label class="form-label fw-semibold">E-mail Remetente *</label>
             <input type="email" name="sender_email" class="form-control"
               placeholder="contato@seudominio.com.br"
-              value="{{ reutilizar.sender_email if reutilizar else '' }}" required>
+              value="{{ (editar or reutilizar).sender_email if (editar or reutilizar) else '' }}" required>
             <div class="form-text">Deve estar verificado no Amazon SES.</div>
           </div>
           <div class="mb-3">
             <label class="form-label fw-semibold">Assunto *</label>
             <input type="text" name="subject" id="subject" class="form-control"
               placeholder="Ola {nome}, temos uma novidade para voce!"
-              value="{{ reutilizar.subject if reutilizar else '' }}" required>
+              value="{{ (editar or reutilizar).subject if (editar or reutilizar) else '' }}" required>
             <div class="form-text">Use <code>{nome}</code> para personalizar.</div>
           </div>
         </div>
@@ -172,7 +177,7 @@
             <textarea id="textarea-main" name="body_html"
                       class="form-control font-monospace border-top-0 rounded-top-0"
                       rows="14"
-                      placeholder="<p>Ola <strong>{nome}</strong>,</p>">{{ reutilizar.body if reutilizar else '' }}</textarea>
+                      placeholder="<p>Ola <strong>{nome}</strong>,</p>">{{ (editar or reutilizar).body if (editar or reutilizar) else '' }}</textarea>
           </div>
 
           <!-- Preview tab -->
@@ -683,9 +688,10 @@ document.addEventListener('DOMContentLoaded', function() {
     autoSignature: !iaHtml && !reutilizarHtml
   });
 
-  // Pré-selecionar mailing se reutilizando campanha com mailing
-  {% if reutilizar and reutilizar.mailing_id %}
-  const chkMailing = document.getElementById('mailing-{{ reutilizar.mailing_id }}');
+  // Pré-selecionar mailing se reutilizando/editando campanha com mailing
+  {% set camp = editar or reutilizar %}
+  {% if camp and camp.mailing_id %}
+  const chkMailing = document.getElementById('mailing-{{ camp.mailing_id }}');
   if (chkMailing) {
     chkMailing.checked = true;
     atualizarMailingsSelecionados();
@@ -693,10 +699,10 @@ document.addEventListener('DOMContentLoaded', function() {
   }
   {% endif %}
 
-  // Pré-selecionar cadência se reutilizando campanha com cadência
-  {% if reutilizar and reutilizar.sequence_id %}
+  // Pré-selecionar cadência se reutilizando/editando campanha com cadência
+  {% if camp and camp.sequence_id %}
   const seqSelect = document.querySelector('select[name="sequence_id"]');
-  if (seqSelect) seqSelect.value = '{{ reutilizar.sequence_id }}';
+  if (seqSelect) seqSelect.value = '{{ camp.sequence_id }}';
   {% endif %}
 
   // Vindo da galeria de templates ("Personalizar com IA") — abre o modal de IA
@@ -887,7 +893,7 @@ async function salvarRascunho() {
   const campaignName = document.querySelector('input[name="campaign_name"]').value.trim();
   const senderEmail = document.querySelector('input[name="sender_email"]').value.trim();
   const subject = document.getElementById('subject') ? document.getElementById('subject').value.trim() : '';
-  const bodyHtml = document.getElementById('body_html') ? document.getElementById('body_html').value : '';
+  const bodyHtml = document.getElementById('textarea-main') ? document.getElementById('textarea-main').value : '';
 
   if (!campaignName) { alert('Preencha o nome da campanha.'); return; }
   if (!senderEmail) { alert('Preencha o email remetente.'); return; }
@@ -896,6 +902,9 @@ async function salvarRascunho() {
   const mailingIds = document.getElementById('mailing_ids') ? document.getElementById('mailing_ids').value : '';
   const seqSelect = document.querySelector('select[name="sequence_id"]');
   const sequenceId = seqSelect ? seqSelect.value : '';
+
+  const draftIdEl = document.getElementById('draft_id');
+  const draftId = draftIdEl ? draftIdEl.value : null;
 
   try {
     const res = await fetch('/campanha/rascunho', {
@@ -908,13 +917,14 @@ async function salvarRascunho() {
         body_html: bodyHtml,
         mailing_ids: mailingIds,
         sequence_id: sequenceId || null,
+        draft_id: draftId,
       })
     });
     const data = await res.json();
     if (data.error) {
       alert(data.error);
     } else {
-      alert('Rascunho salvo! Você pode reutilizar pela lista de campanhas no Dashboard.');
+      alert('Rascunho salvo!');
       if (data.url) window.location.href = data.url;
     }
   } catch (e) {

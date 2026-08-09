@@ -156,6 +156,8 @@ function iamReset() {
   document.getElementById('iamToggleImagem').checked = false;
   document.getElementById('iamImagemSection').classList.add('d-none');
   document.getElementById('iamImagemUrl').value = '';
+  const posSelect = document.getElementById('iamImagemPosicao');
+  if (posSelect) posSelect.value = 'top';
   document.getElementById('iamUploadPreview').innerHTML = '';
   document.getElementById('iamUnsplashResults').innerHTML = '';
 
@@ -313,6 +315,7 @@ function iamColetarDados() {
     formato: formatoEl ? formatoEl.value : 'Texto corrido',
     kit_id: document.getElementById('iamKitId').value || null,
     imagem_url: document.getElementById('iamImagemUrl').value.trim(),
+    imagem_posicao: document.getElementById('iamImagemPosicao') ? document.getElementById('iamImagemPosicao').value : 'top',
     modo_texto: _gtmModoTexto || 'reescrever',
     template_ref_html: _gtmTemplateHtmlParaIA || '',
   };
