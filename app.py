@@ -4116,38 +4116,49 @@ def _texto_para_email_html(texto, template_html='', primary_color='#1a3a6b', tem
                 f'<p style="font-size:15px;color:{cor_texto};line-height:1.7;margin:0;">{sig_html}</p></div>')
             continue
 
-        # Detect list: 3+ lines, each moderate length
+        # Detect list: 2+ lines with bullets or similar structure
         is_list = False
-        if len(lines) >= 3:
-            bullet_chars = ('-', '•', '*', '–', '✅', '📅', '⏰', '🌐', '📸', '📘', '💼', '📱')
+        if len(lines) >= 2:
+            bullet_chars = ('-', '•', '*', '–', '✅', '📅', '⏰', '🌐', '📸', '📘', '💼', '📱',
+                            '✔', '→', '➡', '▸', '▹', '►', '🔹', '🔸', '✨', '🎯', '🎁', '💡', '📌')
             has_bullets = all(any(l.startswith(b) for b in bullet_chars) for l in lines)
-            if has_bullets:
+            numbered = all(re.match(r'^\d+[\.\)]\s', l) for l in lines)
+            if has_bullets or numbered:
                 is_list = True
-            elif all(20 < len(l) < 200 for l in lines):
-                starts_with_verb = sum(1 for l in lines
-                                       if re.match(r'^(Como|Ferramentas|Plataformas|Aplicativos|'
-                                                   r'Landing|Chatbots|Calculadoras|Sistemas|Pequenos|'
-                                                   r'Acesso|Trinta|O eBook|O eBook|Acesso)', l))
-                if starts_with_verb >= len(lines) * 0.5:
-                    is_list = True
-                elif not any(l.endswith(('.', '!', '?')) for l in lines[:-1]):
+            elif len(lines) >= 3 and all(20 < len(l) < 200 for l in lines):
+                if not any(l.endswith(('.', '!', '?')) for l in lines[:-1]):
                     is_list = True
 
         if is_list:
             list_items = []
-            for l in lines:
-                for b in ('-', '•', '*', '–'):
-                    if l.startswith(b + ' '):
-                        l = l[2:].strip()
-                        break
+            for li_idx, l in enumerate(lines):
+                num_match = re.match(r'^(\d+)[\.\)]\s*(.*)', l)
+                if num_match:
+                    num_label = num_match.group(1)
+                    l = num_match.group(2).strip()
+                    marker = (f'<span style="display:inline-block;width:24px;height:24px;'
+                              f'background:{cor};border-radius:50%;text-align:center;line-height:24px;'
+                              f'color:#fff;font-weight:bold;font-size:12px;margin-right:8px;'
+                              f'vertical-align:middle;">{num_label}</span>')
+                else:
+                    for b in ('-', '•', '*', '–'):
+                        if l.startswith(b + ' '):
+                            l = l[2:].strip()
+                            break
+                    for b in ('✅', '📅', '⏰', '🌐', '📸', '📘', '💼', '📱',
+                              '✔', '→', '➡', '▸', '▹', '►', '🔹', '🔸', '✨', '🎯', '🎁', '💡', '📌'):
+                        if l.startswith(b):
+                            l = l[len(b):].strip()
+                            break
+                    marker = f'<span style="color:{cor};font-weight:bold;margin-right:8px;font-size:16px;">&#10003;</span>'
                 list_items.append(
-                    f'<li style="margin-bottom:10px;padding-left:4px;">'
-                    f'<span style="color:{cor};font-weight:bold;margin-right:6px;">&#10003;</span>'
-                    f'{_esc(l)}</li>')
+                    f'<li style="margin-bottom:12px;padding:8px 12px;background:#fff;'
+                    f'border-radius:6px;display:flex;align-items:flex-start;">'
+                    f'{marker}<span style="flex:1;">{_esc(l)}</span></li>')
             content_parts.append(
                 f'<div style="background:{cor_bg};border-left:4px solid {cor};'
-                f'border-radius:0 8px 8px 0;padding:18px 18px 8px 10px;margin:16px 0 20px;">'
-                f'<ul style="padding-left:16px;color:{cor_texto};font-size:15px;line-height:1.7;'
+                f'border-radius:0 8px 8px 0;padding:18px 16px 8px;margin:16px 0 20px;">'
+                f'<ul style="padding:0;color:{cor_texto};font-size:15px;line-height:1.6;'
                 f'margin:0;list-style:none;">'
                 + ''.join(list_items) + '</ul></div>')
             continue
@@ -4159,9 +4170,9 @@ def _texto_para_email_html(texto, template_html='', primary_color='#1a3a6b', tem
             heading_count += 1
             content_parts.append(
                 f'<div style="background:{cor_bg};border-left:4px solid {cor};'
-                f'border-radius:0 8px 8px 0;padding:12px 18px;margin:28px 0 14px;">'
-                f'<h3 style="color:{cor};font-size:17px;margin:0;font-weight:bold;">'
-                f'{_esc(first)}</h3></div>')
+                f'border-radius:0 8px 8px 0;padding:14px 20px;margin:32px 0 16px;">'
+                f'<h2 style="color:{cor};font-size:20px;margin:0;font-weight:bold;letter-spacing:-0.3px;">'
+                f'{_esc(first)}</h2></div>')
             continue
 
         # Detect info block (Data: / Horário: / Formato: lines)
@@ -4174,10 +4185,38 @@ def _texto_para_email_html(texto, template_html='', primary_color='#1a3a6b', tem
                 f'line-height:1.8;">{info}</div>')
             continue
 
-        # Default: paragraph(s)
-        for l in lines:
-            content_parts.append(
-                f'<p style="font-size:15px;color:{cor_texto};line-height:1.7;margin:0 0 14px;">{_esc(l)}</p>')
+        # Detect highlight/quote: short impactful line between quotes or with emphasis markers
+        if (len(lines) == 1 and len(first) < 200
+                and (first.startswith('"') or first.startswith('“')
+                     or first.startswith('*') or first.startswith('> '))):
+            clean = first.strip('""“”*> ').strip()
+            if clean:
+                content_parts.append(
+                    f'<div style="background:{cor_bg};border-left:4px solid {cor_accent};'
+                    f'border-radius:0 8px 8px 0;padding:16px 20px;margin:20px 0;'
+                    f'font-size:17px;font-style:italic;color:{cor};line-height:1.6;">'
+                    f'{_esc(clean)}</div>')
+                continue
+
+        # Default: paragraph(s) — first content paragraph gets emphasis
+        for li, l in enumerate(lines):
+            is_first_content_p = (idx <= 2 and li == 0 and len(content_parts) <= 2
+                                  and len(l) > 60 and not found_cta)
+            if is_first_content_p:
+                content_parts.append(
+                    f'<p style="font-size:17px;color:{cor_texto};line-height:1.7;margin:0 0 18px;'
+                    f'font-weight:500;">{_esc(l)}</p>')
+            else:
+                content_parts.append(
+                    f'<p style="font-size:15px;color:{cor_texto};line-height:1.7;margin:0 0 14px;">{_esc(l)}</p>')
+
+    if not found_cta:
+        content_parts.append(
+            f'<div style="text-align:center;margin:28px 0;">'
+            f'<a href="#LINK_CTA" style="background:{cor_accent};color:#fff;padding:14px 36px;'
+            f'border-radius:8px;text-decoration:none;font-weight:bold;font-size:16px;'
+            f'display:inline-block;box-shadow:0 3px 8px {cor_accent}44;">'
+            f'Saiba Mais &rarr;</a></div>')
 
     img_tag = ''
     if imagem_url:
@@ -4213,7 +4252,7 @@ def _texto_para_email_html(texto, template_html='', primary_color='#1a3a6b', tem
 <table width="100%" cellpadding="0" cellspacing="0"><tr><td align="center">
 <table cellpadding="0" cellspacing="0" style="width:100%;max-width:560px;background:#fff;border-radius:8px;overflow:hidden;box-shadow:0 4px 12px rgba(0,0,0,.1);">
 <tr><td style="background:{cor};padding:32px 32px 28px;text-align:center;">
-  <h1 style="color:#fff;margin:0;font-size:22px;font-weight:bold;word-wrap:break-word;">{_esc(titulo_header)}</h1>
+  <h1 style="color:#fff;margin:0;font-size:26px;font-weight:bold;word-wrap:break-word;letter-spacing:-0.3px;">{_esc(titulo_header)}</h1>
   {subtitle_html}
 </td></tr>
 <tr><td style="padding:32px 32px;color:{cor_texto};word-wrap:break-word;overflow-wrap:break-word;font-family:{fonte_stack};">
