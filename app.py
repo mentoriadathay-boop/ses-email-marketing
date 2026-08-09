@@ -4211,11 +4211,21 @@ def _texto_para_email_html(texto, template_html='', primary_color='#1a3a6b', tem
                 and not first.endswith(('.', '!', '?', ',', ';'))
                 and not re.match(r'^(oi|olá|hey)\b', first, re.I)):
             heading_count += 1
-            content_parts.append(
-                f'<div style="background:{cor_bg};border-left:4px solid {cor};'
-                f'border-radius:0 8px 8px 0;padding:14px 20px;margin:32px 0 16px;">'
-                f'<h2 style="color:{cor};font-size:20px;margin:0;font-weight:bold;letter-spacing:-0.3px;">'
-                f'{_esc(first)}</h2></div>')
+            is_short_label = len(first) < 30
+            if heading_count == 1 and not is_short_label:
+                # Título principal (H2): maior, com fundo sólido colorido
+                content_parts.append(
+                    f'<h2 style="color:{cor};font-size:22px;margin:32px 0 18px;'
+                    f'font-weight:800;letter-spacing:-0.4px;line-height:1.3;'
+                    f'border-bottom:3px solid {cor};padding-bottom:10px;">'
+                    f'{_esc(first)}</h2>')
+            else:
+                # Subtítulos (H3): menores, estilo distinto
+                content_parts.append(
+                    f'<h3 style="color:{cor};font-size:17px;margin:24px 0 10px;'
+                    f'font-weight:700;line-height:1.35;'
+                    f'padding-left:12px;border-left:4px solid {cor_accent};">'
+                    f'{_esc(first)}</h3>')
             continue
 
         # Detect info block (Data: / Horário: / Formato: lines)
