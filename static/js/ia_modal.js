@@ -157,7 +157,7 @@ function iamReset() {
   document.getElementById('iamImagemSection').classList.add('d-none');
   document.getElementById('iamImagemUrl').value = '';
   const posSelect = document.getElementById('iamImagemPosicao');
-  if (posSelect) posSelect.value = 'top';
+  if (posSelect) posSelect.value = 'before_cta';
   document.getElementById('iamUploadPreview').innerHTML = '';
   document.getElementById('iamUnsplashResults').innerHTML = '';
 

@@ -4185,7 +4185,18 @@ def _texto_para_email_html(texto, template_html='', primary_color='#1a3a6b', tem
                    f'<img src="{_esc(imagem_url)}" alt="imagem" '
                    f'style="max-width:100%;border-radius:8px;"></div>')
 
-    if img_tag and imagem_posicao == 'after_first' and len(content_parts) > 0:
+    if img_tag and imagem_posicao == 'before_cta' and content_parts:
+        cta_idx = None
+        for ci, cp in enumerate(content_parts):
+            if 'text-align:center' in cp and '<a href=' in cp and 'padding:14px' in cp:
+                cta_idx = ci
+                break
+        if cta_idx is not None:
+            content_parts.insert(cta_idx, img_tag)
+        else:
+            content_parts.insert(max(len(content_parts) - 1, 0), img_tag)
+        img_tag = ''
+    elif img_tag and imagem_posicao == 'after_first' and len(content_parts) > 0:
         content_parts.insert(1, img_tag)
         img_tag = ''
     elif img_tag and imagem_posicao == 'bottom':
@@ -4263,7 +4274,7 @@ Kit de Marca — {kit['name']}:
     imagem_url = dados.get('imagem_url', '').strip()
     imagem_posicao = dados.get('imagem_posicao', 'top')
     if imagem_url:
-        pos_label = {'top': 'no topo, antes do texto', 'after_first': 'após o primeiro parágrafo', 'bottom': 'no final, após o texto'}.get(imagem_posicao, 'no topo')
+        pos_label = {'before_cta': 'antes do botão CTA', 'top': 'no topo, antes do texto', 'after_first': 'após o primeiro parágrafo', 'bottom': 'no final, após o texto'}.get(imagem_posicao, 'antes do botão CTA')
         imagem_info = f'\nInserir uma imagem {pos_label} do email usando exatamente esta tag: <img src="__IMAGEM_PLACEHOLDER__" alt="imagem" style="max-width:100%;border-radius:8px;margin:16px 0;">'
 
     modo = dados.get('modo_texto', 'reescrever')
