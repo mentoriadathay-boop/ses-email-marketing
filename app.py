@@ -401,11 +401,69 @@ def init_db():
         "ALTER TABLE contacts ADD COLUMN city TEXT",
         "ALTER TABLE contacts ADD COLUMN state TEXT",
         "ALTER TABLE contacts ADD COLUMN country TEXT",
+        # Multi-tenancy: cada tabela ganha user_id (nullable inicialmente para
+        # não quebrar dados existentes; backfill logo abaixo).
+        "ALTER TABLE campaigns ADD COLUMN user_id INTEGER",
+        "ALTER TABLE sequences ADD COLUMN user_id INTEGER",
+        "ALTER TABLE mailings ADD COLUMN user_id INTEGER",
+        "ALTER TABLE contacts ADD COLUMN user_id INTEGER",
+        "ALTER TABLE email_accounts ADD COLUMN user_id INTEGER",
+        "ALTER TABLE brand_kits ADD COLUMN user_id INTEGER",
+        "ALTER TABLE email_templates ADD COLUMN user_id INTEGER",
+        "ALTER TABLE signature ADD COLUMN user_id INTEGER",
+        "ALTER TABLE capture_forms ADD COLUMN user_id INTEGER",
+        "ALTER TABLE uploaded_images ADD COLUMN user_id INTEGER",
+        "ALTER TABLE warmup_plans ADD COLUMN user_id INTEGER",
+        "ALTER TABLE nichos ADD COLUMN user_id INTEGER",
     ]:
         try:
             conn.execute(f"DO $$ BEGIN {col_sql}; EXCEPTION WHEN duplicate_column THEN NULL; END $$")
         except Exception:
             conn.rollback()
+
+    # Índices para performance (fora do DO $$ pois CREATE INDEX não é permitido lá)
+    for idx_sql in [
+        "CREATE INDEX IF NOT EXISTS idx_campaigns_user ON campaigns(user_id)",
+        "CREATE INDEX IF NOT EXISTS idx_sequences_user ON sequences(user_id)",
+        "CREATE INDEX IF NOT EXISTS idx_mailings_user ON mailings(user_id)",
+        "CREATE INDEX IF NOT EXISTS idx_contacts_user ON contacts(user_id)",
+        "CREATE INDEX IF NOT EXISTS idx_email_accounts_user ON email_accounts(user_id)",
+        "CREATE INDEX IF NOT EXISTS idx_brand_kits_user ON brand_kits(user_id)",
+    ]:
+        try:
+            conn.execute(idx_sql)
+            conn.commit()
+        except Exception:
+            conn.rollback()
+
+    # Backfill: dados legados sem user_id vão para o admin (primeiro criado)
+    try:
+        admin = conn.execute(
+            "SELECT id FROM users WHERE role='admin' ORDER BY id LIMIT 1"
+        ).fetchone()
+        if admin:
+            admin_id = admin['id']
+            for backfill_sql in [
+                "UPDATE campaigns SET user_id=%s WHERE user_id IS NULL",
+                "UPDATE sequences SET user_id=%s WHERE user_id IS NULL",
+                "UPDATE mailings SET user_id=%s WHERE user_id IS NULL",
+                "UPDATE contacts SET user_id=%s WHERE user_id IS NULL",
+                "UPDATE email_accounts SET user_id=%s WHERE user_id IS NULL",
+                "UPDATE brand_kits SET user_id=%s WHERE user_id IS NULL",
+                "UPDATE email_templates SET user_id=%s WHERE user_id IS NULL",
+                "UPDATE signature SET user_id=%s WHERE user_id IS NULL",
+                "UPDATE capture_forms SET user_id=%s WHERE user_id IS NULL",
+                "UPDATE uploaded_images SET user_id=%s WHERE user_id IS NULL",
+                "UPDATE warmup_plans SET user_id=%s WHERE user_id IS NULL",
+                "UPDATE nichos SET user_id=%s WHERE user_id IS NULL",
+            ]:
+                try:
+                    conn.execute(backfill_sql, (admin_id,))
+                    conn.commit()
+                except Exception:
+                    conn.rollback()
+    except Exception:
+        conn.rollback()
 
     conn.execute('''CREATE TABLE IF NOT EXISTS notifications (
         id SERIAL PRIMARY KEY,
@@ -510,6 +568,20 @@ def get_current_user():
     user = conn.execute('SELECT * FROM users WHERE id=%s', (session['user_id'],)).fetchone()
     conn.close()
     return user
+
+
+def _uid():
+    """Current user's id. Raises if session is missing — rotas de dados
+    devem sempre estar atrás de @login_required, então isto é fail-fast."""
+    uid = session.get('user_id')
+    if uid is None:
+        from werkzeug.exceptions import Unauthorized
+        raise Unauthorized('Sessão expirada. Faça login novamente.')
+    return uid
+
+
+def _is_admin():
+    return session.get('user_role') == 'admin'
 
 def _generate_password(length=10):
     chars = string.ascii_letters + string.digits
