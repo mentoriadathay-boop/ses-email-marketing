@@ -4060,7 +4060,30 @@ def _texto_para_email_html(texto, template_html='', primary_color='#1a3a6b', tem
     # --- Classify and render each block ---
     content_parts = []
     found_cta = False
+    signature_idx = None  # posição do bloco de assinatura em content_parts
     heading_count = 0
+
+    URL_RE = re.compile(r'^(https?://|www\.)\S+$', re.I)
+
+    def _make_cta_button(url, text='Saiba Mais'):
+        if url.lower().startswith('www.'):
+            url = 'https://' + url
+        return (f'<div style="text-align:center;margin:28px 0;">'
+                f'<a href="{_esc(url)}" style="background:{cor_accent};color:#fff;padding:14px 36px;'
+                f'border-radius:8px;text-decoration:none;font-weight:bold;font-size:16px;'
+                f'display:inline-block;box-shadow:0 3px 8px {cor_accent}44;">'
+                f'{_esc(text)} &rarr;</a></div>')
+
+    def _looks_like_cta_phrase(s):
+        if not s or len(s) > 60:
+            return False
+        return bool(re.match(
+            r'^(quero|baixe|baixar|clique|acesse|acessar|garanta|garantir|'
+            r'confira|conferir|comece|começar|inscreva|inscrever|assine|'
+            r'reserve|reservar|veja|ver|descubra|descobrir|conheça|conhecer|'
+            r'saiba|receba|receber|leia|ler|entre|entrar|participe|participar|'
+            r'compre|comprar|solicite|solicitar|peça|pedir)\b',
+            s.strip().rstrip(':').strip(), re.I))
 
     for idx, block in enumerate(blocks):
         lines = [l.strip() for l in block.split('\n') if l.strip()]
@@ -4077,25 +4100,43 @@ def _texto_para_email_html(texto, template_html='', primary_color='#1a3a6b', tem
             after = block[md_link.end():].strip()
             if before:
                 content_parts.append(f'<p style="font-size:15px;color:{cor_texto};line-height:1.7;margin:0 0 12px;">{_esc(before)}</p>')
-            content_parts.append(
-                f'<div style="text-align:center;margin:28px 0;">'
-                f'<a href="{_esc(link_url)}" style="background:{cor_accent};color:#fff;padding:14px 36px;'
-                f'border-radius:8px;text-decoration:none;font-weight:bold;font-size:16px;'
-                f'display:inline-block;box-shadow:0 3px 8px {cor_accent}44;">'
-                f'{_esc(link_text)} &rarr;</a></div>')
+            content_parts.append(_make_cta_button(link_url, link_text))
             if after:
                 content_parts.append(f'<p style="font-size:15px;color:{cor_texto};line-height:1.7;margin:12px 0 0;">{_esc(after)}</p>')
             found_cta = True
             continue
 
-        # Detect plain URL on its own line
-        if len(lines) == 1 and re.match(r'^https?://\S+$', first):
-            content_parts.append(
-                f'<div style="text-align:center;margin:28px 0;">'
-                f'<a href="{_esc(first)}" style="background:{cor_accent};color:#fff;padding:14px 36px;'
-                f'border-radius:8px;text-decoration:none;font-weight:bold;font-size:16px;'
-                f'display:inline-block;box-shadow:0 3px 8px {cor_accent}44;">'
-                f'Acessar &rarr;</a></div>')
+        # Detect plain URL on its own line (http, https or www.)
+        if len(lines) == 1 and URL_RE.match(first):
+            btn_text = 'Acessar'
+            # se o parágrafo anterior era uma frase-CTA curta, usa como texto do botão e remove-o
+            if content_parts:
+                last = content_parts[-1]
+                m = re.match(r'^<p [^>]*>(.*?)</p>$', last)
+                if m:
+                    prev_text = re.sub(r'<[^>]+>', '', m.group(1)).strip().rstrip(':').strip()
+                    if _looks_like_cta_phrase(prev_text):
+                        btn_text = prev_text
+                        content_parts.pop()
+            content_parts.append(_make_cta_button(first, btn_text))
+            found_cta = True
+            continue
+
+        # Detect URL somewhere in a short block (with optional CTA phrase before)
+        url_inline = re.search(r'(https?://\S+|www\.\S+)', block)
+        if url_inline and len(block) < 200 and block.count('\n') <= 2:
+            link_url = url_inline.group(1).rstrip('.,;:!?')
+            before = block[:url_inline.start()].strip()
+            after = block[url_inline.end():].strip()
+            btn_text = 'Acessar'
+            if _looks_like_cta_phrase(before):
+                btn_text = before.rstrip(':').strip()
+                before = ''
+            if before:
+                content_parts.append(f'<p style="font-size:15px;color:{cor_texto};line-height:1.7;margin:0 0 12px;">{_esc(before)}</p>')
+            content_parts.append(_make_cta_button(link_url, btn_text))
+            if after:
+                content_parts.append(f'<p style="font-size:15px;color:{cor_texto};line-height:1.7;margin:12px 0 0;">{_esc(after)}</p>')
             found_cta = True
             continue
 
@@ -4111,6 +4152,8 @@ def _texto_para_email_html(texto, template_html='', primary_color='#1a3a6b', tem
             sig_html = '<br>'.join(
                 f'<strong>{_esc(l)}</strong>' if i > 0 and len(l) < 80 else _esc(l)
                 for i, l in enumerate(lines))
+            if signature_idx is None:
+                signature_idx = len(content_parts)
             content_parts.append(
                 f'<div style="border-top:2px solid {cor_border_light};padding-top:20px;margin-top:28px;">'
                 f'<p style="font-size:15px;color:{cor_texto};line-height:1.7;margin:0;">{sig_html}</p></div>')
@@ -4211,12 +4254,11 @@ def _texto_para_email_html(texto, template_html='', primary_color='#1a3a6b', tem
                     f'<p style="font-size:15px;color:{cor_texto};line-height:1.7;margin:0 0 14px;">{_esc(l)}</p>')
 
     if not found_cta:
-        content_parts.append(
-            f'<div style="text-align:center;margin:28px 0;">'
-            f'<a href="#LINK_CTA" style="background:{cor_accent};color:#fff;padding:14px 36px;'
-            f'border-radius:8px;text-decoration:none;font-weight:bold;font-size:16px;'
-            f'display:inline-block;box-shadow:0 3px 8px {cor_accent}44;">'
-            f'Saiba Mais &rarr;</a></div>')
+        cta_html = _make_cta_button('#LINK_CTA', 'Saiba Mais')
+        if signature_idx is not None:
+            content_parts.insert(signature_idx, cta_html)
+        else:
+            content_parts.append(cta_html)
 
     img_tag = ''
     if imagem_url:
