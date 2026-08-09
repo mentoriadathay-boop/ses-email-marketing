@@ -47,8 +47,23 @@ except ImportError:
 EMAIL_RE = re.compile(r'\b[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}\b')
 
 app = Flask(__name__)
-app.secret_key = os.environ.get('SECRET_KEY', os.urandom(24))
+_secret = os.environ.get('SECRET_KEY', '').strip()
+if not _secret:
+    if os.environ.get('FLASK_ENV') == 'development' or os.environ.get('DATABASE_URL', '').startswith('sqlite'):
+        _secret = 'dev-only-' + os.urandom(24).hex()
+        print('[SECURITY] SECRET_KEY não definida — usando chave dev temporária. Defina SECRET_KEY em produção.')
+    else:
+        raise RuntimeError(
+            'SECRET_KEY é obrigatória em produção. Gere uma com '
+            "python -c \"import secrets; print(secrets.token_hex(32))\" "
+            'e defina no Railway.')
+app.secret_key = _secret
 app.permanent_session_lifetime = timedelta(days=30)
+app.config.update(
+    SESSION_COOKIE_SECURE=(os.environ.get('FLASK_ENV') != 'development'),
+    SESSION_COOKIE_HTTPONLY=True,
+    SESSION_COOKIE_SAMESITE='Lax',
+)
 
 UPLOAD_FOLDER = os.path.join(os.path.dirname(__file__), 'uploads')
 IMAGES_FOLDER = os.path.join(UPLOAD_FOLDER, 'imagens')
@@ -92,10 +107,12 @@ def _erro_geral(e):
         if request.path.startswith('/ia/') or request.path.startswith('/api/') or request.path.startswith('/email/'):
             return jsonify({'erro': f'Erro {e.code}: {e.description}'}), e.code
         return e
-    app.logger.exception('Erro não tratado em %s', request.path)
+    err_id = uuid.uuid4().hex[:8]
+    app.logger.exception('Erro %s em %s', err_id, request.path)
+    msg = (f'Erro interno (ref {err_id}). Tente novamente ou contate o suporte.')
     if request.path.startswith('/ia/') or request.path.startswith('/api/') or request.path.startswith('/email/'):
-        return jsonify({'erro': f'Erro interno: {e}'}), 500
-    flash(f'Erro interno: {e}', 'danger')
+        return jsonify({'erro': msg, 'ref': err_id}), 500
+    flash(msg, 'danger')
     return redirect(request.referrer or url_for('index'))
 
 PIXEL_GIF = (
@@ -1344,7 +1361,11 @@ def webhook_hotmart():
         return jsonify({'error': 'no data'}), 400
 
     hottok = request.headers.get('X-Hotmart-Hottok', '')
-    if HOTMART_TOKEN and hottok != HOTMART_TOKEN:
+    if not HOTMART_TOKEN:
+        app.logger.warning('Webhook Hotmart chamado mas HOTMART_TOKEN não configurado — rejeitando por segurança')
+        return jsonify({'error': 'webhook not configured'}), 503
+    if not hmac.compare_digest(hottok, HOTMART_TOKEN):
+        app.logger.warning('Webhook Hotmart com token inválido de %s', request.remote_addr)
         return jsonify({'error': 'invalid token'}), 403
 
     event = data.get('event', '')
