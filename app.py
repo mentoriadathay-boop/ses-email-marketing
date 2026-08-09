@@ -755,6 +755,70 @@ def get_sender_name():
     except Exception:
         return 'ConvertMail'
 
+# ── Security: encryption for stored credentials (SMTP/IMAP) ─────────────────
+_ENC_PREFIX = 'enc:v1:'
+_fernet_cached = None
+
+def _get_fernet():
+    """Fernet instance derived from ENCRYPTION_KEY (or SECRET_KEY as fallback).
+    Returns None if cryptography not installed — caller must gracefully degrade."""
+    global _fernet_cached
+    if _fernet_cached is not None:
+        return _fernet_cached
+    try:
+        from cryptography.fernet import Fernet
+        import base64 as _b64
+        raw = os.environ.get('ENCRYPTION_KEY', '').strip()
+        if raw:
+            key = raw.encode('utf-8') if isinstance(raw, str) else raw
+            # Aceita chave Fernet direta (44 chars b64) ou qualquer string (deriva)
+            if len(key) != 44:
+                key = _b64.urlsafe_b64encode(hashlib.sha256(key).digest())
+        else:
+            # Deriva de SECRET_KEY. Não é ideal (mesma chave para tudo), mas
+            # protege contra vazamento de dump de banco sem env vars.
+            seed = (app.secret_key if isinstance(app.secret_key, bytes)
+                    else app.secret_key.encode('utf-8')) + b'|email-account-password|v1'
+            key = _b64.urlsafe_b64encode(hashlib.sha256(seed).digest())
+        _fernet_cached = Fernet(key)
+        return _fernet_cached
+    except ImportError:
+        app.logger.warning('cryptography não instalada — senhas de email ficarão em plaintext')
+        return None
+
+
+def _encrypt_password(plain):
+    if not plain:
+        return plain
+    f = _get_fernet()
+    if not f:
+        return plain
+    token = f.encrypt(plain.encode('utf-8')).decode('utf-8')
+    return _ENC_PREFIX + token
+
+
+def _decrypt_password(stored):
+    if not stored:
+        return stored
+    if not stored.startswith(_ENC_PREFIX):
+        return stored  # senha legada em plaintext — funciona, mas será re-criptografada no próximo save
+    f = _get_fernet()
+    if not f:
+        return ''
+    try:
+        return f.decrypt(stored[len(_ENC_PREFIX):].encode('utf-8')).decode('utf-8')
+    except Exception:
+        app.logger.exception('Falha ao descriptografar senha (chave errada?)')
+        return ''
+
+
+def _acc_password(acc):
+    """Extract IMAP/SMTP password from a Row, decrypting if needed."""
+    if not acc:
+        return ''
+    return _decrypt_password(acc['password'])
+
+
 def _unsub_token(email, seq_id=None, campaign_id=None):
     """HMAC token to prevent third parties from unsubscribing arbitrary emails.
     Uses SECRET_KEY as the signing key — attacker cannot forge without it."""
@@ -2278,11 +2342,11 @@ def salvar_email_account():
     if account_id:
         conn.execute("""UPDATE email_accounts SET label=%s,imap_server=%s,imap_port=%s,
             smtp_server=%s,smtp_port=%s,email=%s,password=%s,use_ssl=%s,sent_folder=%s WHERE id=%s""",
-            (label, imap_server, imap_port, smtp_server, smtp_port, email_addr, password, use_ssl, sent_folder, account_id))
+            (label, imap_server, imap_port, smtp_server, smtp_port, email_addr, _encrypt_password(password), use_ssl, sent_folder, account_id))
     else:
         conn.execute("""INSERT INTO email_accounts (label,imap_server,imap_port,smtp_server,smtp_port,email,password,use_ssl,sent_folder)
             VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
-            (label, imap_server, imap_port, smtp_server, smtp_port, email_addr, password, use_ssl, sent_folder))
+            (label, imap_server, imap_port, smtp_server, smtp_port, email_addr, _encrypt_password(password), use_ssl, sent_folder))
     conn.commit()
     conn.close()
     flash('Conta de email configurada com sucesso!', 'success')
@@ -2316,7 +2380,7 @@ def email_diagnostico():
         return jsonify({'ok': False, 'erro': 'Nenhuma conta configurada'})
     try:
         imap_conn = ec.imap_connect(acc['imap_server'], acc['imap_port'],
-                                     acc['email'], acc['password'], acc['use_ssl'])
+                                     acc['email'], _acc_password(acc), acc['use_ssl'])
         folders = ec.list_folders(imap_conn)
         folder_info = []
         for f in folders:
@@ -2350,7 +2414,7 @@ def email_inbox():
     per_page = 25
     try:
         imap_conn = ec.imap_connect(acc['imap_server'], acc['imap_port'],
-                                     acc['email'], acc['password'], acc['use_ssl'])
+                                     acc['email'], _acc_password(acc), acc['use_ssl'])
         messages, total = ec.fetch_mailbox(imap_conn, 'INBOX', page, per_page, order)
         imap_conn.logout()
     except Exception as e:
@@ -2373,7 +2437,7 @@ def email_enviados():
     sent_folder = acc.get('sent_folder') or 'Sent'
     try:
         imap_conn = ec.imap_connect(acc['imap_server'], acc['imap_port'],
-                                     acc['email'], acc['password'], acc['use_ssl'])
+                                     acc['email'], _acc_password(acc), acc['use_ssl'])
         messages, total = ec.fetch_mailbox(imap_conn, sent_folder, page, per_page, order)
         imap_conn.logout()
     except Exception as e:
@@ -2395,7 +2459,7 @@ def email_spam():
     per_page = 25
     try:
         imap_conn = ec.imap_connect(acc['imap_server'], acc['imap_port'],
-                                     acc['email'], acc['password'], acc['use_ssl'])
+                                     acc['email'], _acc_password(acc), acc['use_ssl'])
         spam_folder = ec.detect_spam_folder(imap_conn)
         messages, total = ec.fetch_mailbox(imap_conn, spam_folder, page, per_page, order)
         imap_conn.logout()
@@ -2414,7 +2478,7 @@ def email_ler(folder, uid):
         return redirect(url_for('configuracoes'))
     try:
         imap_conn = ec.imap_connect(acc['imap_server'], acc['imap_port'],
-                                     acc['email'], acc['password'], acc['use_ssl'])
+                                     acc['email'], _acc_password(acc), acc['use_ssl'])
         msg = ec.fetch_email(imap_conn, uid, folder)
         imap_conn.logout()
     except Exception as e:
@@ -2433,7 +2497,7 @@ def email_anexo(folder, uid, index):
         return redirect(url_for('configuracoes'))
     try:
         imap_conn = ec.imap_connect(acc['imap_server'], acc['imap_port'],
-                                     acc['email'], acc['password'], acc['use_ssl'])
+                                     acc['email'], _acc_password(acc), acc['use_ssl'])
         filename, content_type, data = ec.fetch_attachment(imap_conn, uid, index, folder)
         imap_conn.logout()
     except Exception as e:
@@ -2458,7 +2522,7 @@ def email_compor():
     if reply_uid or forward_uid:
         try:
             imap_conn = ec.imap_connect(acc['imap_server'], acc['imap_port'],
-                                         acc['email'], acc['password'], acc['use_ssl'])
+                                         acc['email'], _acc_password(acc), acc['use_ssl'])
             orig = ec.fetch_email(imap_conn, reply_uid or forward_uid, folder)
             imap_conn.logout()
             if orig:
@@ -2517,7 +2581,7 @@ def email_enviar():
             email_obj = sib_api_v3_sdk.SendSmtpEmail(**params)
             api_instance.send_transac_email(email_obj)
         else:
-            ec.send_email(acc['smtp_server'], acc['smtp_port'], acc['email'], acc['password'],
+            ec.send_email(acc['smtp_server'], acc['smtp_port'], acc['email'], _acc_password(acc),
                           to, subject, body_html, cc=cc, bcc=bcc,
                           reply_to_msg_id=reply_to_msg_id, references=references,
                           attachments=attachments if attachments else None)
@@ -2534,7 +2598,7 @@ def email_deletar(folder, uid):
         return jsonify({'ok': False})
     try:
         imap_conn = ec.imap_connect(acc['imap_server'], acc['imap_port'],
-                                     acc['email'], acc['password'], acc['use_ssl'])
+                                     acc['email'], _acc_password(acc), acc['use_ssl'])
         trash_folder = ec.detect_trash_folder(imap_conn)
         folders = ec.list_folders(imap_conn)
         print(f"[EMAIL] Pastas IMAP: {folders}", flush=True)
@@ -2561,7 +2625,7 @@ def email_deletar_bulk():
         return jsonify({'ok': False, 'erro': 'Nenhum email selecionado'})
     try:
         imap_conn = ec.imap_connect(acc['imap_server'], acc['imap_port'],
-                                     acc['email'], acc['password'], acc['use_ssl'])
+                                     acc['email'], _acc_password(acc), acc['use_ssl'])
         trash_folder = ec.detect_trash_folder(imap_conn)
         if folder == trash_folder:
             for uid in uids:
@@ -2586,7 +2650,7 @@ def email_marcar():
         return jsonify({'ok': False, 'erro': 'UID ausente'})
     try:
         imap_conn = ec.imap_connect(acc['imap_server'], acc['imap_port'],
-                                     acc['email'], acc['password'], acc['use_ssl'])
+                                     acc['email'], _acc_password(acc), acc['use_ssl'])
         if action == 'unread':
             ec.mark_unread(imap_conn, uid, folder)
         else:
@@ -2603,7 +2667,7 @@ def email_unread_count():
         return jsonify({'count': 0})
     try:
         imap_conn = ec.imap_connect(acc['imap_server'], acc['imap_port'],
-                                     acc['email'], acc['password'], acc['use_ssl'])
+                                     acc['email'], _acc_password(acc), acc['use_ssl'])
         count = ec.get_unread_count(imap_conn)
         imap_conn.logout()
         return jsonify({'count': count})
@@ -2627,7 +2691,7 @@ def email_busca():
     if q:
         try:
             imap_conn = ec.imap_connect(acc['imap_server'], acc['imap_port'],
-                                         acc['email'], acc['password'], acc['use_ssl'])
+                                         acc['email'], _acc_password(acc), acc['use_ssl'])
             messages, total = ec.search_mailbox(imap_conn, folder, q, field, page, per_page, order)
             imap_conn.logout()
         except Exception as e:
@@ -2648,7 +2712,7 @@ def email_lixeira():
     per_page = 25
     try:
         imap_conn = ec.imap_connect(acc['imap_server'], acc['imap_port'],
-                                     acc['email'], acc['password'], acc['use_ssl'])
+                                     acc['email'], _acc_password(acc), acc['use_ssl'])
         trash_folder = ec.detect_trash_folder(imap_conn)
         messages, total = ec.fetch_mailbox(imap_conn, trash_folder, page, per_page, order)
         imap_conn.logout()
@@ -2667,7 +2731,7 @@ def email_esvaziar_lixeira():
         return jsonify({'ok': False})
     try:
         imap_conn = ec.imap_connect(acc['imap_server'], acc['imap_port'],
-                                     acc['email'], acc['password'], acc['use_ssl'])
+                                     acc['email'], _acc_password(acc), acc['use_ssl'])
         trash_folder = ec.detect_trash_folder(imap_conn)
         imap_conn.select(trash_folder)
         imap_conn.uid('store', '1:*', '+FLAGS', '\\Deleted')
@@ -2687,7 +2751,7 @@ def email_salvar_rascunho():
     body_html = request.form.get('body_html', '')
     try:
         imap_conn = ec.imap_connect(acc['imap_server'], acc['imap_port'],
-                                     acc['email'], acc['password'], acc['use_ssl'])
+                                     acc['email'], _acc_password(acc), acc['use_ssl'])
         drafts_folder = ec.detect_drafts_folder(imap_conn)
         ec.save_draft(imap_conn, acc['email'], to, subject, body_html, drafts_folder)
         imap_conn.logout()
