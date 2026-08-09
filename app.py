@@ -694,9 +694,28 @@ def get_sender_name():
     except Exception:
         return 'ConvertMail'
 
+def _absolutize_urls(html):
+    """Convert relative URLs in src/href to absolute using APP_URL, so email
+    clients (Gmail, Outlook) can load images and links."""
+    if not html or not APP_URL:
+        return html
+    def _fix(match):
+        attr, quote, url = match.group(1), match.group(2), match.group(3)
+        if url.startswith(('http://', 'https://', 'mailto:', 'tel:', 'data:',
+                           'cid:', '#', '{')):
+            return match.group(0)
+        if url.startswith('//'):
+            return f'{attr}={quote}https:{url}{quote}'
+        if url.startswith('/'):
+            return f'{attr}={quote}{APP_URL}{url}{quote}'
+        return match.group(0)
+    return re.sub(r'(src|href)=(["\'])([^"\']+)\2', _fix, html)
+
+
 def send_email_brevo(sender, recipient_email, recipient_name, subject, body_html):
     personalized_subject = subject.replace('{nome}', recipient_name or 'Cliente')
     personalized_body = body_html.replace('{nome}', recipient_name or 'Cliente')
+    personalized_body = _absolutize_urls(personalized_body)
     configuration = sib_api_v3_sdk.Configuration()
     configuration.api_key['api-key'] = BREVO_API_KEY
     api_instance = sib_api_v3_sdk.TransactionalEmailsApi(sib_api_v3_sdk.ApiClient(configuration))
@@ -2645,7 +2664,7 @@ def upload_imagem():
                  (img_id, mime, b64))
     conn.commit()
     conn.close()
-    return jsonify({'url': f'/img/{img_id}'})
+    return jsonify({'url': f'{APP_URL}/img/{img_id}'})
 
 @app.route('/img/<img_id>')
 def serve_db_imagem(img_id):
