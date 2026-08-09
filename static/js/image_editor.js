@@ -159,38 +159,51 @@ function setupImageEditingOverlay(containerId, textareaId) {
     body.appendChild(overlay);
   });
 
-  // Barras "+ Adicionar imagem aqui" entre as seções (linhas) da tabela principal
-  const mainTable = _findMainTable(doc);
-  if (mainTable) {
-    const tbody = Array.from(mainTable.children).find(c => c.tagName === 'TBODY') || mainTable;
-    const rows = Array.from(tbody.children).filter(c => c.tagName === 'TR');
+  // Barras "+ Adicionar imagem aqui" entre blocos de conteúdo dentro do body
+  const contentBlocks = _findContentBlocks(doc);
+  if (contentBlocks.length > 0) {
+    contentBlocks.forEach((block, idx) => {
+      const rect = block.el.getBoundingClientRect();
+      const bar = doc.createElement('div');
+      bar.className = '_img-edit-overlay _img-add-bar';
+      bar.style.top = (rect.bottom - bodyRect.top) + 'px';
 
-    if (rows.length) {
-      const positions = [];
-      const firstRect = rows[0].getBoundingClientRect();
-      positions.push({ y: firstRect.top - bodyRect.top, rowIdx: 0 });
-      rows.forEach((r, i) => {
-        const rRect = r.getBoundingClientRect();
-        positions.push({ y: rRect.bottom - bodyRect.top, rowIdx: i + 1 });
-      });
-
-      positions.forEach(pos => {
-        const bar = doc.createElement('div');
-        bar.className = '_img-edit-overlay _img-add-bar';
-        bar.style.top = pos.y + 'px';
-
-        const btn = doc.createElement('button');
-        btn.type = 'button';
-        btn.textContent = '+ Adicionar imagem aqui';
-        btn.addEventListener('click', () => {
-          _abrirImagePicker((url) => {
-            _inserirBlocoImagemEmHtml(textareaId, pos.rowIdx, url);
-            editorTab('preview', containerId, textareaId);
-          });
+      const btn = doc.createElement('button');
+      btn.type = 'button';
+      btn.textContent = '+ Adicionar imagem aqui';
+      btn.addEventListener('click', () => {
+        _abrirImagePicker((url) => {
+          _inserirImagemAposBloco(textareaId, block.path, url);
+          editorTab('preview', containerId, textareaId);
         });
-        bar.appendChild(btn);
-        body.appendChild(bar);
       });
+      bar.appendChild(btn);
+      body.appendChild(bar);
+    });
+  } else {
+    const mainTable = _findMainTable(doc);
+    if (mainTable) {
+      const tbody = Array.from(mainTable.children).find(c => c.tagName === 'TBODY') || mainTable;
+      const rows = Array.from(tbody.children).filter(c => c.tagName === 'TR');
+      if (rows.length) {
+        rows.forEach((r, i) => {
+          const rRect = r.getBoundingClientRect();
+          const bar = doc.createElement('div');
+          bar.className = '_img-edit-overlay _img-add-bar';
+          bar.style.top = (rRect.bottom - bodyRect.top) + 'px';
+          const btn = doc.createElement('button');
+          btn.type = 'button';
+          btn.textContent = '+ Adicionar imagem aqui';
+          btn.addEventListener('click', () => {
+            _abrirImagePicker((url) => {
+              _inserirBlocoImagemEmHtml(textareaId, i + 1, url);
+              editorTab('preview', containerId, textareaId);
+            });
+          });
+          bar.appendChild(btn);
+          body.appendChild(bar);
+        });
+      }
     }
   }
 }
@@ -263,6 +276,85 @@ function _inserirBlocoImagemEmHtml(textareaId, rowIdx, novaUrl) {
     tbody.appendChild(tr);
   } else {
     tbody.insertBefore(tr, rows[rowIdx]);
+  }
+
+  textarea.value = _serializeDoc(doc, html);
+}
+
+// ─────────────────────────────────────────────
+// Encontra blocos de conteúdo editáveis dentro do <td> do corpo do e-mail.
+// Retorna [{el, path}] onde path identifica a posição para re-localizar no HTML.
+// ─────────────────────────────────────────────
+function _findContentBlocks(doc) {
+  const body = doc.body;
+  if (!body) return [];
+
+  // Localiza o <td> de conteúdo: o que tem mais texto, excluindo header e footer
+  let contentTd = null;
+  const allTds = Array.from(body.querySelectorAll('td'));
+  let bestLen = 0;
+  allTds.forEach(td => {
+    const style = td.getAttribute('style') || '';
+    if (/font-size:\s*12px/.test(style)) return;
+    const textLen = (td.textContent || '').trim().length;
+    if (textLen > bestLen) {
+      bestLen = textLen;
+      contentTd = td;
+    }
+  });
+  if (!contentTd || bestLen < 10) return [];
+
+  const blocks = [];
+  const children = Array.from(contentTd.children);
+  children.forEach((child, idx) => {
+    const tag = child.tagName;
+    if (!tag) return;
+    const text = (child.textContent || '').trim();
+    const hasImg = child.querySelector('img');
+    if (text.length < 2 && !hasImg) return;
+    blocks.push({ el: child, path: 'child-' + idx });
+  });
+
+  return blocks;
+}
+
+// Insere um bloco de imagem no HTML (string) após o bloco identificado por blockPath.
+function _inserirImagemAposBloco(textareaId, blockPath, url) {
+  const textarea = document.getElementById(textareaId);
+  const html = textarea.value || '';
+  const doc = new DOMParser().parseFromString(html, 'text/html');
+
+  let contentTd = null;
+  const allTds = Array.from(doc.querySelectorAll('td'));
+  let bestLen = 0;
+  allTds.forEach(td => {
+    const style = td.getAttribute('style') || '';
+    if (/font-size:\s*12px/.test(style)) return;
+    const textLen = (td.textContent || '').trim().length;
+    if (textLen > bestLen) {
+      bestLen = textLen;
+      contentTd = td;
+    }
+  });
+  if (!contentTd) return;
+
+  const idx = parseInt(blockPath.replace('child-', ''), 10);
+  const children = Array.from(contentTd.children);
+  const refChild = children[idx];
+  if (!refChild) return;
+
+  const imgDiv = doc.createElement('div');
+  imgDiv.setAttribute('style', 'text-align:center;margin:16px 0;');
+  const img = doc.createElement('img');
+  img.setAttribute('src', url);
+  img.setAttribute('alt', '');
+  img.setAttribute('style', 'max-width:100%;border-radius:8px;display:block;margin:0 auto;');
+  imgDiv.appendChild(img);
+
+  if (refChild.nextSibling) {
+    contentTd.insertBefore(imgDiv, refChild.nextSibling);
+  } else {
+    contentTd.appendChild(imgDiv);
   }
 
   textarea.value = _serializeDoc(doc, html);
