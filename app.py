@@ -755,6 +755,26 @@ def get_sender_name():
     except Exception:
         return 'ConvertMail'
 
+def _unsub_token(email, seq_id=None, campaign_id=None):
+    """HMAC token to prevent third parties from unsubscribing arbitrary emails.
+    Uses SECRET_KEY as the signing key — attacker cannot forge without it."""
+    parts = [(email or '').lower().strip(),
+             str(seq_id or ''), str(campaign_id or '')]
+    msg = '|'.join(parts).encode('utf-8')
+    key = app.secret_key if isinstance(app.secret_key, bytes) else app.secret_key.encode('utf-8')
+    return hmac.new(key, msg, hashlib.sha256).hexdigest()[:32]
+
+
+def _unsub_url(email, seq_id=None, campaign_id=None):
+    q = f'email={quote(email)}'
+    if seq_id:
+        q += f'&seq={seq_id}'
+    if campaign_id:
+        q += f'&campaign={campaign_id}'
+    q += f'&t={_unsub_token(email, seq_id, campaign_id)}'
+    return f'{APP_URL}/descadastrar?{q}'
+
+
 def _absolutize_urls(html):
     """Convert relative URLs in src/href to absolute using APP_URL, so email
     clients (Gmail, Outlook) can load images and links."""
@@ -1000,7 +1020,7 @@ def run_campaign(campaign_id, contacts, sender, subject, body_html, sequence_id=
         upsert_contact(email, name, contact.get('tags', ''), conn)
 
         pixel_url = f"{APP_URL}/track/open?email={quote(email)}&campaign={campaign_id}"
-        unsub_url = f"{APP_URL}/descadastrar?email={quote(email)}"
+        unsub_url = _unsub_url(email, campaign_id=campaign_id)
         print(f"[CAMPAIGN] Pixel URL: {pixel_url[:80]}...", flush=True)
         body_with_tracking = (body_html
             + f'<img src="{pixel_url}" width="1" height="1" style="display:none;border:0" />'
@@ -1104,7 +1124,7 @@ def processar_cadencias():
                 use_body = step['body_html']
 
             pixel_url = f"{APP_URL}/track/open?email={quote(email)}&seq={seq_id}&step={step_num}"
-            unsub_url = f"{APP_URL}/descadastrar?email={quote(email)}&seq={seq_id}"
+            unsub_url = _unsub_url(email, seq_id=seq_id)
             body = (use_body
                     + f'<img src="{pixel_url}" width="1" height="1" style="display:none;border:0" />'
                     + f'<div style="text-align:center;margin-top:24px;font-size:11px;color:#aaa"><a href="{unsub_url}" style="color:#aaa">Descadastrar</a></div>')
@@ -2810,24 +2830,43 @@ def track_click():
             pass
     return redirect(dest_url or '/')
 
-@app.route('/descadastrar')
+@app.route('/descadastrar', methods=['GET', 'POST'])
+@limiter.limit('10 per minute')
 def descadastrar():
-    email = request.args.get('email', '')
-    seq_id = request.args.get('seq', type=int)
-    if email and seq_id:
-        try:
-            conn = get_db()
+    source = request.form if request.method == 'POST' else request.args
+    email = source.get('email', '')
+    seq_id = source.get('seq', type=int)
+    campaign_id = source.get('campaign', type=int)
+    token = source.get('t', '')
+
+    if not email:
+        return render_template('descadastrar.html', email='', erro='Link inválido.')
+
+    expected = _unsub_token(email, seq_id, campaign_id)
+    token_ok = token and hmac.compare_digest(token, expected)
+
+    if not token_ok:
+        # Legacy links geradas antes do fix não têm token — exige POST de confirmação
+        # (protege contra one-click drive-by/prefetch)
+        if request.method != 'POST':
+            return render_template('descadastrar.html', email=email,
+                                   confirmar=True, seq=seq_id, campaign=campaign_id,
+                                   token=token)
+
+    try:
+        conn = get_db()
+        if seq_id:
             conn.execute(
                 "UPDATE sequence_contacts SET status='unsubscribed' WHERE sequence_id=%s AND contact_email=%s",
                 (seq_id, email))
-            add_to_blacklist(email, 'Descadastro voluntário', conn)
-            update_score(email, -50, conn)
-            log_activity(email, 'unsubscribed', f'Cadência {seq_id}', conn)
-            conn.commit()
-            conn.close()
-        except Exception:
-            pass
-    return render_template('descadastrar.html', email=email)
+        add_to_blacklist(email, 'Descadastro voluntário', conn)
+        update_score(email, -50, conn)
+        log_activity(email, 'unsubscribed', f'Cadência {seq_id or "-"} / Campanha {campaign_id or "-"}', conn)
+        conn.commit()
+        conn.close()
+    except Exception:
+        app.logger.exception('Erro ao descadastrar %s', email)
+    return render_template('descadastrar.html', email=email, sucesso=True)
 
 # ── Cadências ─────────────────────────────────────────────────────────────────
 
