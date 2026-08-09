@@ -65,6 +65,50 @@ app.config.update(
     SESSION_COOKIE_SAMESITE='Lax',
 )
 
+# ── Security: rate limiting ─────────────────────────────────────────────────
+try:
+    from flask_limiter import Limiter
+    from flask_limiter.util import get_remote_address
+    limiter = Limiter(
+        get_remote_address,
+        app=app,
+        default_limits=[],  # opt-in por endpoint
+        storage_uri='memory://',
+    )
+    _LIMITER_OK = True
+except ImportError:
+    _LIMITER_OK = False
+    def _noop_decorator(*a, **kw):
+        def _wrap(f): return f
+        return _wrap
+    class _NoopLimiter:
+        def limit(self, *a, **kw): return _noop_decorator()
+    limiter = _NoopLimiter()
+
+# ── Security: HTTPS + security headers via Talisman ────────────────────────
+try:
+    from flask_talisman import Talisman
+    if os.environ.get('FLASK_ENV') != 'development':
+        Talisman(
+            app,
+            force_https=True,
+            strict_transport_security=True,
+            strict_transport_security_max_age=31536000,
+            session_cookie_secure=True,
+            content_security_policy={
+                'default-src': "'self'",
+                'img-src': ["'self'", 'data:', 'https:', 'blob:'],
+                'style-src': ["'self'", "'unsafe-inline'", 'https:'],
+                'script-src': ["'self'", "'unsafe-inline'", 'https:'],
+                'font-src': ["'self'", 'data:', 'https:'],
+                'connect-src': ["'self'", 'https:'],
+                'frame-src': ["'self'", 'https:'],
+            },
+            content_security_policy_nonce_in=[],
+        )
+except ImportError:
+    pass
+
 UPLOAD_FOLDER = os.path.join(os.path.dirname(__file__), 'uploads')
 IMAGES_FOLDER = os.path.join(UPLOAD_FOLDER, 'imagens')
 ALLOWED_EXTENSIONS = {'csv'}
@@ -1232,6 +1276,7 @@ def landing():
     return render_template('landing.html')
 
 @app.route('/login', methods=['GET', 'POST'])
+@limiter.limit('10 per minute; 40 per hour', methods=['POST'])
 def login():
     if 'user_id' in session:
         return redirect(url_for('index'))
@@ -1305,6 +1350,7 @@ def alterar_senha():
     return render_template('alterar_senha.html')
 
 @app.route('/esqueci-senha', methods=['GET', 'POST'])
+@limiter.limit('5 per minute; 20 per hour', methods=['POST'])
 def esqueci_senha():
     if request.method == 'POST':
         email = request.form.get('email', '').strip().lower()
@@ -1355,6 +1401,7 @@ def esqueci_senha():
 # ── Webhook Hotmart ──────────────────────────────────────────────────────────
 
 @app.route('/webhook/hotmart', methods=['POST'])
+@limiter.limit('60 per minute')
 def webhook_hotmart():
     data = request.get_json(force=True, silent=True)
     if not data:
