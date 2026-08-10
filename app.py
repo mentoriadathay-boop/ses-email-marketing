@@ -1197,11 +1197,64 @@ def _upgrade_social_icons_in_html(html):
     return pat.sub(_repl, html)
 
 
+def _extract_inline_images_for_brevo(html):
+    """Extrai imagens uploadadas do HTML para anexar via Brevo CID attachment.
+    Retorna (html_modificado, lista_de_attachments).
+    - html_modificado tem <img src="cid:img_XX"> em vez de <img src="URL/img/id">.
+    - attachments é lista de {'name': ..., 'content': base64, 'contentId': ...}
+      pronta pra passar como attachment do SendSmtpEmail.
+
+    Necessário porque Brevo remove data:image;base64 grandes por padrão
+    (anti-spam), mas aceita perfeitamente CID attachments — que é o padrão
+    canonical de imagens inline em emails."""
+    if not html:
+        return html, []
+    import base64 as b64mod
+    pat = re.compile(
+        r'(<img\b[^>]*\bsrc=["\'])([^"\']*?/img/([a-f0-9]{16,64}))(["\'])',
+        re.I)
+    attachments = []
+    id_to_cid = {}  # img_id → cid (pra deduplicar quando a mesma imagem aparece 2x)
+    conn = None
+    def _repl(m):
+        nonlocal conn
+        prefix, full_url, img_id, suffix = m.group(1), m.group(2), m.group(3), m.group(4)
+        if img_id in id_to_cid:
+            return f'{prefix}cid:{id_to_cid[img_id]}{suffix}'
+        try:
+            if conn is None:
+                conn = get_db()
+            row = conn.execute(
+                'SELECT mime_type, data FROM uploaded_images WHERE id=%s', (img_id,)
+            ).fetchone()
+            if not row:
+                return m.group(0)
+            cid = f'img_{img_id[:12]}'
+            ext = row['mime_type'].split('/')[-1] or 'png'
+            attachments.append({
+                'name': f'{cid}.{ext}',
+                'content': row['data'],  # já é base64 do upload
+                'contentId': cid,
+            })
+            id_to_cid[img_id] = cid
+            return f'{prefix}cid:{cid}{suffix}'
+        except Exception as e:
+            print(f'[extract_inline_images] falha para {img_id}: {e}', flush=True)
+            return m.group(0)
+    try:
+        new_html = pat.sub(_repl, html)
+    finally:
+        if conn is not None:
+            try: conn.close()
+            except Exception: pass
+    return new_html, attachments
+
+
 def _inline_uploaded_images(html):
     """Substitui <img src="{APP_URL}/img/<id>"> por <img src="data:...;base64,...">
-    para imagens carregadas via /upload/imagem. Isso resolve o principal problema
-    de imagens externas bloqueadas pelo Gmail/Outlook para remetentes desconhecidos
-    — a imagem viaja embutida no HTML e sempre renderiza."""
+    para imagens carregadas via /upload/imagem. USADO SÓ PARA PREVIEW —
+    envio real usa _extract_inline_images_for_brevo (CID attachments)
+    porque Brevo strip data URIs grandes por antispam."""
     if not html:
         return html
     import base64 as b64mod
@@ -1245,9 +1298,10 @@ def send_email_brevo(sender, recipient_email, recipient_name, subject, body_html
     personalized_subject = subject.replace('{nome}', recipient_name or 'Cliente')
     personalized_body = body_html.replace('{nome}', recipient_name or 'Cliente')
     personalized_body = _absolutize_urls(personalized_body)
-    # Embute imagens da própria plataforma como base64 — evita bloqueio de Gmail/Outlook
-    personalized_body = _inline_uploaded_images(personalized_body)
-    # Neutraliza links mortos (href="#", "#LINK_CTA", vazio) — se houver URL no texto, usa como fallback
+    # IMAGENS: extrai as uploadadas para anexar via CID (Brevo strip data URIs
+    # grandes por antispam — CID attachment é o método canonical suportado).
+    personalized_body, inline_atts = _extract_inline_images_for_brevo(personalized_body)
+    # Neutraliza links mortos (href="#", "#LINK_CTA", vazio)
     personalized_body = _neutralize_dead_links(personalized_body)
     # Substitui emoji simples por ícone brand nas redes sociais
     personalized_body = _upgrade_social_icons_in_html(personalized_body)
@@ -1264,13 +1318,16 @@ def send_email_brevo(sender, recipient_email, recipient_name, subject, body_html
             entry['name'] = recipient_name.strip()
         to_list.append(entry)
     sender_info = {'email': sender, 'name': get_sender_name()}
-    email_obj = sib_api_v3_sdk.SendSmtpEmail(
+    kwargs = dict(
         to=to_list,
         sender=sender_info,
         reply_to=sender_info,
         subject=personalized_subject,
-        html_content=personalized_body
+        html_content=personalized_body,
     )
+    if inline_atts:
+        kwargs['attachment'] = inline_atts
+    email_obj = sib_api_v3_sdk.SendSmtpEmail(**kwargs)
     return api_instance.send_transac_email(email_obj)
 
 # ── Prospecção / Extração de Leads ───────────────────────────────────────────
