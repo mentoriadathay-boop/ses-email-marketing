@@ -1142,6 +1142,35 @@ _SOCIAL_EMOJIS_HINT = {
 }
 
 
+_DEAD_HREFS = {'#', '#link_cta', '#link-cta', '#linkcta', '#cta', '', 'javascript:void(0)', 'javascript:;'}
+
+
+def _neutralize_dead_links(html):
+    """Converte <a> com href morto (#, #LINK_CTA, vazio) em <span> preservando
+    o estilo — evita o email chegar com 'botão' que engana o destinatário mas
+    não clica em lugar nenhum. Também tenta usar a última URL http/https vista
+    no HTML como fallback antes de neutralizar (útil quando o texto tem URL
+    escrita mas o botão ficou #)."""
+    if not html:
+        return html
+    # Coleta primeira URL http(s) que apareça no texto — candidato a fallback
+    url_match = re.search(r'https?://[^\s<>"\']+', html)
+    fallback = url_match.group(0) if url_match else None
+    pat = re.compile(r'<a\b([^>]*?)href=(["\'])([^"\']*)\2([^>]*)>(.*?)</a>', re.I | re.S)
+    def _repl(m):
+        pre, quote, href, post, inner = m.group(1), m.group(2), m.group(3), m.group(4), m.group(5)
+        href_norm = href.strip().lower()
+        if href_norm not in _DEAD_HREFS and not href_norm.startswith('#'):
+            return m.group(0)
+        # href morto — tenta fallback com a URL do texto
+        if fallback and fallback not in inner:
+            new_href = fallback
+            return f'<a{pre}href={quote}{new_href}{quote}{post}>{inner}</a>'
+        # Sem fallback: neutraliza — <a> vira <span> (não parece link falso)
+        return f'<span{pre}{post}>{inner}</span>'
+    return pat.sub(_repl, html)
+
+
 def _upgrade_social_icons_in_html(html):
     """Post-process: encontra <a href="URL"> cujo conteúdo é apenas emoji/símbolo
     e substitui pela caixinha brand. Detecta plataforma primeiro pela URL, e se
@@ -1218,6 +1247,8 @@ def send_email_brevo(sender, recipient_email, recipient_name, subject, body_html
     personalized_body = _absolutize_urls(personalized_body)
     # Embute imagens da própria plataforma como base64 — evita bloqueio de Gmail/Outlook
     personalized_body = _inline_uploaded_images(personalized_body)
+    # Neutraliza links mortos (href="#", "#LINK_CTA", vazio) — se houver URL no texto, usa como fallback
+    personalized_body = _neutralize_dead_links(personalized_body)
     # Substitui emoji simples por ícone brand nas redes sociais
     personalized_body = _upgrade_social_icons_in_html(personalized_body)
     configuration = sib_api_v3_sdk.Configuration()
@@ -2706,6 +2737,45 @@ def deletar_campanha(campaign_id):
         flash(f'Erro ao excluir campanha: {e}', 'danger')
     conn.close()
     return redirect(url_for('index'))
+
+
+@app.route('/campanha/<int:campaign_id>/preview-envio')
+@login_required
+def preview_envio_campanha(campaign_id):
+    """Renderiza o HTML EXATO que seria enviado no email — depois de aplicar
+    _absolutize_urls, _inline_uploaded_images (base64) e _upgrade_social_icons_in_html.
+    Serve pra debugar 'imagem não abriu' e 'botão morto' sem precisar de F12
+    ou de dispatchar campanha real."""
+    conn = get_db()
+    _check_owner('campaigns', campaign_id, conn)
+    camp = conn.execute('SELECT name, subject, body FROM campaigns WHERE id=%s', (campaign_id,)).fetchone()
+    conn.close()
+    if not camp:
+        from flask import abort
+        abort(404)
+    body = camp['body'] or ''
+    # Aplica o MESMO pipeline do send_email_brevo (mas sem enviar)
+    body = body.replace('{nome}', 'Fulano')
+    body = _absolutize_urls(body)
+    body = _inline_uploaded_images(body)
+    body = _neutralize_dead_links(body)
+    body = _upgrade_social_icons_in_html(body)
+    # Envelope de debug pra deixar claro que é preview
+    debug_html = f'''<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>Preview envio — {camp['name']}</title>
+<style>
+  body {{margin:0;background:#f4f6f9;font-family:Arial,sans-serif}}
+  .banner {{background:#5B2A6E;color:#fff;padding:12px 20px;font-size:13px;position:sticky;top:0;z-index:10}}
+  .banner strong {{color:#ffd700}}
+  .frame {{max-width:640px;margin:20px auto;background:#fff;border-radius:8px;overflow:hidden;box-shadow:0 4px 20px rgba(0,0,0,.1)}}
+</style></head><body>
+<div class="banner">
+  🔍 <strong>PREVIEW DO ENVIO</strong> — Este é o HTML exato entregue ao Brevo (imagens em base64, ícones brand aplicados, URLs absolutas). Se algo estiver quebrado aqui, o email real também estará.
+</div>
+<div class="frame">{body}</div>
+</body></html>'''
+    return Response(debug_html, mimetype='text/html')
+
 
 @app.route('/api/progresso/<int:campaign_id>')
 def api_progresso(campaign_id):
