@@ -150,7 +150,7 @@
           <!-- Texto tab (Quill) -->
           <div id="visual-quill-main" class="border border-top-0 rounded-bottom">
             <div id="quill-main" style="min-height:220px"></div>
-            <div class="editor-extra-btns px-2 pb-2 border-top bg-light rounded-bottom">
+            <div class="editor-extra-btns px-2 pb-2 border-top bg-light rounded-bottom d-flex flex-wrap gap-1">
               <button type="button" class="btn btn-outline-secondary btn-sm"
                       onclick="insertNome('quill-main')">
                 <i class="bi bi-person-badge me-1"></i>{nome}
@@ -159,12 +159,24 @@
                       onclick="uploadImageToEditor('quill-main')">
                 <i class="bi bi-image me-1"></i>Subir Imagem
               </button>
+              <button type="button" class="btn btn-outline-primary btn-sm"
+                      onclick="editarBotaoCTA('textarea-main')" title="Editar URL do botão do email">
+                <i class="bi bi-link-45deg me-1"></i>Editar botão CTA
+              </button>
+              <button type="button" class="btn btn-outline-primary btn-sm"
+                      onclick="inserirBlocoDestaque('quill-main','textarea-main')">
+                <i class="bi bi-card-text me-1"></i>Bloco destacado
+              </button>
+              <button type="button" class="btn btn-outline-primary btn-sm"
+                      onclick="inserirTopicos('quill-main','textarea-main')">
+                <i class="bi bi-list-check me-1"></i>Tópicos
+              </button>
             </div>
           </div>
 
           <!-- HTML tab -->
           <div id="html-quill-main" class="d-none">
-            <div class="d-flex gap-2 py-2 px-2 bg-light border-bottom">
+            <div class="d-flex flex-wrap gap-1 py-2 px-2 bg-light border-bottom">
               <button type="button" class="btn btn-outline-secondary btn-sm"
                       onclick="insertImageToHtml('textarea-main')">
                 <i class="bi bi-image me-1"></i>Inserir Imagem
@@ -172,6 +184,18 @@
               <button type="button" class="btn btn-outline-secondary btn-sm"
                       onclick="insertNomeToHtml('textarea-main')">
                 <i class="bi bi-person-badge me-1"></i>{nome}
+              </button>
+              <button type="button" class="btn btn-outline-primary btn-sm"
+                      onclick="editarBotaoCTA('textarea-main')" title="Editar URL do botão do email">
+                <i class="bi bi-link-45deg me-1"></i>Editar botão CTA
+              </button>
+              <button type="button" class="btn btn-outline-primary btn-sm"
+                      onclick="inserirBlocoDestaque(null,'textarea-main')">
+                <i class="bi bi-card-text me-1"></i>Bloco destacado
+              </button>
+              <button type="button" class="btn btn-outline-primary btn-sm"
+                      onclick="inserirTopicos(null,'textarea-main')">
+                <i class="bi bi-list-check me-1"></i>Tópicos
               </button>
             </div>
             <textarea id="textarea-main" name="body_html"
@@ -949,6 +973,161 @@ function insertNomeToHtml(textareaId) {
   const pos = ta.selectionStart || ta.value.length;
   ta.value = ta.value.slice(0, pos) + '{nome}' + ta.value.slice(pos);
   ta.focus();
+}
+
+// Helper: pega o HTML atual do editor (Quill se ativo, senão textarea)
+function _getEditorHtmlByTextarea(textareaId) {
+  const ta = document.getElementById(textareaId);
+  if (!ta) return '';
+  // Se existir um Quill que ainda não sincronizou, sincroniza.
+  const containerId = textareaId.replace('textarea-', 'quill-');
+  if (window._quillMap && window._quillMap.get) {
+    const q = window._quillMap.get(containerId);
+    const visualWrap = document.getElementById('visual-' + containerId);
+    if (q && visualWrap && !visualWrap.classList.contains('d-none')) {
+      const raw = q.root.innerHTML;
+      if (raw && raw !== '<p><br></p>') ta.value = raw;
+    }
+  }
+  return ta.value || '';
+}
+
+// ─── Editar botão CTA: parse do HTML, lista todos os <a> e permite editar href ──
+function editarBotaoCTA(textareaId) {
+  const html = _getEditorHtmlByTextarea(textareaId);
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(html, 'text/html');
+  const links = Array.from(doc.querySelectorAll('a'));
+  if (links.length === 0) {
+    alert('Nenhum link ou botão encontrado no email. Insira um botão primeiro (ou use um template).');
+    return;
+  }
+  // Constrói modal dinâmico
+  let modal = document.getElementById('modalEditarCTA');
+  if (modal) modal.remove();
+  const body = links.map((a, idx) => {
+    const txt = (a.textContent || '').trim().substring(0, 60) || '(sem texto)';
+    const href = a.getAttribute('href') || '';
+    const isButton = /background|padding.*border-radius/i.test(a.getAttribute('style') || '');
+    return `
+      <div class="mb-2 p-2 border rounded ${isButton ? 'border-primary' : ''}">
+        <div class="d-flex align-items-center gap-2 mb-1">
+          ${isButton ? '<span class="badge bg-primary">botão</span>' : '<span class="badge bg-secondary">link</span>'}
+          <strong class="small text-truncate" style="max-width:340px">${txt}</strong>
+        </div>
+        <div class="input-group input-group-sm">
+          <span class="input-group-text small">href</span>
+          <input type="url" class="form-control form-control-sm cta-href-input"
+                 data-idx="${idx}" value="${href.replace(/"/g,'&quot;')}"
+                 placeholder="https://sua-url-aqui.com">
+        </div>
+      </div>`;
+  }).join('');
+  const modalHtml = `
+    <div class="modal fade" id="modalEditarCTA" tabindex="-1">
+      <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title"><i class="bi bi-link-45deg me-2"></i>Editar botões e links</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+          </div>
+          <div class="modal-body">
+            <p class="small text-muted mb-3">
+              <i class="bi bi-info-circle me-1"></i>
+              Preencha o <strong>href</strong> de cada botão/link com a URL de destino real.
+              Botões destacados em azul são os principais CTAs.
+            </p>
+            ${body}
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
+            <button type="button" class="btn btn-primary btn-sm" onclick="_salvarCtaEdits('${textareaId}')">
+              <i class="bi bi-check-lg me-1"></i>Aplicar
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>`;
+  document.body.insertAdjacentHTML('beforeend', modalHtml);
+  window._ctaEditDoc = doc;
+  window._ctaEditLinks = links;
+  new bootstrap.Modal(document.getElementById('modalEditarCTA')).show();
+}
+
+function _salvarCtaEdits(textareaId) {
+  const inputs = document.querySelectorAll('#modalEditarCTA .cta-href-input');
+  inputs.forEach(inp => {
+    const idx = parseInt(inp.dataset.idx, 10);
+    const newHref = inp.value.trim() || '#';
+    if (window._ctaEditLinks && window._ctaEditLinks[idx]) {
+      window._ctaEditLinks[idx].setAttribute('href', newHref);
+    }
+  });
+  // Serializa: se veio como documento completo, reserializa como documento;
+  // se era só fragmento, pega só o body inner.
+  const doc = window._ctaEditDoc;
+  const wasFullDoc = /^\s*(<!DOCTYPE|<html)/i.test(document.getElementById(textareaId).value);
+  const newHtml = wasFullDoc ? '<!DOCTYPE html>' + doc.documentElement.outerHTML : doc.body.innerHTML;
+  const containerId = textareaId.replace('textarea-', 'quill-');
+  if (typeof showHtmlInEditor === 'function') {
+    showHtmlInEditor(containerId, textareaId, newHtml);
+  } else {
+    document.getElementById(textareaId).value = newHtml;
+  }
+  bootstrap.Modal.getInstance(document.getElementById('modalEditarCTA')).hide();
+  window._ctaEditDoc = null;
+  window._ctaEditLinks = null;
+}
+
+// ─── Inserir bloco destacado ─────────────────────────────────────
+function inserirBlocoDestaque(quillContainerId, textareaId) {
+  const html = `
+<table width="100%" cellpadding="0" cellspacing="0" style="margin:20px 0;">
+  <tr><td style="background:#F8F4FA;border-left:4px solid #5B2A6E;padding:20px;border-radius:8px;">
+    <p style="margin:0;color:#5B2A6E;font-size:15px;font-weight:bold;">💡 Título do destaque</p>
+    <p style="margin:8px 0 0;color:#444;font-size:14px;line-height:1.6;">
+      Texto do bloco destacado — use para chamar atenção para uma informação importante,
+      dado marcante, curiosidade ou aviso.
+    </p>
+  </td></tr>
+</table>`;
+  _inserirNoEditor(quillContainerId, textareaId, html);
+}
+
+// ─── Inserir lista de tópicos ─────────────────────────────────────
+function inserirTopicos(quillContainerId, textareaId) {
+  const html = `
+<ul style="padding:0;margin:16px 0;list-style:none;">
+  <li style="background:#F8F9FA;border-left:3px solid #5B2A6E;padding:14px 16px;margin-bottom:10px;border-radius:4px;">
+    <strong style="color:#5B2A6E;">1. Título do tópico:</strong>
+    <span style="color:#444;">frase explicativa que detalha o item.</span>
+  </li>
+  <li style="background:#F8F9FA;border-left:3px solid #5B2A6E;padding:14px 16px;margin-bottom:10px;border-radius:4px;">
+    <strong style="color:#5B2A6E;">2. Título do tópico:</strong>
+    <span style="color:#444;">frase explicativa que detalha o item.</span>
+  </li>
+  <li style="background:#F8F9FA;border-left:3px solid #5B2A6E;padding:14px 16px;margin-bottom:10px;border-radius:4px;">
+    <strong style="color:#5B2A6E;">3. Título do tópico:</strong>
+    <span style="color:#444;">frase explicativa que detalha o item.</span>
+  </li>
+</ul>`;
+  _inserirNoEditor(quillContainerId, textareaId, html);
+}
+
+function _inserirNoEditor(quillContainerId, textareaId, html) {
+  const ta = document.getElementById(textareaId);
+  const q = quillContainerId && window._quillMap && window._quillMap.get ? window._quillMap.get(quillContainerId) : null;
+  const visualWrap = quillContainerId ? document.getElementById('visual-' + quillContainerId) : null;
+  const quillActive = q && visualWrap && !visualWrap.classList.contains('d-none');
+  if (quillActive) {
+    const range = q.getSelection(true);
+    q.clipboard.dangerouslyPasteHTML(range ? range.index : q.getLength(), html);
+    if (ta) ta.value = q.root.innerHTML;
+  } else if (ta) {
+    const pos = ta.selectionStart || ta.value.length;
+    ta.value = ta.value.slice(0, pos) + html + ta.value.slice(pos);
+    ta.focus();
+  }
 }
 
 function previewEmail() {

@@ -59,6 +59,127 @@ const _TEMPLATES = [
 </table></td></tr></table></body></html>`
   },
   {
+    id: 'newsletter-rica', name: 'Newsletter Rica', cat: 'Texto Corrido',
+    desc: 'Blocos coloridos, títulos grandes, bullets destacados e imagem de destaque. Alta hierarquia visual.',
+    cor: '#5B2A6E', icone: '📚',
+    html: `<!DOCTYPE html><html><body style="margin:0;padding:20px;background:#f0f2f5;font-family:Arial,Helvetica,sans-serif;">
+<table width="100%" cellpadding="0" cellspacing="0"><tr><td align="center">
+<table cellpadding="0" cellspacing="0" style="width:100%;max-width:600px;background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 4px 12px rgba(0,0,0,0.06);">
+
+<!-- Header colorido grande -->
+<tr><td style="background:linear-gradient(135deg,#5B2A6E,#7B3F8E);padding:36px 32px;text-align:center;">
+  <p style="color:#EDE0F2;margin:0;font-size:12px;letter-spacing:2px;text-transform:uppercase;font-weight:bold;">Edição #01 · Julho 2026</p>
+  <h1 style="color:#fff;margin:12px 0 0;font-size:28px;line-height:1.2;">Título principal da newsletter</h1>
+  <p style="color:#EDE0F2;margin:8px 0 0;font-size:15px;">Subtítulo que resume o tema desta edição</p>
+</td></tr>
+
+<!-- Saudação -->
+<tr><td style="padding:28px 32px 8px;background:#fff;">
+  <p style="font-size:16px;color:#333;line-height:1.6;margin:0;">
+    Olá, <strong>{nome}</strong>! Nesta edição você vai encontrar o destaque da semana,
+    uma dica prática para aplicar hoje e uma recomendação especial. Boa leitura!
+  </p>
+</td></tr>
+
+<!-- Imagem de destaque (substitua a URL) -->
+<tr><td style="padding:16px 32px;background:#fff;text-align:center;">
+  <img src="https://via.placeholder.com/536x240/EDE0F2/5B2A6E?text=Sua+imagem+aqui+(536x240)"
+       alt="Imagem de destaque"
+       style="display:block;width:100%;max-width:536px;height:auto;border-radius:8px;margin:0 auto;">
+</td></tr>
+
+<!-- Seção 1: Destaque -->
+<tr><td style="padding:24px 32px;background:#fff;">
+  <h2 style="color:#5B2A6E;font-size:22px;margin:0 0 12px;border-left:4px solid #5B2A6E;padding-left:12px;">
+    📌 Destaque da Semana
+  </h2>
+  <p style="color:#444;line-height:1.7;font-size:15px;margin:0;">
+    Texto do destaque principal — explique o contexto (o que aconteceu ou o que você descobriu),
+    por que isso importa para o leitor e qual é o próximo passo prático.
+  </p>
+</td></tr>
+
+<!-- Bloco destacado colorido -->
+<tr><td style="padding:0 32px;background:#fff;">
+  <div style="background:#F8F4FA;border-left:4px solid #5B2A6E;padding:20px;border-radius:8px;margin:8px 0;">
+    <p style="margin:0;color:#5B2A6E;font-size:15px;font-weight:bold;">💡 Você sabia?</p>
+    <p style="margin:8px 0 0;color:#444;font-size:14px;line-height:1.6;">
+      Insira aqui um dado marcante, curiosidade ou estatística que reforce sua mensagem.
+    </p>
+  </div>
+</td></tr>
+
+<!-- Seção 2: Dica Rápida com tópicos destacados -->
+<tr><td style="padding:24px 32px;background:#fff;">
+  <h2 style="color:#5B2A6E;font-size:22px;margin:0 0 16px;border-left:4px solid #5B2A6E;padding-left:12px;">
+    ✅ Dica prática (passo a passo)
+  </h2>
+  <ul style="padding:0;margin:0;list-style:none;">
+    <li style="background:#F8F9FA;border-left:3px solid #5B2A6E;padding:14px 16px;margin-bottom:10px;border-radius:4px;">
+      <strong style="color:#5B2A6E;">1. Primeiro passo:</strong>
+      <span style="color:#444;">explique o que fazer primeiro e por quê.</span>
+    </li>
+    <li style="background:#F8F9FA;border-left:3px solid #5B2A6E;padding:14px 16px;margin-bottom:10px;border-radius:4px;">
+      <strong style="color:#5B2A6E;">2. Segundo passo:</strong>
+      <span style="color:#444;">detalhe a próxima ação e o que esperar.</span>
+    </li>
+    <li style="background:#F8F9FA;border-left:3px solid #5B2A6E;padding:14px 16px;margin-bottom:10px;border-radius:4px;">
+      <strong style="color:#5B2A6E;">3. Terceiro passo:</strong>
+      <span style="color:#444;">descreva o resultado e como medir.</span>
+    </li>
+  </ul>
+</td></tr>
+
+<!-- Seção 3: Recomendado com fundo alternado -->
+<tr><td style="padding:24px 32px;background:#FAFAFA;">
+  <h2 style="color:#5B2A6E;font-size:22px;margin:0 0 12px;border-left:4px solid #5B2A6E;padding-left:12px;">
+    🎯 Recomendado para você
+  </h2>
+  <p style="color:#444;line-height:1.7;font-size:15px;margin:0;">
+    Com base no seu interesse em <em>[tema]</em>, separamos <em>[conteúdo/recurso/oferta]</em>.
+    Vale a pena porque <em>[motivo específico]</em>.
+  </p>
+</td></tr>
+
+<!-- CTA em destaque -->
+<tr><td style="padding:8px 32px 28px;background:#FAFAFA;text-align:center;">
+  <a href="#LINK_CTA" style="display:inline-block;background:#5B2A6E;color:#fff;padding:16px 40px;border-radius:8px;text-decoration:none;font-weight:bold;font-size:16px;box-shadow:0 4px 12px rgba(91,42,110,0.3);">
+    Quero acessar agora →
+  </a>
+  <p style="margin:12px 0 0;font-size:12px;color:#888;">Clique acima para continuar</p>
+</td></tr>
+
+<!-- P.S. com fundo diferenciado -->
+<tr><td style="padding:20px 32px;background:#FFF9E6;border-top:1px solid #F5E6A8;">
+  <p style="margin:0;font-size:14px;color:#7A5A0F;line-height:1.6;">
+    <strong>P.S.:</strong> se tiver sugestões de temas para as próximas edições, é só responder este email — leio todas!
+  </p>
+</td></tr>
+
+<!-- Assinatura -->
+<tr><td style="padding:24px 32px;background:#fff;">
+  <p style="margin:0;color:#333;font-size:15px;">Um abraço,</p>
+  <p style="margin:4px 0 0;color:#5B2A6E;font-size:16px;font-weight:bold;">[Seu nome]</p>
+  <p style="margin:2px 0 0;color:#888;font-size:13px;">[Seu cargo · Empresa]</p>
+</td></tr>
+
+<!-- Rodapé -->
+<tr><td style="background:#333;padding:20px 32px;text-align:center;">
+  <p style="margin:0;color:#fff;font-size:13px;font-weight:bold;">[Nome da empresa]</p>
+  <p style="margin:6px 0;font-size:20px;">
+    <a href="#" style="color:#fff;text-decoration:none;margin:0 6px;">📷</a>
+    <a href="#" style="color:#fff;text-decoration:none;margin:0 6px;">💼</a>
+    <a href="#" style="color:#fff;text-decoration:none;margin:0 6px;">📺</a>
+    <a href="#" style="color:#fff;text-decoration:none;margin:0 6px;">📱</a>
+  </p>
+  <p style="margin:8px 0 0;font-size:11px;color:#aaa;">
+    © 2026 · <a href="#" style="color:#aaa;">Descadastrar</a>
+  </p>
+</td></tr>
+
+</table></td></tr></table></body></html>`
+  },
+  {
     id: 'produto-destaque', name: 'Produto Destaque', cat: 'Vendas',
     desc: 'Apresenta um produto ou serviço com CTA forte.',
     cor: '#e63946', icone: '🛍️',

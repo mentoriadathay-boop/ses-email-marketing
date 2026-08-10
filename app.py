@@ -3139,7 +3139,9 @@ def upload_imagem():
                  (img_id, mime, b64))
     conn.commit()
     conn.close()
-    return jsonify({'url': f'{APP_URL}/img/{img_id}'})
+    # URL absoluta — se APP_URL for relativo/vazio por erro de config, força https + host.
+    base = APP_URL if APP_URL.startswith(('http://', 'https://')) else f'https://{request.host}'
+    return jsonify({'url': f'{base}/img/{img_id}'})
 
 @app.route('/img/<img_id>')
 def serve_db_imagem(img_id):
@@ -5476,7 +5478,17 @@ Kit de Marca — {kit['name']}:
     imagem_posicao = dados.get('imagem_posicao', 'top')
     if imagem_url:
         pos_label = {'before_cta': 'antes do botão CTA', 'top': 'no topo, antes do texto', 'after_first': 'após o primeiro parágrafo', 'bottom': 'no final, após o texto'}.get(imagem_posicao, 'antes do botão CTA')
-        imagem_info = f'\nInserir uma imagem {pos_label} do email usando exatamente esta tag: <img src="__IMAGEM_PLACEHOLDER__" alt="imagem" style="max-width:100%;border-radius:8px;margin:16px 0;">'
+        imagem_info = f'\nInserir uma imagem {pos_label} do email usando EXATAMENTE esta tag (não altere src, alt nem style): <img src="__IMAGEM_PLACEHOLDER__" alt="Imagem ilustrativa" style="display:block;width:100%;max-width:520px;height:auto;border-radius:8px;margin:20px auto;">'
+
+    cta_url = (dados.get('cta_url', '') or '').strip()
+    cta_texto = (dados.get('cta_texto', '') or '').strip()
+    cta_info = ''
+    if cta_url:
+        cta_info = f'\n- O botão CTA (item 6) deve usar EXATAMENTE href="__CTA_URL_PLACEHOLDER__" (não invente URL nem use âncora #).'
+        if cta_texto:
+            cta_info += f'\n- O texto exato do botão CTA deve ser "{cta_texto}" (não altere).'
+    else:
+        cta_info = '\n- Como não foi informada URL do CTA, use href="#" e texto do botão descritivo. AVISO: o usuário será instruído a editar depois.'
 
     modo = dados.get('modo_texto', 'reescrever')
     template_ref = dados.get('template_ref_html', '').strip()
@@ -5506,27 +5518,40 @@ Tema: {dados.get('tema', '')}
 Contexto: {dados.get('contexto', '')}
 Resultado esperado: {dados.get('resultado', '')}
 Formato: {dados.get('formato', '')}
-{kit_info}{imagem_info}
+{kit_info}{imagem_info}{cta_info}
 
-Estrutura de conteúdo obrigatória (adapte a redação ao tema e ao tom de voz, mas siga esta profundidade):
-1. Cabeçalho colorido com o nome da marca/tema do email
-2. Saudação personalizada com {{nome}} + abertura que conecte imediatamente com a dor, desejo ou contexto do público
-3. Parágrafo(s) de desenvolvimento (pelo menos 2) explicando o "porquê" e o "como" do tema, com exemplos concretos, dados ou cenários — não apenas afirmações genéricas
-4. Uma lista (<ul>/<ol>) com 3 a 5 itens (benefícios, passos, dicas ou erros comuns) relacionados ao tema, cada item com uma frase explicativa, não só um título
-5. Quando o objetivo permitir, inclua um bloco de prova social/autoridade (depoimento, dado numérico ou resultado) coerente com o tema
-6. Botão CTA em destaque, com texto persuasivo específico ao objetivo, href="#LINK_CTA"
-7. Pós-CTA: um parágrafo de reforço (P.S. ou observação extra) com senso de urgência, benefício extra ou convite à resposta
-8. Assinatura pessoal (nome + cargo) coerente com o kit de marca, se houver
-9. Rodapé com nome da empresa e redes sociais como emojis clicáveis
+Estrutura de conteúdo obrigatória — cada bloco visualmente diferenciado:
+
+1. **Cabeçalho colorido** (background:{primary_color}; padding:32px; text-align:center) com título grande (h1 font-size:24px cor branca) — nome do tema/marca. Subtítulo com cor semi-transparente branca.
+
+2. **Saudação personalizada** com {{nome}} em bloco branco (padding:28px 32px) — abertura que conecte com a dor/desejo/contexto do público em 2-3 linhas.
+
+3. **Parágrafo(s) de desenvolvimento** (pelo menos 2 parágrafos, fundo branco) explicando o "porquê" e o "como" do tema, com exemplos concretos, dados ou cenários — não apenas afirmações genéricas. Use <h2 style="color:{primary_color};font-size:20px;border-left:4px solid {primary_color};padding-left:12px;margin-top:24px"> para subtítulos dessas seções.
+
+4. **Bloco DESTACADO EM FUNDO COLORIDO** (background:#f8f9fa OU rgba({primary_color},0.06); padding:20px; border-radius:8px; border-left:4px solid {primary_color}; margin:20px 0) — resumo do argumento central OU curiosidade/dado marcante.
+
+5. **Lista de tópicos** (<ul style="padding-left:0;list-style:none") com 3 a 5 itens. CADA ITEM deve ser um <li style="background:#f8fafc;border-left:3px solid {primary_color};padding:12px 16px;margin-bottom:10px;border-radius:4px;list-style:none"> com <strong>Título curto do tópico:</strong> seguido de frase explicativa (uma linha completa). Não use listas simples com bullets padrão.
+
+6. **Bloco de prova social/autoridade** quando o objetivo permitir (fundo cinza claro #f5f5f5, padding:20px, border-radius:8px, com <em> em itálico) — depoimento curto ou dado numérico coerente com o tema.
+
+7. **Botão CTA em destaque** — bloco separado <div style="text-align:center;margin:28px 0"> com <a> estilizado: background:{primary_color}; color:#fff; padding:14px 32px; border-radius:6px; text-decoration:none; font-weight:bold; font-size:16px; display:inline-block. Texto persuasivo específico ao objetivo.
+
+8. **Pós-CTA** — parágrafo curto de reforço (P.S. ou observação extra) com fundo #fff9e6 e border-left:3px solid #f59e0b, padding:12px 16px, border-radius:4px.
+
+9. **Assinatura pessoal** — nome + cargo coerente com o kit de marca. Fundo branco.
+
+10. **Rodapé** — fundo #f8f9fa, padding:16px, texto centralizado, cor #888, font-size:12px, com nome da empresa e redes sociais como emojis clicáveis.
 
 Instruções obrigatórias:
 - Retorne APENAS o código HTML, sem explicações, sem markdown, sem blocos ```
-- Email responsivo, largura 100%% com max-width 560px, centralizado (use style="width:100%%;max-width:560px" em vez de width="560")
+- Estrutura em <table> com <tr>/<td> — cada bloco numerado acima é um <tr>. Isso garante que fundos coloridos apareçam corretamente no Outlook/Gmail (que ignoram muitos CSS de <div>).
+- Email responsivo, largura 100%% com max-width:600px, centralizado
 - Use SOMENTE inline CSS (style="...") — nenhuma tag <style> ou <link>
-- Cabeçalho colorido com a cor primária {primary_color}
-- Use {{nome}} onde o destinatário deve ser personalizado
-- O corpo do email deve ter o equivalente a 250-400 palavras de texto corrido, com profundidade real — evite frases genéricas como "Temos uma novidade incrível para você"
-- Varie a formatação visual (parágrafos, lista, bloco de destaque) para facilitar a leitura
+- Fonte principal: Arial, Helvetica, sans-serif (email-safe)
+- O corpo do email deve ter o equivalente a 250-400 palavras de texto corrido, com profundidade real
+- Cada bloco DEVE ter margem/padding vertical suficiente para respiração visual (mínimo 16px)
+- Títulos (h1/h2/h3) devem ter tamanhos claros e diferenciados: h1=24px, h2=20px, h3=17px — NUNCA menor que 16px
+- Se houver placeholder __IMAGEM_PLACEHOLDER__ ou __CTA_URL_PLACEHOLDER__, mantenha EXATAMENTE assim para eu substituir depois
 """
 
     try:
@@ -5541,7 +5566,12 @@ Instruções obrigatórias:
         html = re.sub(r'\n?```$', '', html).strip()
         if imagem_url:
             html = html.replace('__IMAGEM_PLACEHOLDER__', imagem_url)
-        return jsonify({'html': html})
+        if cta_url:
+            html = html.replace('__CTA_URL_PLACEHOLDER__', cta_url)
+            # também escapa caso a IA tenha esquecido do placeholder e usado outro href
+            html = html.replace('href="#LINK_CTA"', f'href="{cta_url}"')
+            html = html.replace("href='#LINK_CTA'", f'href="{cta_url}"')
+        return jsonify({'html': html, 'cta_url_missing': not cta_url})
     except Exception as e:
         return jsonify({'erro': str(e)}), 500
 

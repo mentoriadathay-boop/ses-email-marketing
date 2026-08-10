@@ -316,6 +316,8 @@ function iamColetarDados() {
     kit_id: document.getElementById('iamKitId').value || null,
     imagem_url: document.getElementById('iamImagemUrl').value.trim(),
     imagem_posicao: document.getElementById('iamImagemPosicao') ? document.getElementById('iamImagemPosicao').value : 'top',
+    cta_url: document.getElementById('iamCtaUrl') ? document.getElementById('iamCtaUrl').value.trim() : '',
+    cta_texto: document.getElementById('iamCtaTexto') ? document.getElementById('iamCtaTexto').value.trim() : '',
     modo_texto: _gtmModoTexto || 'reescrever',
     template_ref_html: _gtmTemplateHtmlParaIA || '',
   };
@@ -374,6 +376,11 @@ async function iamGerarEmail() {
     document.getElementById('iamResultado').classList.remove('d-none');
     document.getElementById('iamBtnInserir').classList.remove('d-none');
     iamSwitchResultTab('preview');
+    // Aviso visível se o CTA foi gerado sem URL — evita botão morto no envio
+    const avisoEl = document.getElementById('iamAvisoCta');
+    if (avisoEl) {
+      avisoEl.classList.toggle('d-none', !data.cta_url_missing);
+    }
   } catch (e) {
     clearInterval(timer);
     document.getElementById('iamLoading').classList.add('d-none');
