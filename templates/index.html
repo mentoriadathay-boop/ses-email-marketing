@@ -162,6 +162,12 @@
                 <a href="{{ url_for('campanha_reutilizar', campaign_id=c.id) }}" class="btn btn-sm btn-outline-secondary" title="Reutilizar campanha">
                   <i class="bi bi-arrow-repeat"></i>
                 </a>
+                <form method="POST" action="{{ url_for('deletar_campanha', campaign_id=c.id) }}" class="d-inline"
+                      onsubmit="return confirm('Excluir a campanha &quot;{{ c.name|e }}&quot;? Esta ação não pode ser desfeita.');">
+                  <button type="submit" class="btn btn-sm btn-outline-danger" title="Excluir campanha">
+                    <i class="bi bi-trash"></i>
+                  </button>
+                </form>
               </div>
             </td>
           </tr>
