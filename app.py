@@ -5236,13 +5236,18 @@ def _texto_para_email_html(texto, template_html='', primary_color='#1a3a6b', tem
 
         # Detect URL somewhere in a short block (with optional CTA phrase before)
         url_inline = re.search(r'(https?://\S+|www\.\S+)', block)
-        if url_inline and len(block) < 200 and block.count('\n') <= 2:
+        if url_inline and len(block) < 300 and block.count('\n') <= 2:
             link_url = url_inline.group(1).rstrip('.,;:!?')
             before = block[:url_inline.start()].strip()
             after = block[url_inline.end():].strip()
             btn_text = 'Acessar'
-            if _looks_like_cta_phrase(before):
-                btn_text = before.rstrip(':').strip()
+            # Aceita separadores comuns: →, ->, :, — antes da URL
+            before_clean = re.sub(r'[\s:→\-—>]+$', '', before).strip()
+            if _looks_like_cta_phrase(before_clean):
+                btn_text = before_clean
+                before = ''
+            elif len(before_clean) < 80 and before_clean and _looks_like_cta_phrase(before_clean.split(',')[-1].strip()):
+                btn_text = before_clean.split(',')[-1].strip()
                 before = ''
             if before:
                 content_parts.append(f'<p style="font-size:15px;color:{cor_texto};line-height:1.7;margin:0 0 12px;">{_esc(before)}</p>')
@@ -5325,19 +5330,40 @@ def _texto_para_email_html(texto, template_html='', primary_color='#1a3a6b', tem
             heading_count += 1
             is_short_label = len(first) < 30
             if heading_count == 1 and not is_short_label:
-                # Título principal (H2): maior, com fundo sólido colorido
+                # H2 principal: fundo colorido gradient, texto branco grande.
                 content_parts.append(
-                    f'<h2 style="color:{cor};font-size:22px;margin:32px 0 18px;'
-                    f'font-weight:800;letter-spacing:-0.4px;line-height:1.3;'
-                    f'border-bottom:3px solid {cor};padding-bottom:10px;">'
-                    f'{_esc(first)}</h2>')
+                    f'<div style="background:linear-gradient(135deg,{cor},{cor_accent});'
+                    f'padding:24px 28px;border-radius:10px;margin:24px 0;">'
+                    f'<h2 style="color:#fff;font-size:26px;margin:0;'
+                    f'font-weight:800;letter-spacing:-0.5px;line-height:1.25;">'
+                    f'{_esc(first)}</h2></div>')
             else:
-                # Subtítulos (H3): menores, estilo distinto
+                # H3: card com fundo colorido claro + barra lateral + fonte maior.
                 content_parts.append(
-                    f'<h3 style="color:{cor};font-size:17px;margin:24px 0 10px;'
-                    f'font-weight:700;line-height:1.35;'
-                    f'padding-left:12px;border-left:4px solid {cor_accent};">'
-                    f'{_esc(first)}</h3>')
+                    f'<div style="background:{cor_bg};border-left:5px solid {cor};'
+                    f'padding:16px 20px;margin:28px 0 14px;border-radius:0 8px 8px 0;">'
+                    f'<h3 style="color:{cor};font-size:20px;margin:0;'
+                    f'font-weight:700;line-height:1.35;">'
+                    f'{_esc(first)}</h3></div>')
+            continue
+
+        # Detect "P.S.", "💡 dica", "importante", "atenção", "você sabia" — bloco destacado
+        _highlight_re = re.match(
+            r'^(p\.?s\.?|dica|importante|atenção|atencao|nota|obs|observação|observacao|aviso|você sabia|voce sabia|curiosidade|💡|📌|⚡|🔥|✨|⚠️|❗)[\s:.—\-]+',
+            first, re.I)
+        if _highlight_re and len(block) < 500:
+            label = _highlight_re.group(1).strip()
+            rest = first[_highlight_re.end():].strip()
+            remaining_lines = [rest] + lines[1:] if rest else lines[1:]
+            body_html = '<br>'.join(_esc(l) for l in remaining_lines if l)
+            content_parts.append(
+                f'<table width="100%" cellpadding="0" cellspacing="0" style="margin:20px 0;">'
+                f'<tr><td style="background:#FFF9E6;border-left:4px solid #F59E0B;'
+                f'padding:18px 22px;border-radius:6px;">'
+                f'<p style="margin:0 0 6px;color:#7A5A0F;font-size:14px;font-weight:bold;'
+                f'text-transform:uppercase;letter-spacing:0.5px;">{_esc(label)}</p>'
+                f'<p style="margin:0;color:#333;font-size:15px;line-height:1.65;">{body_html}</p>'
+                f'</td></tr></table>')
             continue
 
         # Detect info block (Data: / Horário: / Formato: lines)
