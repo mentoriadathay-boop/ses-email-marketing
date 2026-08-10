@@ -1077,10 +1077,59 @@ def _absolutize_urls(html):
     return re.sub(r'(src|href)=(["\'])([^"\']+)\2', _fix, html)
 
 
+_INLINE_IMG_MAX_BYTES = 500 * 1024  # 500 KB — acima disso mantemos URL externa
+
+
+def _inline_uploaded_images(html):
+    """Substitui <img src="{APP_URL}/img/<id>"> por <img src="data:...;base64,...">
+    para imagens carregadas via /upload/imagem. Isso resolve o principal problema
+    de imagens externas bloqueadas pelo Gmail/Outlook para remetentes desconhecidos
+    — a imagem viaja embutida no HTML e sempre renderiza."""
+    if not html:
+        return html
+    import base64 as b64mod
+    hosts = []
+    if APP_URL:
+        hosts.append(APP_URL)
+    # Também substitui qualquer https://*.railway.app/img/... (variação de domínio)
+    pat = re.compile(
+        r'(<img\b[^>]*\bsrc=["\'])([^"\']*?/img/([a-f0-9]{16,64}))(["\'])',
+        re.I)
+    conn = None
+    def _repl(m):
+        nonlocal conn
+        prefix, full_url, img_id, suffix = m.group(1), m.group(2), m.group(3), m.group(4)
+        try:
+            if conn is None:
+                conn = get_db()
+            row = conn.execute(
+                'SELECT mime_type, data FROM uploaded_images WHERE id=%s', (img_id,)
+            ).fetchone()
+            if not row:
+                return m.group(0)
+            raw_b64 = row['data']
+            # Calcula tamanho aproximado (bytes = len(b64)*3/4)
+            approx_bytes = int(len(raw_b64) * 3 / 4)
+            if approx_bytes > _INLINE_IMG_MAX_BYTES:
+                return m.group(0)  # muito grande — mantém URL
+            return f'{prefix}data:{row["mime_type"]};base64,{raw_b64}{suffix}'
+        except Exception as e:
+            print(f'[inline_img] falha para {img_id}: {e}', flush=True)
+            return m.group(0)
+    try:
+        return pat.sub(_repl, html)
+    finally:
+        if conn is not None:
+            try: conn.close()
+            except Exception: pass
+
+
 def send_email_brevo(sender, recipient_email, recipient_name, subject, body_html):
     personalized_subject = subject.replace('{nome}', recipient_name or 'Cliente')
     personalized_body = body_html.replace('{nome}', recipient_name or 'Cliente')
     personalized_body = _absolutize_urls(personalized_body)
+    # Embute imagens da própria plataforma como base64 — evita bloqueio de Gmail/Outlook
+    personalized_body = _inline_uploaded_images(personalized_body)
     configuration = sib_api_v3_sdk.Configuration()
     configuration.api_key['api-key'] = BREVO_API_KEY
     api_instance = sib_api_v3_sdk.TransactionalEmailsApi(sib_api_v3_sdk.ApiClient(configuration))
