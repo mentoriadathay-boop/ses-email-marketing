@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% block content %}
-{% set lbl = score_label(contact.current_score) %}
+{% set temp = effective_temperature(contact.current_score, contact.temperature_override) %}
 
 <div class="d-flex align-items-center mb-4 flex-wrap gap-2">
   <a href="{{ url_for('lista_contatos') }}" class="btn btn-sm btn-outline-secondary me-2">
@@ -30,11 +30,93 @@
     <i class="bi bi-arrow-repeat me-1"></i>Iniciar cadência
   </button>
   {% endif %}
-  <span class="badge fw-semibold px-3 py-2 fs-6"
-        style="background:{{ lbl[2] }};color:{{ lbl[1] }}">
-    {{ lbl[0] }} &mdash; {{ contact.current_score }} pts
-  </span>
+
+  <!-- Badge de temperatura clicável (dropdown) -->
+  <div class="dropdown">
+    <button class="badge fw-semibold px-3 py-2 fs-6 border-0 dropdown-toggle"
+            style="background:{{ temp[2] }};color:{{ temp[1] }};cursor:pointer"
+            data-bs-toggle="dropdown" aria-expanded="false"
+            title="Clique para classificar manualmente">
+      {% if temp[3] %}<i class="bi bi-lock-fill me-1" style="font-size:.7rem"></i>{% endif %}
+      {{ temp[0] }} &mdash; {{ contact.current_score }} pts
+    </button>
+    <ul class="dropdown-menu dropdown-menu-end shadow" style="min-width:220px">
+      <li><h6 class="dropdown-header">Classificar como</h6></li>
+      {% for key, lbl in [('muito_quente','Muito Quente'),('quente','Quente'),('morno','Morno'),('frio','Frio')] %}
+      {% set t = TEMPERATURE_LABELS[key] %}
+      <li>
+        <form method="POST" action="{{ url_for('set_temperatura', email=contact.email) }}">
+          <input type="hidden" name="temperature" value="{{ key }}">
+          <button type="submit" class="dropdown-item d-flex align-items-center gap-2 {% if contact.temperature_override == key %}active{% endif %}">
+            <span class="d-inline-block rounded-circle" style="width:12px;height:12px;background:{{ t[2] }};border:2px solid {{ t[1] }}"></span>
+            <span>{{ lbl }}</span>
+            {% if contact.temperature_override == key %}
+            <i class="bi bi-check-lg ms-auto"></i>
+            {% endif %}
+          </button>
+        </form>
+      </li>
+      {% endfor %}
+      <li><hr class="dropdown-divider"></li>
+      <li>
+        <form method="POST" action="{{ url_for('set_temperatura', email=contact.email) }}">
+          <input type="hidden" name="temperature" value="auto">
+          <button type="submit" class="dropdown-item d-flex align-items-center gap-2 {% if not contact.temperature_override %}active{% endif %}">
+            <i class="bi bi-gear"></i>
+            <span>Automático (score)</span>
+            {% if not contact.temperature_override %}
+            <i class="bi bi-check-lg ms-auto"></i>
+            {% endif %}
+          </button>
+        </form>
+      </li>
+    </ul>
+  </div>
 </div>
+
+<!-- Box de contexto rápido -->
+{% if last_open or next_step or contact.last_contact_at %}
+<div class="alert py-2 px-3 mb-3 d-flex flex-wrap gap-4" style="background:#f8fafc;border:1px solid #e2e8f0">
+  {% if last_open %}
+  <div style="min-width:180px">
+    <div class="text-muted" style="font-size:.7rem;text-transform:uppercase">Último email aberto</div>
+    <div class="small fw-semibold text-truncate" style="max-width:280px" title="{{ last_open.step_subject or last_open.campaign_subject }}">
+      <i class="bi bi-envelope-open text-success me-1"></i>{{ last_open.step_subject or last_open.campaign_subject or '—' }}
+    </div>
+    <div class="text-muted" style="font-size:.7rem">{{ last_open.opened_at.strftime('%d/%m %H:%M') if last_open.opened_at.strftime is defined else last_open.opened_at }}</div>
+  </div>
+  {% endif %}
+  {% if next_step %}
+  <div style="min-width:180px">
+    <div class="text-muted" style="font-size:.7rem;text-transform:uppercase">Próximo email agendado</div>
+    <div class="small fw-semibold text-truncate" style="max-width:280px" title="{{ next_step.step_subject }}">
+      <i class="bi bi-clock-history text-primary me-1"></i>{{ next_step.step_subject or ('Passo ' ~ next_step.current_step) }}
+    </div>
+    <div class="text-muted" style="font-size:.7rem">
+      {{ next_step.seq_name }} — {{ next_step.next_send_at.strftime('%d/%m %H:%M') if next_step.next_send_at.strftime is defined else next_step.next_send_at }}
+    </div>
+  </div>
+  {% endif %}
+  {% if contact.last_contact_at %}
+  <div style="min-width:150px">
+    <div class="text-muted" style="font-size:.7rem;text-transform:uppercase">Último contato</div>
+    <div class="small fw-semibold">
+      <i class="bi bi-chat-dots text-info me-1"></i>{{ contact.last_contact_at.strftime('%d/%m/%Y') if contact.last_contact_at.strftime is defined else contact.last_contact_at }}
+    </div>
+    {% set diff_days = ((today - contact.last_contact_at.date()).days if contact.last_contact_at.date is defined else 0) %}
+    <div class="text-muted" style="font-size:.7rem">há {{ diff_days }} dia(s)</div>
+  </div>
+  {% endif %}
+  {% if contact.next_action_date %}
+  <div style="min-width:150px">
+    <div class="text-muted" style="font-size:.7rem;text-transform:uppercase">Próxima tarefa</div>
+    <div class="small fw-semibold">
+      <i class="bi bi-calendar-check text-warning me-1"></i>{{ contact.next_action_date.strftime('%d/%m/%Y') if contact.next_action_date.strftime is defined else contact.next_action_date }}
+    </div>
+  </div>
+  {% endif %}
+</div>
+{% endif %}
 
 <div class="row g-4">
   <div class="col-lg-8">

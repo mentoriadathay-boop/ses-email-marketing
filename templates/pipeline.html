@@ -1,0 +1,234 @@
+{% extends "base.html" %}
+{% block content %}
+
+<div class="d-flex align-items-center justify-content-between mb-4">
+  <div>
+    <h4 class="fw-bold mb-0"><i class="bi bi-kanban me-2 text-primary"></i>Pipeline de Negociações</h4>
+    <small class="text-muted">Sua foto do funil — o que precisa fazer hoje e onde estão as oportunidades.</small>
+  </div>
+  <div class="text-end">
+    <span class="badge bg-secondary px-3 py-2">{{ quick.total_contacts }} contatos</span>
+  </div>
+</div>
+
+<!-- ═══ BLOCO A — ALERTAS OPERACIONAIS ═══════════════════════════════════ -->
+<h5 class="fw-semibold mb-3 mt-1"><i class="bi bi-lightning-charge-fill text-warning me-2"></i>O que precisa da sua atenção</h5>
+
+<div class="row g-3 mb-4">
+  <!-- Tarefas de hoje -->
+  <div class="col-md-6 col-lg-3">
+    <div class="card h-100 border-primary">
+      <div class="card-body">
+        <div class="d-flex justify-content-between align-items-center mb-2">
+          <span class="text-muted small text-uppercase" style="font-size:.7rem">Tarefas hoje</span>
+          <span class="fs-3 fw-bold text-primary">{{ quick.tasks_today }}</span>
+        </div>
+        {% if tasks_today %}
+        <div style="max-height:180px;overflow-y:auto">
+          {% for t in tasks_today %}
+          <a href="{{ url_for('contato_perfil', email=t.contact_email) }}" class="d-block text-decoration-none border-bottom pb-1 mb-1">
+            <div class="small fw-semibold text-body text-truncate">{{ t.title }}</div>
+            <div class="text-muted" style="font-size:.7rem">{{ t.contact_name or t.contact_email }}{% if t.due_time %} · {{ t.due_time.strftime('%H:%M') if t.due_time.strftime is defined else t.due_time }}{% endif %}</div>
+          </a>
+          {% endfor %}
+        </div>
+        {% else %}
+        <p class="text-muted small mb-0 text-center py-3"><i class="bi bi-check-circle text-success me-1"></i>Nada para hoje</p>
+        {% endif %}
+        <a href="{{ url_for('lista_tarefas', view='today') }}" class="btn btn-sm btn-outline-primary w-100 mt-2">Ver agenda</a>
+      </div>
+    </div>
+  </div>
+
+  <!-- Tarefas atrasadas -->
+  <div class="col-md-6 col-lg-3">
+    <div class="card h-100 border-danger">
+      <div class="card-body">
+        <div class="d-flex justify-content-between align-items-center mb-2">
+          <span class="text-muted small text-uppercase" style="font-size:.7rem">Atrasadas</span>
+          <span class="fs-3 fw-bold text-danger">{{ quick.tasks_overdue }}</span>
+        </div>
+        {% if tasks_overdue %}
+        <div style="max-height:180px;overflow-y:auto">
+          {% for t in tasks_overdue %}
+          {% set delay = (today - t.due_date).days %}
+          <a href="{{ url_for('contato_perfil', email=t.contact_email) }}" class="d-block text-decoration-none border-bottom pb-1 mb-1">
+            <div class="small fw-semibold text-body text-truncate">{{ t.title }}</div>
+            <div class="text-muted" style="font-size:.7rem">{{ t.contact_name or t.contact_email }} · <span class="text-danger">{{ delay }}d atrás</span></div>
+          </a>
+          {% endfor %}
+        </div>
+        {% else %}
+        <p class="text-muted small mb-0 text-center py-3"><i class="bi bi-check-circle text-success me-1"></i>Nada em atraso</p>
+        {% endif %}
+        {% if tasks_overdue %}
+        <a href="{{ url_for('lista_tarefas', view='overdue') }}" class="btn btn-sm btn-outline-danger w-100 mt-2">Ver atrasadas</a>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <!-- Sinal quente ignorado -->
+  <div class="col-md-6 col-lg-3">
+    <div class="card h-100 border-warning">
+      <div class="card-body">
+        <div class="d-flex justify-content-between align-items-center mb-2">
+          <span class="text-muted small text-uppercase" style="font-size:.7rem" title="Contatos que abriram 3+ emails nas últimas 48h sem tarefa pendente">Sinal quente ignorado</span>
+          <span class="fs-3 fw-bold text-warning">{{ quick.hot_signals }}</span>
+        </div>
+        <div class="text-muted mb-2" style="font-size:.65rem">
+          <i class="bi bi-info-circle me-1"></i>Abriu 3+ emails/48h sem tarefa
+        </div>
+        {% if hot_signals %}
+        <div style="max-height:160px;overflow-y:auto">
+          {% for h in hot_signals %}
+          <a href="{{ url_for('contato_perfil', email=h.email) }}" class="d-block text-decoration-none border-bottom pb-1 mb-1">
+            <div class="small fw-semibold text-body text-truncate">{{ h.name or h.email }}</div>
+            <div class="text-muted" style="font-size:.7rem">🔥 {{ h.opens_48h }} aberturas · {{ h.score }} pts</div>
+          </a>
+          {% endfor %}
+        </div>
+        {% else %}
+        <p class="text-muted small mb-0 text-center py-3"><i class="bi bi-check-circle text-success me-1"></i>Nenhum sinal ignorado</p>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <!-- Quentes esfriando -->
+  <div class="col-md-6 col-lg-3">
+    <div class="card h-100 border-info">
+      <div class="card-body">
+        <div class="d-flex justify-content-between align-items-center mb-2">
+          <span class="text-muted small text-uppercase" style="font-size:.7rem" title="Contatos quentes/muito quentes sem contato há mais de 7 dias">Esfriando</span>
+          <span class="fs-3 fw-bold text-info">{{ quick.cooling_hot }}</span>
+        </div>
+        <div class="text-muted mb-2" style="font-size:.65rem">
+          <i class="bi bi-thermometer-half me-1"></i>Quentes sem contato há 7+ dias
+        </div>
+        {% if cooling_hot %}
+        <div style="max-height:160px;overflow-y:auto">
+          {% for c in cooling_hot %}
+          <a href="{{ url_for('contato_perfil', email=c.email) }}" class="d-block text-decoration-none border-bottom pb-1 mb-1">
+            <div class="small fw-semibold text-body text-truncate">{{ c.name or c.email }}</div>
+            <div class="text-muted" style="font-size:.7rem">{{ c.score }} pts · há {{ c.days_since }}d</div>
+          </a>
+          {% endfor %}
+        </div>
+        {% else %}
+        <p class="text-muted small mb-0 text-center py-3"><i class="bi bi-check-circle text-success me-1"></i>Ninguém esfriando</p>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ BLOCO B — FUNIL POR STATUS ═══════════════════════════════════════ -->
+<h5 class="fw-semibold mb-3 mt-4"><i class="bi bi-funnel-fill text-primary me-2"></i>Funil por status</h5>
+
+<div class="row g-2 mb-4">
+  {% for f in funnel %}
+  <div class="col-6 col-md-4 col-lg-3 col-xl">
+    <a href="{{ url_for('lista_contatos', status=f.key) }}" class="text-decoration-none">
+      <div class="card h-100" style="border-top:3px solid {{ f.fg }}">
+        <div class="card-body p-3">
+          <div class="text-muted small text-uppercase" style="font-size:.65rem">{{ f.label }}</div>
+          <div class="d-flex justify-content-between align-items-baseline mt-1">
+            <span class="fs-3 fw-bold" style="color:{{ f.fg }}">{{ f.count }}</span>
+            {% if quick.total_contacts > 0 %}
+            <span class="text-muted small">{{ ((f.count / quick.total_contacts) * 100) | round(0) | int }}%</span>
+            {% endif %}
+          </div>
+          <div class="progress mt-2" style="height:4px">
+            <div class="progress-bar" role="progressbar"
+                 style="width:{{ ((f.count / quick.total_contacts) * 100) if quick.total_contacts > 0 else 0 }}%;background:{{ f.fg }}"></div>
+          </div>
+        </div>
+      </div>
+    </a>
+  </div>
+  {% endfor %}
+</div>
+
+{% if other_count > 0 %}
+<p class="text-muted small mb-4">
+  <i class="bi bi-info-circle me-1"></i>
+  {{ other_count }} contato(s) em outros status não mapeados no funil.
+</p>
+{% endif %}
+
+<!-- ═══ BLOCO C — RANKING DOS QUENTES ════════════════════════════════════ -->
+<h5 class="fw-semibold mb-3 mt-4"><i class="bi bi-fire text-danger me-2"></i>Top 10 mais quentes</h5>
+
+<div class="card">
+  <div class="table-responsive">
+    <table class="table table-hover align-middle mb-0">
+      <thead class="table-light">
+        <tr>
+          <th>Contato</th>
+          <th style="width:130px">Temperatura</th>
+          <th style="width:90px" class="text-center">Score</th>
+          <th style="width:110px">Último contato</th>
+          <th style="width:110px">Próxima tarefa</th>
+          <th style="width:120px">Status</th>
+          <th style="width:80px"></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in top_hot %}
+        {% set t = effective_temperature(r.score, r.temperature_override) %}
+        <tr>
+          <td>
+            <a href="{{ url_for('contato_perfil', email=r.email) }}" class="text-decoration-none">
+              <div class="fw-semibold small">{{ r.name or r.email }}</div>
+              <div class="text-muted" style="font-size:.7rem">{{ r.email }}</div>
+            </a>
+          </td>
+          <td>
+            <span class="badge fw-semibold" style="background:{{ t[2] }};color:{{ t[1] }}">
+              {% if t[3] %}<i class="bi bi-lock-fill me-1" style="font-size:.65rem"></i>{% endif %}
+              {{ t[0] }}
+            </span>
+          </td>
+          <td class="text-center fw-bold">{{ r.score }}</td>
+          <td>
+            {% if r.last_contact_at %}
+              <div class="small">{{ r.last_contact_at.strftime('%d/%m/%Y') if r.last_contact_at.strftime is defined else r.last_contact_at }}</div>
+              <div class="text-muted" style="font-size:.7rem">há {{ r.days_since }}d</div>
+            {% else %}
+              <span class="text-muted small">nunca</span>
+            {% endif %}
+          </td>
+          <td>
+            {% if r.next_task_date %}
+              {% set left = (r.next_task_date - today).days %}
+              <div class="small">{{ r.next_task_date.strftime('%d/%m/%Y') if r.next_task_date.strftime is defined else r.next_task_date }}</div>
+              <div class="text-muted" style="font-size:.7rem">
+                {% if left < 0 %}<span class="text-danger">{{ -left }}d atrás</span>
+                {% elif left == 0 %}<span class="text-warning">hoje</span>
+                {% else %}em {{ left }}d{% endif %}
+              </div>
+            {% else %}
+              <a href="{{ url_for('contato_perfil', email=r.email) }}#tasks" class="btn btn-sm btn-outline-warning py-0 px-2" style="font-size:.7rem">
+                <i class="bi bi-plus-lg me-1"></i>Agendar
+              </a>
+            {% endif %}
+          </td>
+          <td><span class="badge bg-secondary" style="font-size:.7rem">{{ r.status }}</span></td>
+          <td>
+            <a href="{{ url_for('contato_perfil', email=r.email) }}" class="btn btn-sm btn-outline-primary py-0 px-2">
+              <i class="bi bi-arrow-up-right"></i>
+            </a>
+          </td>
+        </tr>
+        {% else %}
+        <tr>
+          <td colspan="7" class="text-center text-muted py-4">Nenhum contato ainda.</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+{% endblock %}
