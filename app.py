@@ -3881,6 +3881,19 @@ def contato_perfil(email):
         "SELECT id, name, subject, body_html FROM email_templates "
         "WHERE user_id=%s OR user_id IS NULL ORDER BY name",
         (uid,)).fetchall()
+    email_opens = conn.execute(
+        "SELECT o.opened_at, o.campaign_id, o.sequence_id, o.step_number, "
+        "       c.name AS campaign_name, c.subject AS campaign_subject, "
+        "       s.name AS sequence_name, ss.subject AS step_subject "
+        "FROM email_opens o "
+        "LEFT JOIN campaigns c ON c.id = o.campaign_id "
+        "LEFT JOIN sequences s ON s.id = o.sequence_id "
+        "LEFT JOIN sequence_steps ss ON ss.sequence_id = o.sequence_id AND ss.step_number = o.step_number "
+        "WHERE o.contact_email=%s "
+        "  AND (c.user_id=%s OR c.user_id IS NULL OR c.id IS NULL) "
+        "  AND (s.user_id=%s OR s.user_id IS NULL OR s.id IS NULL) "
+        "ORDER BY o.opened_at DESC LIMIT 200",
+        (email, uid, uid)).fetchall()
     best_hour = get_best_send_hour(email)
     is_bl = is_blacklisted(email, conn)
     conn.close()
@@ -3889,7 +3902,7 @@ def contato_perfil(email):
                            all_mailings=all_mailings, contact_mailings=contact_mailings,
                            conversations=conversations, tasks_pending=tasks_pending,
                            tasks_done=tasks_done, user_sequences=user_sequences,
-                           user_templates=user_templates,
+                           user_templates=user_templates, email_opens=email_opens,
                            today=datetime.now().date(),
                            best_hour=best_hour, is_blacklisted=is_bl)
 
