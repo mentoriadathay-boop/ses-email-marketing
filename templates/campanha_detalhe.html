@@ -22,6 +22,10 @@
       <i class="bi bi-arrow-clockwise me-1"></i> Reenviar (Não Abriram)
     </button>
     {% endif %}
+    <a href="{{ url_for('preview_envio_campanha', campaign_id=campaign.id) }}"
+       target="_blank" class="btn btn-outline-info" title="Ver HTML exato que foi entregue ao Brevo">
+      <i class="bi bi-eye me-1"></i> Ver HTML enviado
+    </a>
     <a href="{{ url_for('campanha_reutilizar', campaign_id=campaign.id) }}"
        class="btn btn-outline-primary">
       <i class="bi bi-arrow-repeat me-1"></i> Reutilizar Campanha
