@@ -1,6 +1,7 @@
 // editor.js — Editor visual Quill para ConvertMail
 
 const _quillMap = new Map();   // containerId -> quill instance
+window._quillMap = _quillMap;  // exposto para consumidores externos (nova_campanha.html)
 let _tplTarget = null;         // { quill, subjectId } — editor alvo do modal de templates
 let _tplCache = null;          // cache dos templates da API
 const _rawHtmlContainers = new Set(); // containers cujo textarea contém um HTML completo (template/IA) — não sincronizar a partir do Quill
