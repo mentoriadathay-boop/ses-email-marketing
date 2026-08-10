@@ -6497,6 +6497,36 @@ def preview_email():
     html = request.form.get('html', '')
     return render_template('preview_email.html', email_html=html)
 
+
+@app.route('/preview-envio-html', methods=['POST'])
+@login_required
+def preview_envio_html():
+    """Aceita HTML via POST e devolve renderização com o mesmo pipeline
+    do send_email_brevo aplicado (base64 de imagem, ícones brand, dead-link
+    fix). Serve pra usuário conferir NA HORA (aba nova) como o email vai
+    chegar antes de disparar — sem precisar salvar/enviar campanha."""
+    html = request.form.get('html', '') or ''
+    html = html.replace('{nome}', 'Fulano')
+    html = _absolutize_urls(html)
+    html = _inline_uploaded_images(html)
+    html = _neutralize_dead_links(html)
+    html = _upgrade_social_icons_in_html(html)
+    debug_html = f'''<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>Preview do envio</title>
+<style>
+  body {{margin:0;background:#f4f6f9;font-family:Arial,sans-serif}}
+  .banner {{background:#5B2A6E;color:#fff;padding:12px 20px;font-size:13px;position:sticky;top:0;z-index:10}}
+  .banner strong {{color:#ffd700}}
+  .frame {{max-width:640px;margin:20px auto;background:#fff;border-radius:8px;overflow:hidden;box-shadow:0 4px 20px rgba(0,0,0,.1)}}
+</style></head><body>
+<div class="banner">
+  🔍 <strong>PREVIEW REAL DO ENVIO</strong> — Este é o HTML que sairia para o destinatário agora
+  (imagens em base64, ícones brand, links validados). Se algo estiver quebrado aqui, o email real também estará.
+</div>
+<div class="frame">{html}</div>
+</body></html>'''
+    return Response(debug_html, mimetype='text/html')
+
 # ── 8. Assistente SPF/DKIM/DMARC ────────────────────────────────────────────
 
 @app.route('/verificar-dominio', methods=['POST'])
