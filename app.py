@@ -358,6 +358,30 @@ def init_db():
             name TEXT NOT NULL UNIQUE,
             created_at TIMESTAMP DEFAULT NOW()
         )''',
+        '''CREATE TABLE IF NOT EXISTS contact_conversations (
+            id SERIAL PRIMARY KEY,
+            user_id INTEGER,
+            contact_email TEXT NOT NULL,
+            conversation_date DATE NOT NULL,
+            channel TEXT DEFAULT 'whatsapp',
+            notes TEXT NOT NULL,
+            created_at TIMESTAMP DEFAULT NOW()
+        )''',
+        '''CREATE TABLE IF NOT EXISTS contact_tasks (
+            id SERIAL PRIMARY KEY,
+            user_id INTEGER,
+            contact_email TEXT NOT NULL,
+            task_type TEXT NOT NULL DEFAULT 'retornar_contato',
+            title TEXT NOT NULL,
+            due_date DATE NOT NULL,
+            due_time TIME,
+            status TEXT DEFAULT 'pending',
+            notify_days_before INTEGER DEFAULT 0,
+            notified_at TIMESTAMP,
+            reminder_notified_at TIMESTAMP,
+            completed_at TIMESTAMP,
+            created_at TIMESTAMP DEFAULT NOW()
+        )''',
     ]
     for sql in tables:
         conn.execute(sql)
@@ -415,6 +439,8 @@ def init_db():
         "ALTER TABLE uploaded_images ADD COLUMN user_id INTEGER",
         "ALTER TABLE warmup_plans ADD COLUMN user_id INTEGER",
         "ALTER TABLE nichos ADD COLUMN user_id INTEGER",
+        "ALTER TABLE contacts ADD COLUMN last_contact_at TIMESTAMP",
+        "ALTER TABLE contacts ADD COLUMN next_action_date DATE",
     ]:
         try:
             conn.execute(f"DO $$ BEGIN {col_sql}; EXCEPTION WHEN duplicate_column THEN NULL; END $$")
@@ -444,6 +470,13 @@ def init_db():
         "CREATE INDEX IF NOT EXISTS idx_contacts_user ON contacts(user_id)",
         "CREATE INDEX IF NOT EXISTS idx_email_accounts_user ON email_accounts(user_id)",
         "CREATE INDEX IF NOT EXISTS idx_brand_kits_user ON brand_kits(user_id)",
+        "CREATE INDEX IF NOT EXISTS idx_contacts_user_updated ON contacts(user_id, updated_at DESC)",
+        "CREATE INDEX IF NOT EXISTS idx_contacts_user_next_action ON contacts(user_id, next_action_date)",
+        "CREATE INDEX IF NOT EXISTS idx_conversations_contact ON contact_conversations(contact_email, conversation_date DESC)",
+        "CREATE INDEX IF NOT EXISTS idx_conversations_user ON contact_conversations(user_id)",
+        "CREATE INDEX IF NOT EXISTS idx_tasks_user_status ON contact_tasks(user_id, status, due_date)",
+        "CREATE INDEX IF NOT EXISTS idx_tasks_contact ON contact_tasks(contact_email, status)",
+        "CREATE INDEX IF NOT EXISTS idx_tasks_notifier ON contact_tasks(status, due_date) WHERE status='pending'",
     ]:
         try:
             conn.execute(idx_sql)
@@ -477,6 +510,32 @@ def init_db():
                     conn.commit()
                 except Exception:
                     conn.rollback()
+    except Exception:
+        conn.rollback()
+
+    # Backfill único: migra whatsapp_notes legado para uma conversa datada,
+    # depois limpa o campo para evitar duplicação.
+    try:
+        legacy = conn.execute(
+            "SELECT email, user_id, whatsapp_notes, updated_at, created_at "
+            "FROM contacts WHERE whatsapp_notes IS NOT NULL AND whatsapp_notes <> ''"
+        ).fetchall()
+        for row in legacy:
+            when = row['updated_at'] or row['created_at'] or datetime.now()
+            already = conn.execute(
+                "SELECT 1 FROM contact_conversations WHERE contact_email=%s LIMIT 1",
+                (row['email'],)
+            ).fetchone()
+            if already:
+                continue
+            conn.execute(
+                "INSERT INTO contact_conversations (user_id, contact_email, conversation_date, channel, notes) "
+                "VALUES (%s, %s, %s, %s, %s)",
+                (row['user_id'], row['email'],
+                 when.date() if hasattr(when, 'date') else when,
+                 'whatsapp', row['whatsapp_notes']))
+            conn.execute("UPDATE contacts SET whatsapp_notes=NULL WHERE email=%s", (row['email'],))
+        conn.commit()
     except Exception:
         conn.rollback()
 
@@ -3771,11 +3830,11 @@ def contato_perfil(email):
         flash('Contato não encontrado.', 'danger'); conn.close(); return redirect(url_for('lista_contatos'))
 
     if request.method == 'POST':
-        fields = ['name', 'phone', 'company', 'position', 'whatsapp', 'status', 'tags', 'notes', 'whatsapp_notes', 'product_interest', 'source', 'nicho', 'city', 'state', 'country']
+        fields = ['name', 'phone', 'company', 'position', 'whatsapp', 'status', 'tags', 'notes', 'product_interest', 'source', 'nicho', 'city', 'state', 'country']
         updates = {f: request.form.get(f, '').strip() for f in fields}
         conn.execute(
-            "UPDATE contacts SET name=%s,phone=%s,company=%s,position=%s,whatsapp=%s,status=%s,tags=%s,notes=%s,whatsapp_notes=%s,product_interest=%s,source=%s,nicho=%s,city=%s,state=%s,country=%s,updated_at=NOW() WHERE email=%s",
-            (*updates.values(), email))
+            "UPDATE contacts SET name=%s,phone=%s,company=%s,position=%s,whatsapp=%s,status=%s,tags=%s,notes=%s,product_interest=%s,source=%s,nicho=%s,city=%s,state=%s,country=%s,updated_at=NOW() WHERE email=%s AND user_id=%s",
+            (*updates.values(), email, uid))
         # Salva produtos adquiridos
         conn.execute('DELETE FROM contact_purchases WHERE contact_email=%s', (email,))
         for prod, dt in zip(request.form.getlist('purchase_product[]'), request.form.getlist('purchase_date[]')):
@@ -3804,12 +3863,34 @@ def contato_perfil(email):
     contact_mailings = conn.execute(
         'SELECT m.id, m.name, m.contact_count FROM mailing_contacts mc JOIN mailings m ON m.id=mc.mailing_id WHERE mc.email=%s ORDER BY m.name',
         (email,)).fetchall()
+    conversations = conn.execute(
+        'SELECT * FROM contact_conversations WHERE contact_email=%s AND user_id=%s '
+        'ORDER BY conversation_date DESC, created_at DESC',
+        (email, uid)).fetchall()
+    tasks_pending = conn.execute(
+        "SELECT * FROM contact_tasks WHERE contact_email=%s AND user_id=%s AND status='pending' "
+        "ORDER BY due_date ASC, COALESCE(due_time, '00:00'::time) ASC",
+        (email, uid)).fetchall()
+    tasks_done = conn.execute(
+        "SELECT * FROM contact_tasks WHERE contact_email=%s AND user_id=%s AND status<>'pending' "
+        "ORDER BY completed_at DESC NULLS LAST, due_date DESC LIMIT 20",
+        (email, uid)).fetchall()
+    user_sequences = conn.execute(
+        "SELECT id, name FROM sequences WHERE user_id=%s ORDER BY name", (uid,)).fetchall()
+    user_templates = conn.execute(
+        "SELECT id, name, subject, body_html FROM email_templates "
+        "WHERE user_id=%s OR user_id IS NULL ORDER BY name",
+        (uid,)).fetchall()
     best_hour = get_best_send_hour(email)
     is_bl = is_blacklisted(email, conn)
     conn.close()
     return render_template('contato_perfil.html', contact=contact, activities=activities,
                            cadencias=cadencias_do_contato, purchases=purchases,
                            all_mailings=all_mailings, contact_mailings=contact_mailings,
+                           conversations=conversations, tasks_pending=tasks_pending,
+                           tasks_done=tasks_done, user_sequences=user_sequences,
+                           user_templates=user_templates,
+                           today=datetime.now().date(),
                            best_hour=best_hour, is_blacklisted=is_bl)
 
 
@@ -3858,6 +3939,333 @@ def contato_remove_mailing(email, mailing_id):
         log_activity(email, 'removed_from_mailing', f'Removido do mailing: {mailing["name"]}', conn)
         conn.commit()
     conn.close()
+    return redirect(url_for('contato_perfil', email=email))
+
+
+# ── CRM — Conversas registradas ────────────────────────────────────────────
+
+TASK_TYPES = [
+    ('retornar_contato', 'Retornar contato'),
+    ('agendar_servico',  'Agendar serviço'),
+    ('enviar_proposta',  'Enviar proposta'),
+    ('reuniao',          'Reunião'),
+    ('follow_up',        'Follow-up'),
+    ('outro',            'Outro'),
+]
+TASK_TYPES_MAP = dict(TASK_TYPES)
+app.jinja_env.globals['TASK_TYPES'] = TASK_TYPES
+app.jinja_env.globals['TASK_TYPES_MAP'] = TASK_TYPES_MAP
+
+CONVERSATION_CHANNELS = [
+    ('whatsapp',   'WhatsApp'),
+    ('ligacao',    'Ligação'),
+    ('email',      'Email'),
+    ('presencial', 'Presencial'),
+    ('reuniao',    'Reunião'),
+    ('outro',      'Outro'),
+]
+app.jinja_env.globals['CONVERSATION_CHANNELS'] = CONVERSATION_CHANNELS
+
+
+def _ensure_contact_owner(conn, email, uid):
+    row = conn.execute(
+        'SELECT id FROM contacts WHERE email=%s AND user_id=%s', (email, uid)).fetchone()
+    if not row:
+        from werkzeug.exceptions import NotFound
+        raise NotFound('Contato não encontrado.')
+    return row
+
+
+def _refresh_contact_summary(conn, email, uid):
+    """Atualiza last_contact_at e next_action_date do contato (cache)."""
+    last_row = conn.execute(
+        "SELECT MAX(conversation_date) as d FROM contact_conversations "
+        "WHERE contact_email=%s AND user_id=%s",
+        (email, uid)).fetchone()
+    last_dt = last_row['d'] if last_row else None
+    next_row = conn.execute(
+        "SELECT MIN(due_date) as d FROM contact_tasks "
+        "WHERE contact_email=%s AND user_id=%s AND status='pending'",
+        (email, uid)).fetchone()
+    next_dt = next_row['d'] if next_row else None
+    conn.execute(
+        "UPDATE contacts SET last_contact_at=%s, next_action_date=%s "
+        "WHERE email=%s AND user_id=%s",
+        (last_dt, next_dt, email, uid))
+
+
+@app.route('/contatos/<path:email>/conversas', methods=['POST'])
+@login_required
+def adicionar_conversa(email):
+    uid = _uid()
+    conn = get_db()
+    _ensure_contact_owner(conn, email, uid)
+    date_raw = request.form.get('conversation_date', '').strip()
+    channel = (request.form.get('channel', 'whatsapp') or 'whatsapp').strip()
+    notes = (request.form.get('notes', '') or '').strip()
+    if not date_raw or not notes:
+        conn.close()
+        flash('Informe a data e o conteúdo da conversa.', 'danger')
+        return redirect(url_for('contato_perfil', email=email))
+    try:
+        conv_date = datetime.strptime(date_raw, '%Y-%m-%d').date()
+    except ValueError:
+        conn.close()
+        flash('Data inválida.', 'danger')
+        return redirect(url_for('contato_perfil', email=email))
+    conn.execute(
+        'INSERT INTO contact_conversations (user_id, contact_email, conversation_date, channel, notes) '
+        'VALUES (%s, %s, %s, %s, %s)',
+        (uid, email, conv_date, channel, notes))
+    _refresh_contact_summary(conn, email, uid)
+    log_activity(email, 'conversation_logged',
+                 f'{channel.capitalize()} em {conv_date.strftime("%d/%m/%Y")}', conn)
+    conn.commit()
+    conn.close()
+    flash('Conversa registrada.', 'success')
+    return redirect(url_for('contato_perfil', email=email) + '#conversations')
+
+
+@app.route('/contatos/<path:email>/conversas/<int:conv_id>/remover', methods=['POST'])
+@login_required
+def remover_conversa(email, conv_id):
+    uid = _uid()
+    conn = get_db()
+    conn.execute(
+        'DELETE FROM contact_conversations WHERE id=%s AND contact_email=%s AND user_id=%s',
+        (conv_id, email, uid))
+    _refresh_contact_summary(conn, email, uid)
+    conn.commit(); conn.close()
+    flash('Conversa removida.', 'info')
+    return redirect(url_for('contato_perfil', email=email) + '#conversations')
+
+
+# ── CRM — Tarefas / follow-up ──────────────────────────────────────────────
+
+@app.route('/contatos/<path:email>/tarefas', methods=['POST'])
+@login_required
+def adicionar_tarefa(email):
+    uid = _uid()
+    conn = get_db()
+    _ensure_contact_owner(conn, email, uid)
+    task_type = (request.form.get('task_type', 'retornar_contato') or 'retornar_contato').strip()
+    title = (request.form.get('title', '') or '').strip()
+    due_date_raw = (request.form.get('due_date', '') or '').strip()
+    due_time_raw = (request.form.get('due_time', '') or '').strip()
+    notify_days_before = request.form.get('notify_days_before', '0').strip() or '0'
+    if not title or not due_date_raw:
+        conn.close()
+        flash('Informe o título e a data da tarefa.', 'danger')
+        return redirect(url_for('contato_perfil', email=email))
+    try:
+        due_date = datetime.strptime(due_date_raw, '%Y-%m-%d').date()
+    except ValueError:
+        conn.close()
+        flash('Data inválida.', 'danger')
+        return redirect(url_for('contato_perfil', email=email))
+    due_time = None
+    if due_time_raw:
+        try:
+            due_time = datetime.strptime(due_time_raw, '%H:%M').time()
+        except ValueError:
+            due_time = None
+    try:
+        nd = max(0, min(30, int(notify_days_before)))
+    except ValueError:
+        nd = 0
+    conn.execute(
+        'INSERT INTO contact_tasks (user_id, contact_email, task_type, title, due_date, due_time, notify_days_before) '
+        'VALUES (%s, %s, %s, %s, %s, %s, %s)',
+        (uid, email, task_type, title, due_date, due_time, nd))
+    _refresh_contact_summary(conn, email, uid)
+    log_activity(email, 'task_created',
+                 f'{TASK_TYPES_MAP.get(task_type, task_type)}: {title} — {due_date.strftime("%d/%m/%Y")}', conn)
+    conn.commit()
+    conn.close()
+    flash('Tarefa agendada.', 'success')
+    return redirect(url_for('contato_perfil', email=email) + '#tasks')
+
+
+@app.route('/tarefas/<int:task_id>/concluir', methods=['POST'])
+@login_required
+def concluir_tarefa(task_id):
+    uid = _uid()
+    conn = get_db()
+    row = conn.execute(
+        'SELECT * FROM contact_tasks WHERE id=%s AND user_id=%s', (task_id, uid)).fetchone()
+    if not row:
+        conn.close()
+        flash('Tarefa não encontrada.', 'danger')
+        return redirect(url_for('lista_tarefas'))
+    conn.execute(
+        "UPDATE contact_tasks SET status='done', completed_at=NOW() WHERE id=%s AND user_id=%s",
+        (task_id, uid))
+    _refresh_contact_summary(conn, row['contact_email'], uid)
+    log_activity(row['contact_email'], 'task_completed', row['title'], conn)
+    conn.commit(); conn.close()
+    flash('Tarefa concluída.', 'success')
+    return redirect(request.referrer or url_for('lista_tarefas'))
+
+
+@app.route('/tarefas/<int:task_id>/cancelar', methods=['POST'])
+@login_required
+def cancelar_tarefa(task_id):
+    uid = _uid()
+    conn = get_db()
+    row = conn.execute(
+        'SELECT * FROM contact_tasks WHERE id=%s AND user_id=%s', (task_id, uid)).fetchone()
+    if not row:
+        conn.close()
+        flash('Tarefa não encontrada.', 'danger')
+        return redirect(url_for('lista_tarefas'))
+    conn.execute(
+        "UPDATE contact_tasks SET status='canceled' WHERE id=%s AND user_id=%s",
+        (task_id, uid))
+    _refresh_contact_summary(conn, row['contact_email'], uid)
+    conn.commit(); conn.close()
+    flash('Tarefa cancelada.', 'info')
+    return redirect(request.referrer or url_for('lista_tarefas'))
+
+
+@app.route('/tarefas')
+@login_required
+def lista_tarefas():
+    uid = _uid()
+    conn = get_db()
+    view = request.args.get('view', 'pending')  # pending | today | overdue | week | done | all
+    base = "SELECT t.*, c.name as contact_name FROM contact_tasks t " \
+           "LEFT JOIN contacts c ON c.email=t.contact_email AND c.user_id=t.user_id " \
+           "WHERE t.user_id=%s"
+    params = [uid]
+    today = datetime.now().date()
+    if view == 'today':
+        base += " AND t.status='pending' AND t.due_date = %s"
+        params.append(today)
+    elif view == 'overdue':
+        base += " AND t.status='pending' AND t.due_date < %s"
+        params.append(today)
+    elif view == 'week':
+        base += " AND t.status='pending' AND t.due_date BETWEEN %s AND %s"
+        params.extend([today, today + timedelta(days=7)])
+    elif view == 'done':
+        base += " AND t.status='done'"
+    elif view == 'all':
+        pass
+    else:  # pending
+        base += " AND t.status='pending'"
+    base += " ORDER BY t.due_date ASC, COALESCE(t.due_time, '00:00'::time) ASC"
+    tasks = conn.execute(base, params).fetchall()
+    counts = {
+        'today':   conn.execute("SELECT COUNT(*) as n FROM contact_tasks WHERE user_id=%s AND status='pending' AND due_date=%s", (uid, today)).fetchone()['n'],
+        'overdue': conn.execute("SELECT COUNT(*) as n FROM contact_tasks WHERE user_id=%s AND status='pending' AND due_date<%s", (uid, today)).fetchone()['n'],
+        'week':    conn.execute("SELECT COUNT(*) as n FROM contact_tasks WHERE user_id=%s AND status='pending' AND due_date BETWEEN %s AND %s", (uid, today, today + timedelta(days=7))).fetchone()['n'],
+        'pending': conn.execute("SELECT COUNT(*) as n FROM contact_tasks WHERE user_id=%s AND status='pending'", (uid,)).fetchone()['n'],
+    }
+    conn.close()
+    return render_template('tarefas.html', tasks=tasks, view=view, counts=counts, today=today)
+
+
+# ── CRM — Envio direto de email a partir do contato ────────────────────────
+
+@app.route('/contatos/<path:email>/enviar-email', methods=['POST'])
+@login_required
+def enviar_email_contato(email):
+    uid = _uid()
+    conn = get_db()
+    contact = conn.execute(
+        'SELECT * FROM contacts WHERE email=%s AND user_id=%s', (email, uid)).fetchone()
+    if not contact:
+        conn.close()
+        flash('Contato não encontrado.', 'danger')
+        return redirect(url_for('lista_contatos'))
+    if is_blacklisted(email, conn):
+        conn.close()
+        flash(f'{email} está na blacklist — envio bloqueado.', 'danger')
+        return redirect(url_for('contato_perfil', email=email))
+    subject = (request.form.get('subject', '') or '').strip()
+    body_html = (request.form.get('body_html', '') or '').strip()
+    sender = (request.form.get('sender', '') or ADMIN_EMAIL).strip()
+    if not subject or not body_html:
+        conn.close()
+        flash('Assunto e corpo são obrigatórios.', 'danger')
+        return redirect(url_for('contato_perfil', email=email))
+    if not BREVO_API_KEY:
+        conn.close()
+        flash('BREVO_API_KEY não configurada — não é possível enviar.', 'danger')
+        return redirect(url_for('contato_perfil', email=email))
+    try:
+        send_email_brevo(sender, email, contact['name'] or '', subject, body_html)
+        log_activity(email, 'email_sent', f'Envio manual: {subject}', conn)
+        conn.execute(
+            "UPDATE contacts SET last_contact_at=NOW() WHERE email=%s AND user_id=%s",
+            (email, uid))
+        conn.commit()
+        flash(f'Email enviado para {email}.', 'success')
+    except Exception as e:
+        flash(f'Erro ao enviar: {e}', 'danger')
+    conn.close()
+    return redirect(url_for('contato_perfil', email=email))
+
+
+# ── CRM — Iniciar cadência a partir do contato ─────────────────────────────
+
+@app.route('/contatos/<path:email>/iniciar-cadencia', methods=['POST'])
+@login_required
+def iniciar_cadencia_contato(email):
+    uid = _uid()
+    seq_id_raw = (request.form.get('sequence_id', '') or '').strip()
+    if not seq_id_raw:
+        flash('Selecione uma cadência.', 'danger')
+        return redirect(url_for('contato_perfil', email=email))
+    try:
+        seq_id = int(seq_id_raw)
+    except ValueError:
+        flash('Cadência inválida.', 'danger')
+        return redirect(url_for('contato_perfil', email=email))
+    conn = get_db()
+    contact = conn.execute(
+        'SELECT * FROM contacts WHERE email=%s AND user_id=%s', (email, uid)).fetchone()
+    if not contact:
+        conn.close()
+        flash('Contato não encontrado.', 'danger')
+        return redirect(url_for('lista_contatos'))
+    seq = conn.execute(
+        'SELECT * FROM sequences WHERE id=%s AND user_id=%s', (seq_id, uid)).fetchone()
+    if not seq:
+        conn.close()
+        flash('Cadência não encontrada.', 'danger')
+        return redirect(url_for('contato_perfil', email=email))
+    if is_blacklisted(email, conn):
+        conn.close()
+        flash(f'{email} está na blacklist — não pode entrar em cadência.', 'danger')
+        return redirect(url_for('contato_perfil', email=email))
+    first_step = conn.execute(
+        'SELECT * FROM sequence_steps WHERE sequence_id=%s ORDER BY step_number LIMIT 1',
+        (seq_id,)).fetchone()
+    if not first_step:
+        conn.close()
+        flash('Cadência sem passos configurados.', 'danger')
+        return redirect(url_for('contato_perfil', email=email))
+    existing = conn.execute(
+        'SELECT id FROM sequence_contacts WHERE sequence_id=%s AND contact_email=%s',
+        (seq_id, email)).fetchone()
+    if existing:
+        conn.close()
+        flash(f'{email} já está nessa cadência.', 'info')
+        return redirect(url_for('contato_perfil', email=email))
+    now = datetime.now()
+    next_dt = now + timedelta(days=first_step['day_offset'])
+    ph = seq['preferred_hour'] if 'preferred_hour' in seq.keys() else None
+    if ph is not None:
+        next_dt = next_dt.replace(hour=int(ph), minute=0, second=0, microsecond=0)
+    next_send = next_dt.strftime('%Y-%m-%d %H:%M:%S')
+    conn.execute(
+        'INSERT INTO sequence_contacts (sequence_id, contact_email, contact_name, current_step, next_send_at) '
+        'VALUES (%s, %s, %s, %s, %s)',
+        (seq_id, email, contact['name'] or '', first_step['step_number'], next_send))
+    log_activity(email, 'sequence_started', f'Cadência: {seq["name"]}', conn)
+    conn.commit(); conn.close()
+    flash(f'{email} adicionado à cadência "{seq["name"]}". Primeiro envio: {next_dt.strftime("%d/%m/%Y %H:%M")}.', 'success')
     return redirect(url_for('contato_perfil', email=email))
 
 
@@ -5668,6 +6076,116 @@ def _try_init_db():
 
 _try_init_db()
 
+TASK_NOTIFY_TO = os.environ.get('TASK_NOTIFY_EMAIL', 'consultoria@asamarketingevendas.com.br').strip()
+
+
+def notificar_tarefas_agendadas():
+    """Roda periodicamente. Envia email para TASK_NOTIFY_TO quando:
+       - Tarefa vence hoje e ainda não foi notificada;
+       - Ou faltam <= notify_days_before dias e o lembrete prévio ainda não saiu.
+       Marca timestamps ANTES de tentar enviar para evitar duplicidade em caso
+       de crash — se o envio falhar, a próxima execução do worker vai reprocessar
+       tarefas cujo notified_at foi limpo manualmente."""
+    if not BREVO_API_KEY or not TASK_NOTIFY_TO:
+        return
+    try:
+        conn = get_db()
+    except Exception as e:
+        print(f"[worker-tasks] db indisponivel: {e}", flush=True)
+        return
+    try:
+        today = datetime.now().date()
+
+        # Lembretes prévios (X dias antes)
+        pre = conn.execute(
+            "SELECT t.*, c.name as contact_name, c.phone as contact_phone, c.whatsapp as contact_whatsapp "
+            "FROM contact_tasks t "
+            "LEFT JOIN contacts c ON c.email=t.contact_email AND c.user_id=t.user_id "
+            "WHERE t.status='pending' "
+            "  AND t.notify_days_before > 0 "
+            "  AND t.reminder_notified_at IS NULL "
+            "  AND (t.due_date - INTERVAL '1 day' * t.notify_days_before) <= %s "
+            "  AND t.due_date > %s",
+            (today, today)).fetchall()
+        for row in pre:
+            conn.execute(
+                "UPDATE contact_tasks SET reminder_notified_at=NOW() WHERE id=%s",
+                (row['id'],))
+            conn.commit()
+            try:
+                _enviar_email_tarefa(row, kind='lembrete')
+            except Exception as e:
+                print(f"[worker-tasks] falha lembrete #{row['id']}: {e}", flush=True)
+
+        # Tarefas do dia (ou atrasadas) sem notificação
+        due = conn.execute(
+            "SELECT t.*, c.name as contact_name, c.phone as contact_phone, c.whatsapp as contact_whatsapp "
+            "FROM contact_tasks t "
+            "LEFT JOIN contacts c ON c.email=t.contact_email AND c.user_id=t.user_id "
+            "WHERE t.status='pending' "
+            "  AND t.notified_at IS NULL "
+            "  AND t.due_date <= %s",
+            (today,)).fetchall()
+        for row in due:
+            conn.execute(
+                "UPDATE contact_tasks SET notified_at=NOW() WHERE id=%s",
+                (row['id'],))
+            conn.commit()
+            try:
+                _enviar_email_tarefa(row, kind='hoje')
+            except Exception as e:
+                print(f"[worker-tasks] falha vencimento #{row['id']}: {e}", flush=True)
+    except Exception as e:
+        print(f"[worker-tasks] erro geral: {e}", flush=True)
+    finally:
+        try: conn.close()
+        except Exception: pass
+
+
+def _enviar_email_tarefa(row, kind='hoje'):
+    if not BREVO_API_KEY or not TASK_NOTIFY_TO:
+        return
+    label = TASK_TYPES_MAP.get(row['task_type'], row['task_type'])
+    contact_name = row['contact_name'] or row['contact_email']
+    when = row['due_date']
+    when_str = when.strftime('%d/%m/%Y') if hasattr(when, 'strftime') else str(when)
+    if row['due_time']:
+        when_str += f" {row['due_time']}"
+    subj_prefix = '[LEMBRETE] ' if kind == 'lembrete' else '[TAREFA] '
+    subject = f"{subj_prefix}{label} — {contact_name} — {when_str}"
+    phone = row['contact_whatsapp'] or row['contact_phone'] or ''
+    from urllib.parse import quote as _q
+    link_contato = f'{APP_URL}/contatos/{_q(row["contact_email"])}' if APP_URL else ''
+    link_agenda = f'{APP_URL}/tarefas' if APP_URL else ''
+    body = f'''
+    <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:20px">
+      <h2 style="color:#1a3a6b;margin:0 0 12px">{subj_prefix.strip('[] ')} de tarefa</h2>
+      <p style="color:#333;font-size:15px">
+        <strong>Tipo:</strong> {label}<br>
+        <strong>Contato:</strong> {contact_name} &lt;{row['contact_email']}&gt;<br>
+        {f"<strong>Telefone/WhatsApp:</strong> {phone}<br>" if phone else ""}
+        <strong>Data:</strong> {when_str}
+      </p>
+      <div style="background:#f5f5f5;padding:16px;border-radius:8px;margin:16px 0">
+        <div style="color:#666;font-size:12px;margin-bottom:4px">TAREFA</div>
+        <div style="color:#111;font-size:16px;font-weight:600">{row['title']}</div>
+      </div>
+      {f'<p style="margin:20px 0"><a href="{link_contato}" style="background:#1a3a6b;color:#fff;padding:10px 18px;border-radius:6px;text-decoration:none;font-weight:bold">Abrir contato</a>&nbsp;&nbsp;<a href="{link_agenda}" style="color:#1a3a6b;text-decoration:none;font-weight:bold">Ver agenda</a></p>' if APP_URL else ''}
+      <hr style="border:none;border-top:1px solid #eee;margin:24px 0">
+      <p style="color:#999;font-size:12px">ConvertMail — notificação automática de CRM</p>
+    </div>
+    '''
+    configuration = sib_api_v3_sdk.Configuration()
+    configuration.api_key['api-key'] = BREVO_API_KEY
+    api = sib_api_v3_sdk.TransactionalEmailsApi(sib_api_v3_sdk.ApiClient(configuration))
+    email_obj = sib_api_v3_sdk.SendSmtpEmail(
+        to=[{'email': TASK_NOTIFY_TO}],
+        sender={'email': ADMIN_EMAIL, 'name': 'ConvertMail CRM'},
+        subject=subject,
+        html_content=body)
+    api.send_transac_email(email_obj)
+
+
 def _start_scheduler():
     global _scheduler
     if _scheduler is not None and _scheduler.running:
@@ -5676,6 +6194,7 @@ def _start_scheduler():
     _scheduler.add_job(processar_cadencias, 'interval', minutes=30)
     _scheduler.add_job(processar_campanhas_agendadas, 'interval', minutes=5)
     _scheduler.add_job(calcular_scores_inativos, 'interval', hours=24)
+    _scheduler.add_job(notificar_tarefas_agendadas, 'interval', minutes=15)
     _scheduler.start()
     print("APScheduler iniciado.", flush=True)
 
