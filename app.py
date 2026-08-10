@@ -2535,6 +2535,39 @@ def deletar_log_campanha(log_id):
     flash('Registro removido do log.', 'success')
     return redirect(url_for('campanha_detalhe', campaign_id=campaign_id) if campaign_id else url_for('index'))
 
+
+@app.route('/campanha/<int:campaign_id>/deletar', methods=['POST'])
+@login_required
+def deletar_campanha(campaign_id):
+    """Exclui a campanha e todos os logs de envio associados.
+    Aberturas registradas em email_opens são desassociadas (campaign_id=NULL)
+    para preservar o histórico do contato mesmo após a exclusão."""
+    conn = get_db()
+    _check_owner('campaigns', campaign_id, conn)
+    row = conn.execute('SELECT name, status FROM campaigns WHERE id=%s', (campaign_id,)).fetchone()
+    if not row:
+        conn.close()
+        flash('Campanha não encontrada.', 'danger')
+        return redirect(url_for('index'))
+    name = row['name']
+    try:
+        # Aberturas: preserva o registro do contato, apenas desassocia.
+        conn.execute('UPDATE email_opens SET campaign_id=NULL WHERE campaign_id=%s', (campaign_id,))
+        # Logs de envio dessa campanha: apagados junto (não fazem sentido sem a campanha).
+        conn.execute('DELETE FROM campaign_logs WHERE campaign_id=%s', (campaign_id,))
+        # Se essa campanha originou uma campanha "reenviar não-abridores", limpa referência.
+        conn.execute('UPDATE campaigns SET resent_from=NULL WHERE resent_from=%s', (campaign_id,))
+        conn.execute('DELETE FROM campaigns WHERE id=%s', (campaign_id,))
+        conn.commit()
+        # Limpa progresso in-memory se ainda existir
+        campaign_progress.pop(campaign_id, None)
+        flash(f'Campanha "{name}" excluída.', 'success')
+    except Exception as e:
+        conn.rollback()
+        flash(f'Erro ao excluir campanha: {e}', 'danger')
+    conn.close()
+    return redirect(url_for('index'))
+
 @app.route('/api/progresso/<int:campaign_id>')
 def api_progresso(campaign_id):
     prog = campaign_progress.get(campaign_id)
