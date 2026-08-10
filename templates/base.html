@@ -91,6 +91,9 @@
       <a href="{{ url_for('lista_contatos') }}" class="nav-link {% if request.endpoint in ('lista_contatos','contato_perfil','contatos_por_tag') %}active{% endif %}">
         <i class="bi bi-people"></i> Contatos
       </a>
+      <a href="{{ url_for('lista_tarefas') }}" class="nav-link {% if request.endpoint in ('lista_tarefas',) %}active{% endif %}">
+        <i class="bi bi-calendar-check"></i> Tarefas
+      </a>
       <a href="{{ url_for('lista_tags') }}" class="nav-link {% if request.endpoint == 'lista_tags' %}active{% endif %}">
         <i class="bi bi-tags"></i> Tags
       </a>

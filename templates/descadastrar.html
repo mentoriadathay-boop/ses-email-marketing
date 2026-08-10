@@ -3,14 +3,31 @@
 <div class="d-flex justify-content-center align-items-center" style="min-height:60vh">
   <div class="card text-center" style="max-width:480px;width:100%">
     <div class="card-body py-5 px-4">
-      <div class="mb-3" style="font-size:3rem">&#128274;</div>
-      <h4 class="fw-bold mb-2">Descadastro realizado</h4>
-      {% if email %}
-      <p class="text-muted mb-1">O endereco <strong>{{ email }}</strong> foi removido desta sequencia de emails.</p>
+      {% if erro %}
+        <div class="mb-3" style="font-size:3rem">&#9888;</div>
+        <h4 class="fw-bold mb-2">Link inválido</h4>
+        <p class="text-muted mb-1">{{ erro }}</p>
+      {% elif confirmar %}
+        <div class="mb-3" style="font-size:3rem">&#9888;</div>
+        <h4 class="fw-bold mb-2">Confirmar descadastro</h4>
+        <p class="text-muted mb-3">Este link é antigo e não tem verificação. Clique no botão abaixo para confirmar que deseja realmente descadastrar <strong>{{ email }}</strong>.</p>
+        <form method="POST" action="">
+          <input type="hidden" name="email" value="{{ email }}">
+          {% if seq %}<input type="hidden" name="seq" value="{{ seq }}">{% endif %}
+          {% if campaign %}<input type="hidden" name="campaign" value="{{ campaign }}">{% endif %}
+          {% if token %}<input type="hidden" name="t" value="{{ token }}">{% endif %}
+          <button type="submit" class="btn btn-danger">Sim, descadastrar</button>
+        </form>
       {% else %}
-      <p class="text-muted mb-1">Voce foi removido desta sequencia de emails.</p>
+        <div class="mb-3" style="font-size:3rem">&#128274;</div>
+        <h4 class="fw-bold mb-2">Descadastro realizado</h4>
+        {% if email %}
+        <p class="text-muted mb-1">O endereço <strong>{{ email }}</strong> foi removido desta lista de emails.</p>
+        {% else %}
+        <p class="text-muted mb-1">Você foi removido desta lista de emails.</p>
+        {% endif %}
+        <p class="text-muted small">Você não receberá mais mensagens desta cadência ou campanha.</p>
       {% endif %}
-      <p class="text-muted small">Voce nao recebera mais mensagens desta cadencia.</p>
     </div>
   </div>
 </div>

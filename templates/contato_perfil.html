@@ -2,8 +2,8 @@
 {% block content %}
 {% set lbl = score_label(contact.current_score) %}
 
-<div class="d-flex align-items-center mb-4">
-  <a href="{{ url_for('lista_contatos') }}" class="btn btn-sm btn-outline-secondary me-3">
+<div class="d-flex align-items-center mb-4 flex-wrap gap-2">
+  <a href="{{ url_for('lista_contatos') }}" class="btn btn-sm btn-outline-secondary me-2">
     <i class="bi bi-arrow-left"></i>
   </a>
   <div class="flex-fill">
@@ -18,9 +18,17 @@
   {% set wa_num = contact.whatsapp or contact.phone or '' %}
   {% if wa_num %}
   <a href="https://wa.me/{{ wa_num | replace(' ','') | replace('(','') | replace(')','') | replace('-','') | replace('+','') }}"
-     target="_blank" class="btn btn-success btn-sm px-3 me-2">
+     target="_blank" class="btn btn-success btn-sm px-3">
     <i class="bi bi-whatsapp me-1"></i>WhatsApp
   </a>
+  {% endif %}
+  <button type="button" class="btn btn-primary btn-sm px-3" data-bs-toggle="modal" data-bs-target="#modalEnviarEmail">
+    <i class="bi bi-envelope me-1"></i>Enviar email
+  </button>
+  {% if user_sequences %}
+  <button type="button" class="btn btn-outline-primary btn-sm px-3" data-bs-toggle="modal" data-bs-target="#modalIniciarCadencia">
+    <i class="bi bi-arrow-repeat me-1"></i>Iniciar cadência
+  </button>
   {% endif %}
   <span class="badge fw-semibold px-3 py-2 fs-6"
         style="background:{{ lbl[2] }};color:{{ lbl[1] }}">
@@ -29,17 +37,30 @@
 </div>
 
 <div class="row g-4">
-  <!-- Coluna principal: gestao do contato (ampla) -->
   <div class="col-lg-8">
+
+    <!-- OBSERVAÇÕES (permanentes, acima) -->
+    <div class="card mb-4 border-warning" style="border-left:4px solid #f59e0b">
+      <div class="card-body">
+        <h6 class="fw-semibold mb-3"><i class="bi bi-sticky me-2 text-warning"></i>Observações sobre o contato</h6>
+        <form method="POST">
+          <textarea name="notes" class="form-control form-control-sm" rows="3"
+                    placeholder="Notas permanentes: contexto, dor, cargo, decisor, orçamento...">{{ contact.notes or '' }}</textarea>
+          <!-- Todos os outros campos vêm no form abaixo. Este textarea faz parte do mesmo form pai. -->
+        </form>
+      </div>
+    </div>
+
+    <!-- Dados do contato -->
     <div class="card mb-4">
       <div class="card-body">
         <h6 class="fw-semibold mb-3"><i class="bi bi-person-lines-fill me-2 text-primary"></i>Dados do Contato</h6>
         <form method="POST">
+          <input type="hidden" name="notes" value="{{ contact.notes or '' }}" id="hidden-notes">
           <div class="row g-3">
             <div class="col-md-6">
               <label class="form-label small fw-semibold">Nome</label>
-              <input type="text" name="name" class="form-control form-control-sm"
-                     value="{{ contact.name or '' }}">
+              <input type="text" name="name" class="form-control form-control-sm" value="{{ contact.name or '' }}">
             </div>
             <div class="col-md-6">
               <label class="form-label small fw-semibold">Email</label>
@@ -47,23 +68,19 @@
             </div>
             <div class="col-md-4">
               <label class="form-label small fw-semibold">Telefone</label>
-              <input type="text" name="phone" class="form-control form-control-sm"
-                     value="{{ contact.phone or '' }}" placeholder="(11) 99999-9999">
+              <input type="text" name="phone" class="form-control form-control-sm" value="{{ contact.phone or '' }}" placeholder="(11) 99999-9999">
             </div>
             <div class="col-md-4">
               <label class="form-label small fw-semibold"><i class="bi bi-whatsapp text-success me-1"></i>WhatsApp</label>
-              <input type="text" name="whatsapp" class="form-control form-control-sm"
-                     value="{{ contact.whatsapp or '' }}" placeholder="5511999999999">
+              <input type="text" name="whatsapp" class="form-control form-control-sm" value="{{ contact.whatsapp or '' }}" placeholder="5511999999999">
             </div>
             <div class="col-md-4">
               <label class="form-label small fw-semibold">Empresa</label>
-              <input type="text" name="company" class="form-control form-control-sm"
-                     value="{{ contact.company or '' }}">
+              <input type="text" name="company" class="form-control form-control-sm" value="{{ contact.company or '' }}">
             </div>
             <div class="col-md-4">
               <label class="form-label small fw-semibold">Cargo</label>
-              <input type="text" name="position" class="form-control form-control-sm"
-                     value="{{ contact.position or '' }}">
+              <input type="text" name="position" class="form-control form-control-sm" value="{{ contact.position or '' }}">
             </div>
             <div class="col-md-4">
               <label class="form-label small fw-semibold">Status</label>
@@ -75,8 +92,7 @@
             </div>
             <div class="col-md-4">
               <label class="form-label small fw-semibold">Tags</label>
-              <input type="text" name="tags" class="form-control form-control-sm"
-                     value="{{ contact.tags or '' }}" placeholder="B2B, vip">
+              <input type="text" name="tags" class="form-control form-control-sm" value="{{ contact.tags or '' }}" placeholder="B2B, vip">
             </div>
             <div class="col-md-4">
               <label class="form-label small fw-semibold">Produto de Interesse</label>
@@ -108,33 +124,15 @@
             </div>
             <div class="col-md-4">
               <label class="form-label small fw-semibold">Cidade</label>
-              <input type="text" name="city" class="form-control form-control-sm"
-                     value="{{ contact.city or '' }}" placeholder="São Paulo">
+              <input type="text" name="city" class="form-control form-control-sm" value="{{ contact.city or '' }}" placeholder="São Paulo">
             </div>
             <div class="col-md-4">
               <label class="form-label small fw-semibold">Estado</label>
-              <input type="text" name="state" class="form-control form-control-sm"
-                     value="{{ contact.state or '' }}" placeholder="SP">
+              <input type="text" name="state" class="form-control form-control-sm" value="{{ contact.state or '' }}" placeholder="SP">
             </div>
             <div class="col-md-4">
               <label class="form-label small fw-semibold">País</label>
-              <input type="text" name="country" class="form-control form-control-sm"
-                     value="{{ contact.country or '' }}" placeholder="Brasil">
-            </div>
-          </div>
-
-          <hr class="my-3">
-
-          <div class="row g-3">
-            <div class="col-md-6">
-              <label class="form-label small fw-semibold">Observacoes</label>
-              <textarea name="notes" class="form-control form-control-sm" rows="3"
-                        placeholder="Notas internas sobre o contato...">{{ contact.notes or '' }}</textarea>
-            </div>
-            <div class="col-md-6">
-              <label class="form-label small fw-semibold"><i class="bi bi-whatsapp text-success me-1"></i>Notas WhatsApp</label>
-              <textarea name="whatsapp_notes" class="form-control form-control-sm" rows="3"
-                        placeholder="Resumo das conversas pelo WhatsApp...">{{ contact.whatsapp_notes or '' }}</textarea>
+              <input type="text" name="country" class="form-control form-control-sm" value="{{ contact.country or '' }}" placeholder="Brasil">
             </div>
           </div>
 
@@ -144,8 +142,7 @@
           <div class="mb-3">
             <div class="d-flex justify-content-between align-items-center mb-2">
               <label class="form-label small fw-semibold mb-0">Produtos Adquiridos</label>
-              <button type="button" class="btn btn-outline-success btn-sm py-0 px-2"
-                      onclick="adicionarCompra()" style="font-size:.75rem">
+              <button type="button" class="btn btn-outline-success btn-sm py-0 px-2" onclick="adicionarCompra()" style="font-size:.75rem">
                 <i class="bi bi-plus-lg me-1"></i>Adicionar
               </button>
             </div>
@@ -160,8 +157,7 @@
                 </select>
                 <input type="date" name="purchase_date[]" class="form-control form-control-sm" style="width:140px"
                        value="{{ p.purchased_at.strftime('%Y-%m-%d') if p.purchased_at else '' }}">
-                <button type="button" class="btn btn-outline-danger btn-sm py-0 px-2"
-                        onclick="this.closest('.purchase-row').remove()">
+                <button type="button" class="btn btn-outline-danger btn-sm py-0 px-2" onclick="this.closest('.purchase-row').remove()">
                   <i class="bi bi-trash"></i>
                 </button>
               </div>
@@ -173,6 +169,163 @@
             <i class="bi bi-check-lg me-1"></i> Salvar Alteracoes
           </button>
         </form>
+      </div>
+    </div>
+
+    <!-- TAREFAS AGENDADAS -->
+    <div class="card mb-4" id="tasks">
+      <div class="card-body">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+          <h6 class="fw-semibold mb-0"><i class="bi bi-calendar-check me-2 text-success"></i>Tarefas / Follow-up</h6>
+          <span class="badge bg-primary">{{ tasks_pending|length }} pendente(s)</span>
+        </div>
+
+        <form method="POST" action="{{ url_for('adicionar_tarefa', email=contact.email) }}" class="row g-2 mb-3">
+          <div class="col-md-3">
+            <select name="task_type" class="form-select form-select-sm">
+              {% for val, label in TASK_TYPES %}
+              <option value="{{ val }}">{{ label }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="col-md-4">
+            <input type="text" name="title" class="form-control form-control-sm" placeholder="O que fazer..." required>
+          </div>
+          <div class="col-md-2">
+            <input type="date" name="due_date" class="form-control form-control-sm" required>
+          </div>
+          <div class="col-md-1">
+            <input type="time" name="due_time" class="form-control form-control-sm" placeholder="Hora">
+          </div>
+          <div class="col-md-1">
+            <input type="number" name="notify_days_before" class="form-control form-control-sm" min="0" max="30" value="0" title="Lembrete X dias antes">
+          </div>
+          <div class="col-md-1">
+            <button type="submit" class="btn btn-success btn-sm w-100"><i class="bi bi-plus-lg"></i></button>
+          </div>
+          <div class="col-12">
+            <div class="d-flex gap-1 flex-wrap">
+              <button type="button" class="btn btn-outline-secondary btn-sm py-0" onclick="tarefaRapida(3)">+3 dias</button>
+              <button type="button" class="btn btn-outline-secondary btn-sm py-0" onclick="tarefaRapida(7)">+1 semana</button>
+              <button type="button" class="btn btn-outline-secondary btn-sm py-0" onclick="tarefaRapida(15)">+15 dias</button>
+              <button type="button" class="btn btn-outline-secondary btn-sm py-0" onclick="tarefaRapida(30)">+1 mês</button>
+              <small class="text-muted ms-auto">Notificação: <strong>consultoria@asamarketingevendas.com.br</strong></small>
+            </div>
+          </div>
+        </form>
+
+        {% if tasks_pending %}
+        {% for t in tasks_pending %}
+        {% set days_left = (t.due_date - today).days if today is defined else 0 %}
+        <div class="d-flex justify-content-between align-items-start mb-2 pb-2 {% if not loop.last %}border-bottom{% endif %}">
+          <div class="flex-fill">
+            <div class="d-flex align-items-center gap-2 mb-1">
+              <span class="badge" style="background:#dbeafe;color:#1e40af;font-size:.65rem">{{ TASK_TYPES_MAP.get(t.task_type, t.task_type) }}</span>
+              <span class="text-muted small">
+                <i class="bi bi-calendar3 me-1"></i>{{ t.due_date.strftime('%d/%m/%Y') }}{% if t.due_time %} {{ t.due_time.strftime('%H:%M') if t.due_time.strftime is defined else t.due_time }}{% endif %}
+              </span>
+              {% if t.notify_days_before and t.notify_days_before > 0 %}
+              <span class="text-muted" style="font-size:.7rem"><i class="bi bi-bell me-1"></i>lembrete {{ t.notify_days_before }}d antes</span>
+              {% endif %}
+            </div>
+            <div class="fw-semibold small">{{ t.title }}</div>
+          </div>
+          <div class="d-flex gap-1">
+            <form method="POST" action="{{ url_for('concluir_tarefa', task_id=t.id) }}" class="d-inline">
+              <button type="submit" class="btn btn-sm btn-outline-success py-0 px-2" title="Marcar como concluída">
+                <i class="bi bi-check-lg"></i>
+              </button>
+            </form>
+            <form method="POST" action="{{ url_for('cancelar_tarefa', task_id=t.id) }}" class="d-inline"
+                  onsubmit="return confirm('Cancelar tarefa?')">
+              <button type="submit" class="btn btn-sm btn-outline-danger py-0 px-2" title="Cancelar">
+                <i class="bi bi-x-lg"></i>
+              </button>
+            </form>
+          </div>
+        </div>
+        {% endfor %}
+        {% else %}
+        <p class="text-muted small mb-0 text-center py-2">Nenhuma tarefa agendada.</p>
+        {% endif %}
+
+        {% if tasks_done %}
+        <details class="mt-3">
+          <summary class="text-muted small" style="cursor:pointer">Histórico de tarefas ({{ tasks_done|length }})</summary>
+          <div class="mt-2">
+            {% for t in tasks_done %}
+            <div class="d-flex justify-content-between align-items-center mb-1 small text-muted">
+              <span>
+                {% if t.status == 'done' %}
+                <i class="bi bi-check-circle text-success me-1"></i>
+                {% else %}
+                <i class="bi bi-x-circle text-danger me-1"></i>
+                {% endif %}
+                {{ t.title }}
+              </span>
+              <span>{{ (t.completed_at or t.due_date).strftime('%d/%m/%Y') }}</span>
+            </div>
+            {% endfor %}
+          </div>
+        </details>
+        {% endif %}
+      </div>
+    </div>
+
+    <!-- CONVERSAS DATADAS -->
+    <div class="card mb-4" id="conversations">
+      <div class="card-body">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+          <h6 class="fw-semibold mb-0"><i class="bi bi-chat-dots me-2 text-info"></i>Histórico de conversas</h6>
+          <span class="badge bg-info">{{ conversations|length }}</span>
+        </div>
+
+        <form method="POST" action="{{ url_for('adicionar_conversa', email=contact.email) }}" class="mb-3 border-bottom pb-3">
+          <div class="row g-2">
+            <div class="col-md-3">
+              <input type="date" name="conversation_date" class="form-control form-control-sm" value="{{ today.strftime('%Y-%m-%d') if today else '' }}" required>
+            </div>
+            <div class="col-md-3">
+              <select name="channel" class="form-select form-select-sm">
+                {% for val, label in CONVERSATION_CHANNELS %}
+                <option value="{{ val }}">{{ label }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="col-md-6">
+              <button type="submit" class="btn btn-sm btn-info text-white w-100">
+                <i class="bi bi-plus-lg me-1"></i>Registrar nova conversa
+              </button>
+            </div>
+            <div class="col-12">
+              <textarea name="notes" class="form-control form-control-sm" rows="2" placeholder="Resumo da conversa..." required></textarea>
+            </div>
+          </div>
+        </form>
+
+        {% if conversations %}
+        {% for c in conversations %}
+        <div class="mb-3 pb-2 {% if not loop.last %}border-bottom{% endif %}">
+          <div class="d-flex justify-content-between align-items-center mb-1">
+            <div>
+              <span class="badge" style="background:#dcfce7;color:#166534;font-size:.65rem">
+                <i class="bi bi-{{ 'whatsapp' if c.channel == 'whatsapp' else 'chat' }} me-1"></i>{{ c.channel|capitalize }}
+              </span>
+              <strong class="ms-2 small">{{ c.conversation_date.strftime('%d/%m/%Y') if c.conversation_date.strftime is defined else c.conversation_date }}</strong>
+            </div>
+            <form method="POST" action="{{ url_for('remover_conversa', email=contact.email, conv_id=c.id) }}" class="d-inline"
+                  onsubmit="return confirm('Remover esta conversa?')">
+              <button type="submit" class="btn btn-sm btn-outline-danger py-0 px-2" style="font-size:.7rem">
+                <i class="bi bi-trash"></i>
+              </button>
+            </form>
+          </div>
+          <div class="small text-body" style="white-space:pre-wrap">{{ c.notes }}</div>
+        </div>
+        {% endfor %}
+        {% else %}
+        <p class="text-muted small mb-0 text-center py-2">Nenhuma conversa registrada.</p>
+        {% endif %}
       </div>
     </div>
 
@@ -191,11 +344,8 @@
               </span>
             </div>
             <form method="POST" action="{{ url_for('contato_remove_mailing', email=contact.email, mailing_id=m.id) }}"
-                  class="d-inline"
-                  onsubmit="return confirm('Remover contato do mailing {{ m.name }}?')">
-              <button type="submit" class="btn btn-outline-danger btn-sm py-0 px-2" title="Remover do mailing">
-                <i class="bi bi-x-lg"></i>
-              </button>
+                  class="d-inline" onsubmit="return confirm('Remover do mailing {{ m.name }}?')">
+              <button type="submit" class="btn btn-outline-danger btn-sm py-0 px-2"><i class="bi bi-x-lg"></i></button>
             </form>
           </div>
           {% endfor %}
@@ -231,7 +381,6 @@
     </div>
 
     <div class="row g-3">
-      <!-- Smart send time -->
       {% if best_hour is not none %}
       <div class="col-md-4">
         <div class="card h-100">
@@ -244,7 +393,6 @@
       </div>
       {% endif %}
 
-      <!-- Registrar compra -->
       <div class="col-md-{% if best_hour is not none %}4{% else %}6{% endif %}">
         <div class="card h-100">
           <div class="card-body">
@@ -258,7 +406,6 @@
         </div>
       </div>
 
-      <!-- Cadências -->
       {% if cadencias %}
       <div class="col-md-4">
         <div class="card h-100">
@@ -288,7 +435,7 @@
     </div>
   </div>
 
-  <!-- Coluna direita: timeline compacta -->
+  <!-- Timeline compacta -->
   <div class="col-lg-4">
     <div class="card" style="position:sticky;top:80px">
       <div class="card-header bg-white border-0 pt-3 pb-0 px-3">
@@ -309,6 +456,14 @@
               <span class="badge rounded-pill" style="background:#EDE0F2;color:#5B2A6E;font-size:.6rem"><i class="bi bi-x-lg"></i></span>
             {% elif act.type == 'contact_updated' %}
               <span class="badge rounded-pill" style="background:#f3f4f6;color:#6b7280;font-size:.6rem"><i class="bi bi-pencil"></i></span>
+            {% elif act.type == 'conversation_logged' %}
+              <span class="badge rounded-pill" style="background:#cffafe;color:#155e75;font-size:.6rem"><i class="bi bi-chat-dots"></i></span>
+            {% elif act.type == 'task_created' %}
+              <span class="badge rounded-pill" style="background:#fef3c7;color:#92400e;font-size:.6rem"><i class="bi bi-calendar-plus"></i></span>
+            {% elif act.type == 'task_completed' %}
+              <span class="badge rounded-pill" style="background:#d1fae5;color:#065f46;font-size:.6rem"><i class="bi bi-check-lg"></i></span>
+            {% elif act.type == 'sequence_started' %}
+              <span class="badge rounded-pill" style="background:#e0e7ff;color:#3730a3;font-size:.6rem"><i class="bi bi-arrow-repeat"></i></span>
             {% else %}
               <span class="badge rounded-pill bg-secondary" style="font-size:.6rem"><i class="bi bi-dot"></i></span>
             {% endif %}
@@ -320,6 +475,10 @@
               {% elif act.type == 'link_clicked' %}Clicou
               {% elif act.type == 'unsubscribed' %}Descadastro
               {% elif act.type == 'contact_updated' %}Atualizado
+              {% elif act.type == 'conversation_logged' %}Conversa
+              {% elif act.type == 'task_created' %}Tarefa criada
+              {% elif act.type == 'task_completed' %}Tarefa concluída
+              {% elif act.type == 'sequence_started' %}Cadência iniciada
               {% else %}{{ act.type }}{% endif %}
             </div>
             {% if act.description %}
@@ -339,6 +498,82 @@
     </div>
   </div>
 </div>
+
+<!-- MODAL: Enviar email direto -->
+<div class="modal fade" id="modalEnviarEmail" tabindex="-1">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <form method="POST" action="{{ url_for('enviar_email_contato', email=contact.email) }}">
+        <div class="modal-header">
+          <h5 class="modal-title"><i class="bi bi-envelope me-2"></i>Enviar email para {{ contact.name or contact.email }}</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <div class="mb-2">
+            <label class="form-label small fw-semibold">De (remetente)</label>
+            <input type="email" name="sender" class="form-control form-control-sm" placeholder="seu@email.com" required>
+          </div>
+          {% if user_templates %}
+          <div class="mb-2">
+            <label class="form-label small fw-semibold">Template (opcional)</label>
+            <select class="form-select form-select-sm" onchange="aplicarTemplate(this)">
+              <option value="">— Escrever do zero —</option>
+              {% for tpl in user_templates %}
+              <option value="{{ tpl.id }}"
+                      data-subject="{{ tpl.subject|e }}"
+                      data-body="{{ tpl.body_html|e }}">{{ tpl.name }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          {% endif %}
+          <div class="mb-2">
+            <label class="form-label small fw-semibold">Assunto</label>
+            <input type="text" name="subject" id="email-subject" class="form-control form-control-sm" required>
+          </div>
+          <div class="mb-2">
+            <label class="form-label small fw-semibold">Corpo (HTML permitido — use {nome} para personalizar)</label>
+            <textarea name="body_html" id="email-body" class="form-control" rows="10" required></textarea>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+          <button type="submit" class="btn btn-sm btn-primary"><i class="bi bi-send me-1"></i>Enviar</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: Iniciar cadência -->
+{% if user_sequences %}
+<div class="modal fade" id="modalIniciarCadencia" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <form method="POST" action="{{ url_for('iniciar_cadencia_contato', email=contact.email) }}">
+        <div class="modal-header">
+          <h5 class="modal-title"><i class="bi bi-arrow-repeat me-2"></i>Iniciar cadência</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <p class="small text-muted">Este contato será adicionado ao passo 1 da cadência escolhida.</p>
+          <label class="form-label small fw-semibold">Cadência</label>
+          <select name="sequence_id" class="form-select form-select-sm" required>
+            <option value="">— Selecione —</option>
+            {% for s in user_sequences %}
+            <option value="{{ s.id }}">{{ s.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+          <button type="submit" class="btn btn-sm btn-primary"><i class="bi bi-arrow-repeat me-1"></i>Iniciar</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endif %}
+
 {% endblock %}
 
 {% block scripts %}
@@ -360,5 +595,35 @@ function adicionarCompra() {
     </button>`;
   document.getElementById('purchases-container').appendChild(row);
 }
+
+function tarefaRapida(dias) {
+  const form = document.querySelector('#tasks form');
+  if (!form) return;
+  const d = new Date();
+  d.setDate(d.getDate() + dias);
+  form.querySelector('input[name="due_date"]').value = d.toISOString().split('T')[0];
+  const title = form.querySelector('input[name="title"]');
+  if (!title.value) title.value = 'Retornar contato';
+  title.focus();
+}
+
+function aplicarTemplate(sel) {
+  const opt = sel.options[sel.selectedIndex];
+  if (!opt.value) return;
+  document.getElementById('email-subject').value = opt.dataset.subject || '';
+  document.getElementById('email-body').value = opt.dataset.body || '';
+}
+
+// Sincroniza a textarea de observações (form separado) com o hidden do form principal
+(function(){
+  const noteArea = document.querySelector('textarea[name="notes"]');
+  const noteHidden = document.getElementById('hidden-notes');
+  if (noteArea && noteHidden) {
+    noteArea.addEventListener('input', () => noteHidden.value = noteArea.value);
+    // No submit do form principal, também garantir sincronização
+    const mainForm = noteHidden.closest('form');
+    if (mainForm) mainForm.addEventListener('submit', () => noteHidden.value = noteArea.value);
+  }
+})();
 </script>
 {% endblock %}

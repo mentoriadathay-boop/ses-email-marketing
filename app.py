@@ -47,8 +47,67 @@ except ImportError:
 EMAIL_RE = re.compile(r'\b[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}\b')
 
 app = Flask(__name__)
-app.secret_key = os.environ.get('SECRET_KEY', os.urandom(24))
+_secret = os.environ.get('SECRET_KEY', '').strip()
+if not _secret:
+    if os.environ.get('FLASK_ENV') == 'development' or os.environ.get('DATABASE_URL', '').startswith('sqlite'):
+        _secret = 'dev-only-' + os.urandom(24).hex()
+        print('[SECURITY] SECRET_KEY não definida — usando chave dev temporária. Defina SECRET_KEY em produção.')
+    else:
+        raise RuntimeError(
+            'SECRET_KEY é obrigatória em produção. Gere uma com '
+            "python -c \"import secrets; print(secrets.token_hex(32))\" "
+            'e defina no Railway.')
+app.secret_key = _secret
 app.permanent_session_lifetime = timedelta(days=30)
+app.config.update(
+    SESSION_COOKIE_SECURE=(os.environ.get('FLASK_ENV') != 'development'),
+    SESSION_COOKIE_HTTPONLY=True,
+    SESSION_COOKIE_SAMESITE='Lax',
+)
+
+# ── Security: rate limiting ─────────────────────────────────────────────────
+try:
+    from flask_limiter import Limiter
+    from flask_limiter.util import get_remote_address
+    limiter = Limiter(
+        get_remote_address,
+        app=app,
+        default_limits=[],  # opt-in por endpoint
+        storage_uri='memory://',
+    )
+    _LIMITER_OK = True
+except ImportError:
+    _LIMITER_OK = False
+    def _noop_decorator(*a, **kw):
+        def _wrap(f): return f
+        return _wrap
+    class _NoopLimiter:
+        def limit(self, *a, **kw): return _noop_decorator()
+    limiter = _NoopLimiter()
+
+# ── Security: HTTPS + security headers via Talisman ────────────────────────
+try:
+    from flask_talisman import Talisman
+    if os.environ.get('FLASK_ENV') != 'development':
+        Talisman(
+            app,
+            force_https=True,
+            strict_transport_security=True,
+            strict_transport_security_max_age=31536000,
+            session_cookie_secure=True,
+            content_security_policy={
+                'default-src': "'self'",
+                'img-src': ["'self'", 'data:', 'https:', 'blob:'],
+                'style-src': ["'self'", "'unsafe-inline'", 'https:'],
+                'script-src': ["'self'", "'unsafe-inline'", 'https:'],
+                'font-src': ["'self'", 'data:', 'https:'],
+                'connect-src': ["'self'", 'https:'],
+                'frame-src': ["'self'", 'https:'],
+            },
+            content_security_policy_nonce_in=[],
+        )
+except ImportError:
+    pass
 
 UPLOAD_FOLDER = os.path.join(os.path.dirname(__file__), 'uploads')
 IMAGES_FOLDER = os.path.join(UPLOAD_FOLDER, 'imagens')
@@ -92,10 +151,12 @@ def _erro_geral(e):
         if request.path.startswith('/ia/') or request.path.startswith('/api/') or request.path.startswith('/email/'):
             return jsonify({'erro': f'Erro {e.code}: {e.description}'}), e.code
         return e
-    app.logger.exception('Erro não tratado em %s', request.path)
+    err_id = uuid.uuid4().hex[:8]
+    app.logger.exception('Erro %s em %s', err_id, request.path)
+    msg = (f'Erro interno (ref {err_id}). Tente novamente ou contate o suporte.')
     if request.path.startswith('/ia/') or request.path.startswith('/api/') or request.path.startswith('/email/'):
-        return jsonify({'erro': f'Erro interno: {e}'}), 500
-    flash(f'Erro interno: {e}', 'danger')
+        return jsonify({'erro': msg, 'ref': err_id}), 500
+    flash(msg, 'danger')
     return redirect(request.referrer or url_for('index'))
 
 PIXEL_GIF = (
@@ -297,6 +358,30 @@ def init_db():
             name TEXT NOT NULL UNIQUE,
             created_at TIMESTAMP DEFAULT NOW()
         )''',
+        '''CREATE TABLE IF NOT EXISTS contact_conversations (
+            id SERIAL PRIMARY KEY,
+            user_id INTEGER,
+            contact_email TEXT NOT NULL,
+            conversation_date DATE NOT NULL,
+            channel TEXT DEFAULT 'whatsapp',
+            notes TEXT NOT NULL,
+            created_at TIMESTAMP DEFAULT NOW()
+        )''',
+        '''CREATE TABLE IF NOT EXISTS contact_tasks (
+            id SERIAL PRIMARY KEY,
+            user_id INTEGER,
+            contact_email TEXT NOT NULL,
+            task_type TEXT NOT NULL DEFAULT 'retornar_contato',
+            title TEXT NOT NULL,
+            due_date DATE NOT NULL,
+            due_time TIME,
+            status TEXT DEFAULT 'pending',
+            notify_days_before INTEGER DEFAULT 0,
+            notified_at TIMESTAMP,
+            reminder_notified_at TIMESTAMP,
+            completed_at TIMESTAMP,
+            created_at TIMESTAMP DEFAULT NOW()
+        )''',
     ]
     for sql in tables:
         conn.execute(sql)
@@ -340,11 +425,119 @@ def init_db():
         "ALTER TABLE contacts ADD COLUMN city TEXT",
         "ALTER TABLE contacts ADD COLUMN state TEXT",
         "ALTER TABLE contacts ADD COLUMN country TEXT",
+        # Multi-tenancy: cada tabela ganha user_id (nullable inicialmente para
+        # não quebrar dados existentes; backfill logo abaixo).
+        "ALTER TABLE campaigns ADD COLUMN user_id INTEGER",
+        "ALTER TABLE sequences ADD COLUMN user_id INTEGER",
+        "ALTER TABLE mailings ADD COLUMN user_id INTEGER",
+        "ALTER TABLE contacts ADD COLUMN user_id INTEGER",
+        "ALTER TABLE email_accounts ADD COLUMN user_id INTEGER",
+        "ALTER TABLE brand_kits ADD COLUMN user_id INTEGER",
+        "ALTER TABLE email_templates ADD COLUMN user_id INTEGER",
+        "ALTER TABLE signature ADD COLUMN user_id INTEGER",
+        "ALTER TABLE capture_forms ADD COLUMN user_id INTEGER",
+        "ALTER TABLE uploaded_images ADD COLUMN user_id INTEGER",
+        "ALTER TABLE warmup_plans ADD COLUMN user_id INTEGER",
+        "ALTER TABLE nichos ADD COLUMN user_id INTEGER",
+        "ALTER TABLE contacts ADD COLUMN last_contact_at TIMESTAMP",
+        "ALTER TABLE contacts ADD COLUMN next_action_date DATE",
     ]:
         try:
             conn.execute(f"DO $$ BEGIN {col_sql}; EXCEPTION WHEN duplicate_column THEN NULL; END $$")
         except Exception:
             conn.rollback()
+
+    # Multi-tenancy: contacts.email era UNIQUE globalmente — impede dois users
+    # de ter o mesmo email. Troca para UNIQUE(user_id, email).
+    try:
+        conn.execute("ALTER TABLE contacts DROP CONSTRAINT IF EXISTS contacts_email_key")
+        conn.commit()
+    except Exception:
+        conn.rollback()
+    try:
+        conn.execute(
+            "CREATE UNIQUE INDEX IF NOT EXISTS uq_contacts_user_email ON contacts(user_id, email)"
+        )
+        conn.commit()
+    except Exception:
+        conn.rollback()
+
+    # Índices para performance (fora do DO $$ pois CREATE INDEX não é permitido lá)
+    for idx_sql in [
+        "CREATE INDEX IF NOT EXISTS idx_campaigns_user ON campaigns(user_id)",
+        "CREATE INDEX IF NOT EXISTS idx_sequences_user ON sequences(user_id)",
+        "CREATE INDEX IF NOT EXISTS idx_mailings_user ON mailings(user_id)",
+        "CREATE INDEX IF NOT EXISTS idx_contacts_user ON contacts(user_id)",
+        "CREATE INDEX IF NOT EXISTS idx_email_accounts_user ON email_accounts(user_id)",
+        "CREATE INDEX IF NOT EXISTS idx_brand_kits_user ON brand_kits(user_id)",
+        "CREATE INDEX IF NOT EXISTS idx_contacts_user_updated ON contacts(user_id, updated_at DESC)",
+        "CREATE INDEX IF NOT EXISTS idx_contacts_user_next_action ON contacts(user_id, next_action_date)",
+        "CREATE INDEX IF NOT EXISTS idx_conversations_contact ON contact_conversations(contact_email, conversation_date DESC)",
+        "CREATE INDEX IF NOT EXISTS idx_conversations_user ON contact_conversations(user_id)",
+        "CREATE INDEX IF NOT EXISTS idx_tasks_user_status ON contact_tasks(user_id, status, due_date)",
+        "CREATE INDEX IF NOT EXISTS idx_tasks_contact ON contact_tasks(contact_email, status)",
+        "CREATE INDEX IF NOT EXISTS idx_tasks_notifier ON contact_tasks(status, due_date) WHERE status='pending'",
+    ]:
+        try:
+            conn.execute(idx_sql)
+            conn.commit()
+        except Exception:
+            conn.rollback()
+
+    # Backfill: dados legados sem user_id vão para o admin (primeiro criado)
+    try:
+        admin = conn.execute(
+            "SELECT id FROM users WHERE role='admin' ORDER BY id LIMIT 1"
+        ).fetchone()
+        if admin:
+            admin_id = admin['id']
+            for backfill_sql in [
+                "UPDATE campaigns SET user_id=%s WHERE user_id IS NULL",
+                "UPDATE sequences SET user_id=%s WHERE user_id IS NULL",
+                "UPDATE mailings SET user_id=%s WHERE user_id IS NULL",
+                "UPDATE contacts SET user_id=%s WHERE user_id IS NULL",
+                "UPDATE email_accounts SET user_id=%s WHERE user_id IS NULL",
+                "UPDATE brand_kits SET user_id=%s WHERE user_id IS NULL",
+                "UPDATE email_templates SET user_id=%s WHERE user_id IS NULL",
+                "UPDATE signature SET user_id=%s WHERE user_id IS NULL",
+                "UPDATE capture_forms SET user_id=%s WHERE user_id IS NULL",
+                "UPDATE uploaded_images SET user_id=%s WHERE user_id IS NULL",
+                "UPDATE warmup_plans SET user_id=%s WHERE user_id IS NULL",
+                "UPDATE nichos SET user_id=%s WHERE user_id IS NULL",
+            ]:
+                try:
+                    conn.execute(backfill_sql, (admin_id,))
+                    conn.commit()
+                except Exception:
+                    conn.rollback()
+    except Exception:
+        conn.rollback()
+
+    # Backfill único: migra whatsapp_notes legado para uma conversa datada,
+    # depois limpa o campo para evitar duplicação.
+    try:
+        legacy = conn.execute(
+            "SELECT email, user_id, whatsapp_notes, updated_at, created_at "
+            "FROM contacts WHERE whatsapp_notes IS NOT NULL AND whatsapp_notes <> ''"
+        ).fetchall()
+        for row in legacy:
+            when = row['updated_at'] or row['created_at'] or datetime.now()
+            already = conn.execute(
+                "SELECT 1 FROM contact_conversations WHERE contact_email=%s LIMIT 1",
+                (row['email'],)
+            ).fetchone()
+            if already:
+                continue
+            conn.execute(
+                "INSERT INTO contact_conversations (user_id, contact_email, conversation_date, channel, notes) "
+                "VALUES (%s, %s, %s, %s, %s)",
+                (row['user_id'], row['email'],
+                 when.date() if hasattr(when, 'date') else when,
+                 'whatsapp', row['whatsapp_notes']))
+            conn.execute("UPDATE contacts SET whatsapp_notes=NULL WHERE email=%s", (row['email'],))
+        conn.commit()
+    except Exception:
+        conn.rollback()
 
     conn.execute('''CREATE TABLE IF NOT EXISTS notifications (
         id SERIAL PRIMARY KEY,
@@ -449,6 +642,47 @@ def get_current_user():
     user = conn.execute('SELECT * FROM users WHERE id=%s', (session['user_id'],)).fetchone()
     conn.close()
     return user
+
+
+def _uid():
+    """Current user's id. Raises if session is missing — rotas de dados
+    devem sempre estar atrás de @login_required, então isto é fail-fast."""
+    uid = session.get('user_id')
+    if uid is None:
+        from werkzeug.exceptions import Unauthorized
+        raise Unauthorized('Sessão expirada. Faça login novamente.')
+    return uid
+
+
+def _is_admin():
+    return session.get('user_role') == 'admin'
+
+
+def _check_owner(table, record_id, conn=None):
+    """Aborta com 404 se o registro não pertence ao usuário atual.
+    Retorna a linha se o acesso for permitido. Fecha nada — quem chama gerencia conn.
+    Admin passa por padrão (útil para suporte); troque para False se quiser
+    isolamento estrito também para admin."""
+    if record_id is None:
+        return None
+    close_after = False
+    if conn is None:
+        conn = get_db()
+        close_after = True
+    row = conn.execute(f'SELECT * FROM {table} WHERE id=%s', (record_id,)).fetchone()
+    if close_after:
+        conn.close()
+    if not row:
+        from werkzeug.exceptions import NotFound
+        raise NotFound(f'{table} não encontrado.')
+    owner = row['user_id'] if 'user_id' in row.keys() else None
+    if owner is not None and owner != _uid() and not _is_admin():
+        # Não vaza existência do recurso — retorna 404, não 403
+        app.logger.warning('IDOR bloqueado: user %s tentou acessar %s#%s (owner=%s)',
+                           _uid(), table, record_id, owner)
+        from werkzeug.exceptions import NotFound
+        raise NotFound(f'{table} não encontrado.')
+    return row
 
 def _generate_password(length=10):
     chars = string.ascii_letters + string.digits
@@ -693,6 +927,90 @@ def get_sender_name():
         return (row['sender_name'] or 'ConvertMail') if row else 'ConvertMail'
     except Exception:
         return 'ConvertMail'
+
+# ── Security: encryption for stored credentials (SMTP/IMAP) ─────────────────
+_ENC_PREFIX = 'enc:v1:'
+_fernet_cached = None
+
+def _get_fernet():
+    """Fernet instance derived from ENCRYPTION_KEY (or SECRET_KEY as fallback).
+    Returns None if cryptography not installed — caller must gracefully degrade."""
+    global _fernet_cached
+    if _fernet_cached is not None:
+        return _fernet_cached
+    try:
+        from cryptography.fernet import Fernet
+        import base64 as _b64
+        raw = os.environ.get('ENCRYPTION_KEY', '').strip()
+        if raw:
+            key = raw.encode('utf-8') if isinstance(raw, str) else raw
+            # Aceita chave Fernet direta (44 chars b64) ou qualquer string (deriva)
+            if len(key) != 44:
+                key = _b64.urlsafe_b64encode(hashlib.sha256(key).digest())
+        else:
+            # Deriva de SECRET_KEY. Não é ideal (mesma chave para tudo), mas
+            # protege contra vazamento de dump de banco sem env vars.
+            seed = (app.secret_key if isinstance(app.secret_key, bytes)
+                    else app.secret_key.encode('utf-8')) + b'|email-account-password|v1'
+            key = _b64.urlsafe_b64encode(hashlib.sha256(seed).digest())
+        _fernet_cached = Fernet(key)
+        return _fernet_cached
+    except ImportError:
+        app.logger.warning('cryptography não instalada — senhas de email ficarão em plaintext')
+        return None
+
+
+def _encrypt_password(plain):
+    if not plain:
+        return plain
+    f = _get_fernet()
+    if not f:
+        return plain
+    token = f.encrypt(plain.encode('utf-8')).decode('utf-8')
+    return _ENC_PREFIX + token
+
+
+def _decrypt_password(stored):
+    if not stored:
+        return stored
+    if not stored.startswith(_ENC_PREFIX):
+        return stored  # senha legada em plaintext — funciona, mas será re-criptografada no próximo save
+    f = _get_fernet()
+    if not f:
+        return ''
+    try:
+        return f.decrypt(stored[len(_ENC_PREFIX):].encode('utf-8')).decode('utf-8')
+    except Exception:
+        app.logger.exception('Falha ao descriptografar senha (chave errada?)')
+        return ''
+
+
+def _acc_password(acc):
+    """Extract IMAP/SMTP password from a Row, decrypting if needed."""
+    if not acc:
+        return ''
+    return _decrypt_password(acc['password'])
+
+
+def _unsub_token(email, seq_id=None, campaign_id=None):
+    """HMAC token to prevent third parties from unsubscribing arbitrary emails.
+    Uses SECRET_KEY as the signing key — attacker cannot forge without it."""
+    parts = [(email or '').lower().strip(),
+             str(seq_id or ''), str(campaign_id or '')]
+    msg = '|'.join(parts).encode('utf-8')
+    key = app.secret_key if isinstance(app.secret_key, bytes) else app.secret_key.encode('utf-8')
+    return hmac.new(key, msg, hashlib.sha256).hexdigest()[:32]
+
+
+def _unsub_url(email, seq_id=None, campaign_id=None):
+    q = f'email={quote(email)}'
+    if seq_id:
+        q += f'&seq={seq_id}'
+    if campaign_id:
+        q += f'&campaign={campaign_id}'
+    q += f'&t={_unsub_token(email, seq_id, campaign_id)}'
+    return f'{APP_URL}/descadastrar?{q}'
+
 
 def _absolutize_urls(html):
     """Convert relative URLs in src/href to absolute using APP_URL, so email
@@ -939,7 +1257,7 @@ def run_campaign(campaign_id, contacts, sender, subject, body_html, sequence_id=
         upsert_contact(email, name, contact.get('tags', ''), conn)
 
         pixel_url = f"{APP_URL}/track/open?email={quote(email)}&campaign={campaign_id}"
-        unsub_url = f"{APP_URL}/descadastrar?email={quote(email)}"
+        unsub_url = _unsub_url(email, campaign_id=campaign_id)
         print(f"[CAMPAIGN] Pixel URL: {pixel_url[:80]}...", flush=True)
         body_with_tracking = (body_html
             + f'<img src="{pixel_url}" width="1" height="1" style="display:none;border:0" />'
@@ -1043,7 +1361,7 @@ def processar_cadencias():
                 use_body = step['body_html']
 
             pixel_url = f"{APP_URL}/track/open?email={quote(email)}&seq={seq_id}&step={step_num}"
-            unsub_url = f"{APP_URL}/descadastrar?email={quote(email)}&seq={seq_id}"
+            unsub_url = _unsub_url(email, seq_id=seq_id)
             body = (use_body
                     + f'<img src="{pixel_url}" width="1" height="1" style="display:none;border:0" />'
                     + f'<div style="text-align:center;margin-top:24px;font-size:11px;color:#aaa"><a href="{unsub_url}" style="color:#aaa">Descadastrar</a></div>')
@@ -1215,6 +1533,7 @@ def landing():
     return render_template('landing.html')
 
 @app.route('/login', methods=['GET', 'POST'])
+@limiter.limit('10 per minute; 40 per hour', methods=['POST'])
 def login():
     if 'user_id' in session:
         return redirect(url_for('index'))
@@ -1288,6 +1607,7 @@ def alterar_senha():
     return render_template('alterar_senha.html')
 
 @app.route('/esqueci-senha', methods=['GET', 'POST'])
+@limiter.limit('5 per minute; 20 per hour', methods=['POST'])
 def esqueci_senha():
     if request.method == 'POST':
         email = request.form.get('email', '').strip().lower()
@@ -1338,13 +1658,18 @@ def esqueci_senha():
 # ── Webhook Hotmart ──────────────────────────────────────────────────────────
 
 @app.route('/webhook/hotmart', methods=['POST'])
+@limiter.limit('60 per minute')
 def webhook_hotmart():
     data = request.get_json(force=True, silent=True)
     if not data:
         return jsonify({'error': 'no data'}), 400
 
     hottok = request.headers.get('X-Hotmart-Hottok', '')
-    if HOTMART_TOKEN and hottok != HOTMART_TOKEN:
+    if not HOTMART_TOKEN:
+        app.logger.warning('Webhook Hotmart chamado mas HOTMART_TOKEN não configurado — rejeitando por segurança')
+        return jsonify({'error': 'webhook not configured'}), 503
+    if not hmac.compare_digest(hottok, HOTMART_TOKEN):
+        app.logger.warning('Webhook Hotmart com token inválido de %s', request.remote_addr)
         return jsonify({'error': 'invalid token'}), 403
 
     event = data.get('event', '')
@@ -1487,24 +1812,45 @@ def admin_deletar_usuario(user_id):
 # ── Rotas de campanhas ────────────────────────────────────────────────────────
 
 @app.route('/dashboard')
+@login_required
 def index():
+    uid = _uid()
     conn = get_db()
-    campaigns = conn.execute("SELECT * FROM campaigns ORDER BY created_at DESC LIMIT 20").fetchall()
-    total_contacts = conn.execute('SELECT COUNT(*) as n FROM contacts').fetchone()['n']
+    campaigns = conn.execute(
+        "SELECT * FROM campaigns WHERE user_id=%s ORDER BY created_at DESC LIMIT 20", (uid,)
+    ).fetchall()
+    total_contacts = conn.execute('SELECT COUNT(*) as n FROM contacts WHERE user_id=%s', (uid,)).fetchone()['n']
     blacklist_count = conn.execute('SELECT COUNT(*) as n FROM blacklist').fetchone()['n']
-    hot_leads = conn.execute('SELECT COUNT(*) as n FROM contact_scores WHERE score > 50').fetchone()['n']
-    sent_cadencias = conn.execute("SELECT COUNT(*) as n FROM sequence_logs WHERE status='sent'").fetchone()['n']
-    sent_campanhas = conn.execute("SELECT COALESCE(SUM(sent),0) as n FROM campaigns").fetchone()['n']
+    hot_leads = conn.execute(
+        'SELECT COUNT(*) as n FROM contact_scores cs '
+        'JOIN contacts c ON LOWER(c.email)=LOWER(cs.email) '
+        'WHERE cs.score > 50 AND c.user_id=%s', (uid,)
+    ).fetchone()['n']
+    sent_cadencias = conn.execute(
+        "SELECT COUNT(*) as n FROM sequence_logs sl "
+        "JOIN sequences s ON s.id=sl.sequence_id "
+        "WHERE sl.status='sent' AND s.user_id=%s", (uid,)
+    ).fetchone()['n']
+    sent_campanhas = conn.execute(
+        "SELECT COALESCE(SUM(sent),0) as n FROM campaigns WHERE user_id=%s", (uid,)
+    ).fetchone()['n']
     sent_total = sent_cadencias + sent_campanhas
-    opens_total = conn.execute('SELECT COUNT(DISTINCT contact_email) as n FROM email_opens').fetchone()['n']
+    opens_total = conn.execute(
+        'SELECT COUNT(DISTINCT eo.contact_email) as n FROM email_opens eo '
+        'JOIN campaigns c ON c.id=eo.campaign_id '
+        'WHERE c.user_id=%s', (uid,)
+    ).fetchone()['n']
     open_rate = round(opens_total / sent_total * 100, 1) if sent_total > 0 else 0
     now = datetime.now()
     month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
     sent_campanhas_mes = conn.execute(
-        "SELECT COALESCE(SUM(sent),0) as n FROM campaigns WHERE created_at >= %s", (month_start,)
+        "SELECT COALESCE(SUM(sent),0) as n FROM campaigns WHERE user_id=%s AND created_at >= %s",
+        (uid, month_start)
     ).fetchone()['n']
     sent_cadencias_mes = conn.execute(
-        "SELECT COUNT(*) as n FROM sequence_logs WHERE status='sent' AND sent_at >= %s", (month_start,)
+        "SELECT COUNT(*) as n FROM sequence_logs sl "
+        "JOIN sequences s ON s.id=sl.sequence_id "
+        "WHERE sl.status='sent' AND sl.sent_at >= %s AND s.user_id=%s", (month_start, uid)
     ).fetchone()['n']
     sent_mes = sent_campanhas_mes + sent_cadencias_mes
     conn.close()
@@ -1514,6 +1860,7 @@ def index():
                            sent_total=sent_total, sent_mes=sent_mes)
 
 @app.route('/nova-campanha', methods=['GET', 'POST'])
+@login_required
 def nova_campanha():
     if request.method == 'POST':
         name = request.form.get('campaign_name', '').strip()
@@ -1635,10 +1982,11 @@ def nova_campanha():
                 draft_id = None
         if not draft_id:
             cur = conn.execute(
-                "INSERT INTO campaigns (name,subject,body,sender_email,total_contacts,status,mailing_id,sequence_id,scheduled_at,csv_filename) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id",
+                "INSERT INTO campaigns (name,subject,body,sender_email,total_contacts,status,mailing_id,sequence_id,scheduled_at,csv_filename,user_id) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id",
                 (name, subject, body_html, sender,
                  0 if is_scheduled else len(contacts),
-                 campaign_status, mailing_id, sequence_id, parsed_scheduled_at, csv_filename))
+                 campaign_status, mailing_id, sequence_id, parsed_scheduled_at, csv_filename,
+                 _uid()))
             campaign_id = cur.fetchone()['id']
             conn.commit()
         conn.close()
@@ -1659,8 +2007,10 @@ def nova_campanha():
     return render_template('nova_campanha.html', mailings=mailings, sequences=sequences, reutilizar=None, editar=None)
 
 @app.route('/campanha/<int:campaign_id>')
+@login_required
 def campanha_detalhe(campaign_id):
     conn = get_db()
+    _check_owner('campaigns', campaign_id, conn)
     campaign = conn.execute(
         "SELECT c.*, s.name AS sequence_name FROM campaigns c "
         "LEFT JOIN sequences s ON s.id = c.sequence_id WHERE c.id=%s",
@@ -1712,34 +2062,42 @@ def campanha_detalhe(campaign_id):
                            openers=openers_with_names)
 
 @app.route('/campanha/<int:campaign_id>/reutilizar')
+@login_required
 def campanha_reutilizar(campaign_id):
+    uid = _uid()
     conn = get_db()
+    _check_owner('campaigns', campaign_id, conn)
     campaign = conn.execute('SELECT * FROM campaigns WHERE id=%s', (campaign_id,)).fetchone()
     if not campaign:
         conn.close()
         flash('Campanha não encontrada.', 'danger')
         return redirect(url_for('index'))
-    mailings = conn.execute('SELECT * FROM mailings ORDER BY created_at DESC').fetchall()
-    sequences = conn.execute("SELECT id, name FROM sequences WHERE status='active' ORDER BY name").fetchall()
+    mailings = conn.execute('SELECT * FROM mailings WHERE user_id=%s ORDER BY created_at DESC', (uid,)).fetchall()
+    sequences = conn.execute("SELECT id, name FROM sequences WHERE status='active' AND user_id=%s ORDER BY name", (uid,)).fetchall()
     conn.close()
     return render_template('nova_campanha.html', mailings=mailings, sequences=sequences, reutilizar=campaign, editar=None)
 
 @app.route('/campanha/<int:campaign_id>/editar')
+@login_required
 def campanha_editar(campaign_id):
+    uid = _uid()
     conn = get_db()
+    _check_owner('campaigns', campaign_id, conn)
     campaign = conn.execute("SELECT * FROM campaigns WHERE id=%s AND status='draft'", (campaign_id,)).fetchone()
     if not campaign:
         conn.close()
         flash('Rascunho não encontrado ou já foi enviado.', 'danger')
         return redirect(url_for('index'))
-    mailings = conn.execute('SELECT * FROM mailings ORDER BY created_at DESC').fetchall()
-    sequences = conn.execute("SELECT id, name FROM sequences WHERE status='active' ORDER BY name").fetchall()
+    mailings = conn.execute('SELECT * FROM mailings WHERE user_id=%s ORDER BY created_at DESC', (uid,)).fetchall()
+    sequences = conn.execute("SELECT id, name FROM sequences WHERE status='active' AND user_id=%s ORDER BY name", (uid,)).fetchall()
     conn.close()
     return render_template('nova_campanha.html', mailings=mailings, sequences=sequences, reutilizar=None, editar=campaign)
 
 @app.route('/campanha/<int:campaign_id>/campanha-abridores')
+@login_required
 def campanha_para_abridores(campaign_id):
     conn = get_db()
+    _check_owner('campaigns', campaign_id, conn)
     campaign = conn.execute('SELECT * FROM campaigns WHERE id=%s', (campaign_id,)).fetchone()
     if not campaign:
         conn.close()
@@ -1759,8 +2117,8 @@ def campanha_para_abridores(campaign_id):
         return redirect(url_for('campanha_detalhe', campaign_id=campaign_id))
     mailing_name = f"Abridores — {campaign['name']}"
     cur = conn.execute(
-        "INSERT INTO mailings (name, filename, contact_count) VALUES (%s, %s, %s) RETURNING id",
-        (mailing_name, '', len(openers)))
+        "INSERT INTO mailings (name, filename, contact_count, user_id) VALUES (%s, %s, %s, %s) RETURNING id",
+        (mailing_name, '', len(openers), _uid()))
     mailing_id = cur.fetchone()['id']
     for op in openers:
         conn.execute(
@@ -1895,6 +2253,7 @@ def api_nichos():
     return jsonify([{'nicho': r['nicho'], 'qtd': r['qtd']} for r in rows])
 
 @app.route('/campanha/rascunho', methods=['POST'])
+@login_required
 def campanha_rascunho():
     data = request.get_json() or {}
     nome = data.get('campaign_name', '').strip()
@@ -1931,9 +2290,9 @@ def campanha_rascunho():
 
     if not draft_id:
         cur = conn.execute(
-            "INSERT INTO campaigns (name,subject,body,sender_email,total_contacts,status,mailing_id,sequence_id) "
-            "VALUES (%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id",
-            (nome, subject, body_html, sender or '', total_contacts, 'draft', mailing_id, sequence_id))
+            "INSERT INTO campaigns (name,subject,body,sender_email,total_contacts,status,mailing_id,sequence_id,user_id) "
+            "VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id",
+            (nome, subject, body_html, sender or '', total_contacts, 'draft', mailing_id, sequence_id, _uid()))
         campaign_id = cur.fetchone()['id']
 
     conn.commit()
@@ -1941,6 +2300,7 @@ def campanha_rascunho():
     return jsonify({'ok': True, 'campaign_id': campaign_id, 'url': url_for('campanha_detalhe', campaign_id=campaign_id)})
 
 @app.route('/campanha/segmentada', methods=['POST'])
+@login_required
 def campanha_segmentada():
     data = request.get_json() or {}
     nome_base = data.get('campaign_name', '').strip()
@@ -2002,9 +2362,9 @@ def campanha_segmentada():
 
         campaign_name = f"{nome_base} — {nicho}"
         cur = conn.execute(
-            "INSERT INTO campaigns (name,subject,body,sender_email,total_contacts,status,sequence_id) "
-            "VALUES (%s,%s,%s,%s,%s,%s,%s) RETURNING id",
-            (campaign_name, subject, body_html, sender, len(contacts), 'pending', sequence_id))
+            "INSERT INTO campaigns (name,subject,body,sender_email,total_contacts,status,sequence_id,user_id) "
+            "VALUES (%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id",
+            (campaign_name, subject, body_html, sender, len(contacts), 'pending', sequence_id, _uid()))
         campaign_id = cur.fetchone()['id']
         conn.commit()
 
@@ -2190,11 +2550,11 @@ def salvar_email_account():
     if account_id:
         conn.execute("""UPDATE email_accounts SET label=%s,imap_server=%s,imap_port=%s,
             smtp_server=%s,smtp_port=%s,email=%s,password=%s,use_ssl=%s,sent_folder=%s WHERE id=%s""",
-            (label, imap_server, imap_port, smtp_server, smtp_port, email_addr, password, use_ssl, sent_folder, account_id))
+            (label, imap_server, imap_port, smtp_server, smtp_port, email_addr, _encrypt_password(password), use_ssl, sent_folder, account_id))
     else:
         conn.execute("""INSERT INTO email_accounts (label,imap_server,imap_port,smtp_server,smtp_port,email,password,use_ssl,sent_folder)
             VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
-            (label, imap_server, imap_port, smtp_server, smtp_port, email_addr, password, use_ssl, sent_folder))
+            (label, imap_server, imap_port, smtp_server, smtp_port, email_addr, _encrypt_password(password), use_ssl, sent_folder))
     conn.commit()
     conn.close()
     flash('Conta de email configurada com sucesso!', 'success')
@@ -2228,7 +2588,7 @@ def email_diagnostico():
         return jsonify({'ok': False, 'erro': 'Nenhuma conta configurada'})
     try:
         imap_conn = ec.imap_connect(acc['imap_server'], acc['imap_port'],
-                                     acc['email'], acc['password'], acc['use_ssl'])
+                                     acc['email'], _acc_password(acc), acc['use_ssl'])
         folders = ec.list_folders(imap_conn)
         folder_info = []
         for f in folders:
@@ -2262,7 +2622,7 @@ def email_inbox():
     per_page = 25
     try:
         imap_conn = ec.imap_connect(acc['imap_server'], acc['imap_port'],
-                                     acc['email'], acc['password'], acc['use_ssl'])
+                                     acc['email'], _acc_password(acc), acc['use_ssl'])
         messages, total = ec.fetch_mailbox(imap_conn, 'INBOX', page, per_page, order)
         imap_conn.logout()
     except Exception as e:
@@ -2285,7 +2645,7 @@ def email_enviados():
     sent_folder = acc.get('sent_folder') or 'Sent'
     try:
         imap_conn = ec.imap_connect(acc['imap_server'], acc['imap_port'],
-                                     acc['email'], acc['password'], acc['use_ssl'])
+                                     acc['email'], _acc_password(acc), acc['use_ssl'])
         messages, total = ec.fetch_mailbox(imap_conn, sent_folder, page, per_page, order)
         imap_conn.logout()
     except Exception as e:
@@ -2307,7 +2667,7 @@ def email_spam():
     per_page = 25
     try:
         imap_conn = ec.imap_connect(acc['imap_server'], acc['imap_port'],
-                                     acc['email'], acc['password'], acc['use_ssl'])
+                                     acc['email'], _acc_password(acc), acc['use_ssl'])
         spam_folder = ec.detect_spam_folder(imap_conn)
         messages, total = ec.fetch_mailbox(imap_conn, spam_folder, page, per_page, order)
         imap_conn.logout()
@@ -2326,7 +2686,7 @@ def email_ler(folder, uid):
         return redirect(url_for('configuracoes'))
     try:
         imap_conn = ec.imap_connect(acc['imap_server'], acc['imap_port'],
-                                     acc['email'], acc['password'], acc['use_ssl'])
+                                     acc['email'], _acc_password(acc), acc['use_ssl'])
         msg = ec.fetch_email(imap_conn, uid, folder)
         imap_conn.logout()
     except Exception as e:
@@ -2345,7 +2705,7 @@ def email_anexo(folder, uid, index):
         return redirect(url_for('configuracoes'))
     try:
         imap_conn = ec.imap_connect(acc['imap_server'], acc['imap_port'],
-                                     acc['email'], acc['password'], acc['use_ssl'])
+                                     acc['email'], _acc_password(acc), acc['use_ssl'])
         filename, content_type, data = ec.fetch_attachment(imap_conn, uid, index, folder)
         imap_conn.logout()
     except Exception as e:
@@ -2370,7 +2730,7 @@ def email_compor():
     if reply_uid or forward_uid:
         try:
             imap_conn = ec.imap_connect(acc['imap_server'], acc['imap_port'],
-                                         acc['email'], acc['password'], acc['use_ssl'])
+                                         acc['email'], _acc_password(acc), acc['use_ssl'])
             orig = ec.fetch_email(imap_conn, reply_uid or forward_uid, folder)
             imap_conn.logout()
             if orig:
@@ -2429,7 +2789,7 @@ def email_enviar():
             email_obj = sib_api_v3_sdk.SendSmtpEmail(**params)
             api_instance.send_transac_email(email_obj)
         else:
-            ec.send_email(acc['smtp_server'], acc['smtp_port'], acc['email'], acc['password'],
+            ec.send_email(acc['smtp_server'], acc['smtp_port'], acc['email'], _acc_password(acc),
                           to, subject, body_html, cc=cc, bcc=bcc,
                           reply_to_msg_id=reply_to_msg_id, references=references,
                           attachments=attachments if attachments else None)
@@ -2446,7 +2806,7 @@ def email_deletar(folder, uid):
         return jsonify({'ok': False})
     try:
         imap_conn = ec.imap_connect(acc['imap_server'], acc['imap_port'],
-                                     acc['email'], acc['password'], acc['use_ssl'])
+                                     acc['email'], _acc_password(acc), acc['use_ssl'])
         trash_folder = ec.detect_trash_folder(imap_conn)
         folders = ec.list_folders(imap_conn)
         print(f"[EMAIL] Pastas IMAP: {folders}", flush=True)
@@ -2473,7 +2833,7 @@ def email_deletar_bulk():
         return jsonify({'ok': False, 'erro': 'Nenhum email selecionado'})
     try:
         imap_conn = ec.imap_connect(acc['imap_server'], acc['imap_port'],
-                                     acc['email'], acc['password'], acc['use_ssl'])
+                                     acc['email'], _acc_password(acc), acc['use_ssl'])
         trash_folder = ec.detect_trash_folder(imap_conn)
         if folder == trash_folder:
             for uid in uids:
@@ -2498,7 +2858,7 @@ def email_marcar():
         return jsonify({'ok': False, 'erro': 'UID ausente'})
     try:
         imap_conn = ec.imap_connect(acc['imap_server'], acc['imap_port'],
-                                     acc['email'], acc['password'], acc['use_ssl'])
+                                     acc['email'], _acc_password(acc), acc['use_ssl'])
         if action == 'unread':
             ec.mark_unread(imap_conn, uid, folder)
         else:
@@ -2515,7 +2875,7 @@ def email_unread_count():
         return jsonify({'count': 0})
     try:
         imap_conn = ec.imap_connect(acc['imap_server'], acc['imap_port'],
-                                     acc['email'], acc['password'], acc['use_ssl'])
+                                     acc['email'], _acc_password(acc), acc['use_ssl'])
         count = ec.get_unread_count(imap_conn)
         imap_conn.logout()
         return jsonify({'count': count})
@@ -2539,7 +2899,7 @@ def email_busca():
     if q:
         try:
             imap_conn = ec.imap_connect(acc['imap_server'], acc['imap_port'],
-                                         acc['email'], acc['password'], acc['use_ssl'])
+                                         acc['email'], _acc_password(acc), acc['use_ssl'])
             messages, total = ec.search_mailbox(imap_conn, folder, q, field, page, per_page, order)
             imap_conn.logout()
         except Exception as e:
@@ -2560,7 +2920,7 @@ def email_lixeira():
     per_page = 25
     try:
         imap_conn = ec.imap_connect(acc['imap_server'], acc['imap_port'],
-                                     acc['email'], acc['password'], acc['use_ssl'])
+                                     acc['email'], _acc_password(acc), acc['use_ssl'])
         trash_folder = ec.detect_trash_folder(imap_conn)
         messages, total = ec.fetch_mailbox(imap_conn, trash_folder, page, per_page, order)
         imap_conn.logout()
@@ -2579,7 +2939,7 @@ def email_esvaziar_lixeira():
         return jsonify({'ok': False})
     try:
         imap_conn = ec.imap_connect(acc['imap_server'], acc['imap_port'],
-                                     acc['email'], acc['password'], acc['use_ssl'])
+                                     acc['email'], _acc_password(acc), acc['use_ssl'])
         trash_folder = ec.detect_trash_folder(imap_conn)
         imap_conn.select(trash_folder)
         imap_conn.uid('store', '1:*', '+FLAGS', '\\Deleted')
@@ -2599,7 +2959,7 @@ def email_salvar_rascunho():
     body_html = request.form.get('body_html', '')
     try:
         imap_conn = ec.imap_connect(acc['imap_server'], acc['imap_port'],
-                                     acc['email'], acc['password'], acc['use_ssl'])
+                                     acc['email'], _acc_password(acc), acc['use_ssl'])
         drafts_folder = ec.detect_drafts_folder(imap_conn)
         ec.save_draft(imap_conn, acc['email'], to, subject, body_html, drafts_folder)
         imap_conn.logout()
@@ -2742,31 +3102,54 @@ def track_click():
             pass
     return redirect(dest_url or '/')
 
-@app.route('/descadastrar')
+@app.route('/descadastrar', methods=['GET', 'POST'])
+@limiter.limit('10 per minute')
 def descadastrar():
-    email = request.args.get('email', '')
-    seq_id = request.args.get('seq', type=int)
-    if email and seq_id:
-        try:
-            conn = get_db()
+    source = request.form if request.method == 'POST' else request.args
+    email = source.get('email', '')
+    seq_id = source.get('seq', type=int)
+    campaign_id = source.get('campaign', type=int)
+    token = source.get('t', '')
+
+    if not email:
+        return render_template('descadastrar.html', email='', erro='Link inválido.')
+
+    expected = _unsub_token(email, seq_id, campaign_id)
+    token_ok = token and hmac.compare_digest(token, expected)
+
+    if not token_ok:
+        # Legacy links geradas antes do fix não têm token — exige POST de confirmação
+        # (protege contra one-click drive-by/prefetch)
+        if request.method != 'POST':
+            return render_template('descadastrar.html', email=email,
+                                   confirmar=True, seq=seq_id, campaign=campaign_id,
+                                   token=token)
+
+    try:
+        conn = get_db()
+        if seq_id:
             conn.execute(
                 "UPDATE sequence_contacts SET status='unsubscribed' WHERE sequence_id=%s AND contact_email=%s",
                 (seq_id, email))
-            add_to_blacklist(email, 'Descadastro voluntário', conn)
-            update_score(email, -50, conn)
-            log_activity(email, 'unsubscribed', f'Cadência {seq_id}', conn)
-            conn.commit()
-            conn.close()
-        except Exception:
-            pass
-    return render_template('descadastrar.html', email=email)
+        add_to_blacklist(email, 'Descadastro voluntário', conn)
+        update_score(email, -50, conn)
+        log_activity(email, 'unsubscribed', f'Cadência {seq_id or "-"} / Campanha {campaign_id or "-"}', conn)
+        conn.commit()
+        conn.close()
+    except Exception:
+        app.logger.exception('Erro ao descadastrar %s', email)
+    return render_template('descadastrar.html', email=email, sucesso=True)
 
 # ── Cadências ─────────────────────────────────────────────────────────────────
 
 @app.route('/cadencias')
+@login_required
 def cadencias():
+    uid = _uid()
     conn = get_db()
-    seqs = conn.execute('SELECT * FROM sequences ORDER BY created_at DESC').fetchall()
+    seqs = conn.execute(
+        'SELECT * FROM sequences WHERE user_id=%s ORDER BY created_at DESC', (uid,)
+    ).fetchall()
     result = []
     for s in seqs:
         sid = s['id']
@@ -2781,6 +3164,7 @@ def cadencias():
     return render_template('cadencias.html', sequences=result)
 
 @app.route('/cadencias/nova', methods=['GET', 'POST'])
+@login_required
 def nova_cadencia():
     if request.method == 'POST':
         name = request.form.get('name', '').strip()
@@ -2804,8 +3188,8 @@ def nova_cadencia():
 
         conn = get_db()
         cur = conn.execute(
-            'INSERT INTO sequences (name,description,sender_email,start_date,preferred_hour) VALUES (%s,%s,%s,%s,%s) RETURNING id',
-            (name, description, sender, start_date, preferred_hour))
+            'INSERT INTO sequences (name,description,sender_email,start_date,preferred_hour,user_id) VALUES (%s,%s,%s,%s,%s,%s) RETURNING id',
+            (name, description, sender, start_date, preferred_hour, _uid()))
         seq_id = cur.fetchone()['id']
         for i, (day, subj, body, cond) in enumerate(zip(days, subjects, bodies, conditions), start=1):
             ab_b = ab_subjects_b[i-1] if i <= len(ab_subjects_b) else ''
@@ -2821,7 +3205,9 @@ def nova_cadencia():
     return render_template('nova_cadencia.html', seq=None, steps=[], editing=False)
 
 @app.route('/cadencias/<int:seq_id>')
+@login_required
 def cadencia_detalhe(seq_id):
+    _check_owner('sequences', seq_id)
     conn = get_db()
     seq = conn.execute('SELECT * FROM sequences WHERE id=%s', (seq_id,)).fetchone()
     if not seq:
@@ -3008,7 +3394,9 @@ def cadencia_detalhe(seq_id):
 
 
 @app.route('/api/cadencias/<int:seq_id>/contato/<path:email>/historico')
+@login_required
 def api_contato_historico(seq_id, email):
+    _check_owner('sequences', seq_id)
     conn = get_db()
     logs = conn.execute(
         'SELECT sl.*, ss.subject as step_subject FROM sequence_logs sl'
@@ -3085,7 +3473,9 @@ def diagnostico_cadencia(seq_id):
 
 
 @app.route('/cadencias/<int:seq_id>/editar', methods=['GET', 'POST'])
+@login_required
 def editar_cadencia(seq_id):
+    _check_owner('sequences', seq_id)
     conn = get_db()
     seq = conn.execute('SELECT * FROM sequences WHERE id=%s', (seq_id,)).fetchone()
     if not seq:
@@ -3126,7 +3516,9 @@ def editar_cadencia(seq_id):
     return render_template('nova_cadencia.html', seq=seq, steps=steps, editing=True)
 
 @app.route('/cadencias/<int:seq_id>/adicionar-contatos', methods=['POST'])
+@login_required
 def adicionar_contatos_cadencia(seq_id):
+    _check_owner('sequences', seq_id)
     conn = get_db()
     seq = conn.execute('SELECT * FROM sequences WHERE id=%s', (seq_id,)).fetchone()
     if not seq:
@@ -3236,14 +3628,18 @@ def adicionar_contatos_cadencia(seq_id):
     return redirect(url_for('cadencia_detalhe', seq_id=seq_id))
 
 @app.route('/cadencias/<int:seq_id>/processar-agora', methods=['POST'])
+@login_required
 def processar_cadencia_agora(seq_id):
+    _check_owner('sequences', seq_id)
     t = threading.Thread(target=processar_cadencias, daemon=True)
     t.start()
     flash('Processamento de emails disparado — aguarde alguns segundos e recarregue.', 'info')
     return redirect(url_for('cadencia_detalhe', seq_id=seq_id))
 
 @app.route('/cadencias/<int:seq_id>/pausar', methods=['POST'])
+@login_required
 def pausar_cadencia(seq_id):
+    _check_owner('sequences', seq_id)
     conn = get_db()
     conn.execute("UPDATE sequence_contacts SET status='paused' WHERE sequence_id=%s AND status='active'", (seq_id,))
     conn.execute("UPDATE sequences SET status='paused' WHERE id=%s", (seq_id,))
@@ -3252,7 +3648,9 @@ def pausar_cadencia(seq_id):
     return redirect(url_for('cadencia_detalhe', seq_id=seq_id))
 
 @app.route('/cadencias/<int:seq_id>/retomar', methods=['POST'])
+@login_required
 def retomar_cadencia(seq_id):
+    _check_owner('sequences', seq_id)
     conn = get_db()
     conn.execute("UPDATE sequence_contacts SET status='active' WHERE sequence_id=%s AND status='paused'", (seq_id,))
     conn.execute("UPDATE sequences SET status='active' WHERE id=%s", (seq_id,))
@@ -3261,7 +3659,9 @@ def retomar_cadencia(seq_id):
     return redirect(url_for('cadencia_detalhe', seq_id=seq_id))
 
 @app.route('/cadencias/<int:seq_id>/enviar-teste', methods=['POST'])
+@login_required
 def enviar_teste_cadencia(seq_id):
+    _check_owner('sequences', seq_id)
     conn = get_db()
     seq = conn.execute('SELECT * FROM sequences WHERE id=%s', (seq_id,)).fetchone()
     if not seq:
@@ -3292,7 +3692,9 @@ def enviar_teste_cadencia(seq_id):
     return redirect(url_for('cadencia_detalhe', seq_id=seq_id))
 
 @app.route('/cadencias/<int:seq_id>/reiniciar', methods=['POST'])
+@login_required
 def reiniciar_cadencia(seq_id):
+    _check_owner('sequences', seq_id)
     conn = get_db()
     seq = conn.execute('SELECT * FROM sequences WHERE id=%s', (seq_id,)).fetchone()
     if not seq:
@@ -3323,7 +3725,9 @@ def reiniciar_cadencia(seq_id):
     return redirect(url_for('cadencia_detalhe', seq_id=seq_id))
 
 @app.route('/cadencias/<int:seq_id>/contato/<path:email>/parar', methods=['POST'])
+@login_required
 def parar_contato_cadencia(seq_id, email):
+    _check_owner('sequences', seq_id)
     conn = get_db()
     conn.execute("UPDATE sequence_contacts SET status='stopped' WHERE sequence_id=%s AND contact_email=%s", (seq_id, email))
     conn.commit(); conn.close()
@@ -3331,7 +3735,9 @@ def parar_contato_cadencia(seq_id, email):
     return redirect(url_for('cadencia_detalhe', seq_id=seq_id))
 
 @app.route('/api/cadencias/<int:seq_id>/metricas')
+@login_required
 def api_cadencia_metricas(seq_id):
+    _check_owner('sequences', seq_id)
     conn = get_db()
     steps = conn.execute('SELECT * FROM sequence_steps WHERE sequence_id=%s ORDER BY step_number', (seq_id,)).fetchall()
     result = []
@@ -3348,7 +3754,9 @@ def api_cadencia_metricas(seq_id):
 # ── CRM — Contatos ────────────────────────────────────────────────────────────
 
 @app.route('/contatos/adicionar', methods=['POST'])
+@login_required
 def adicionar_contato_manual():
+    uid = _uid()
     email = request.form.get('email', '').strip()
     name = request.form.get('name', '').strip()
     phone = request.form.get('phone', '').strip()
@@ -3366,21 +3774,23 @@ def adicionar_contato_manual():
         flash('Email é obrigatório.', 'danger')
         return redirect(url_for('lista_contatos'))
     conn = get_db()
-    existing = conn.execute('SELECT id FROM contacts WHERE email=%s', (email,)).fetchone()
+    existing = conn.execute('SELECT id FROM contacts WHERE email=%s AND user_id=%s', (email, uid)).fetchone()
     if existing:
-        flash(f'{email} já existe na base.', 'warning')
+        flash(f'{email} já existe na sua base.', 'warning')
         conn.close()
         return redirect(url_for('contato_perfil', email=email))
     conn.execute(
-        'INSERT INTO contacts (email,name,phone,company,whatsapp,status,tags,product_interest,source,nicho,city,state,country) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)',
-        (email, name, phone, company, whatsapp or None, status or 'lead', tags, product_interest or None, source or None, nicho or None, city or None, state or None, country or None))
+        'INSERT INTO contacts (email,name,phone,company,whatsapp,status,tags,product_interest,source,nicho,city,state,country,user_id) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)',
+        (email, name, phone, company, whatsapp or None, status or 'lead', tags, product_interest or None, source or None, nicho or None, city or None, state or None, country or None, uid))
     conn.commit()
     conn.close()
     flash(f'Contato {email} adicionado!', 'success')
     return redirect(url_for('contato_perfil', email=email))
 
 @app.route('/contatos')
+@login_required
 def lista_contatos():
+    uid = _uid()
     conn = get_db()
     status_filter = request.args.get('status', '')
     tag_filter = request.args.get('tag', '')
@@ -3388,8 +3798,8 @@ def lista_contatos():
     sort = request.args.get('sort', 'score')
 
     query = '''SELECT c.*, COALESCE(cs.score,0) as current_score
-               FROM contacts c LEFT JOIN contact_scores cs ON cs.email=c.email WHERE 1=1'''
-    params = []
+               FROM contacts c LEFT JOIN contact_scores cs ON cs.email=c.email WHERE c.user_id=%s'''
+    params = [uid]
     if status_filter: query += ' AND c.status=%s'; params.append(status_filter)
     if tag_filter: query += ' AND c.tags ILIKE %s'; params.append(f'%{tag_filter}%')
     if search:
@@ -3401,7 +3811,7 @@ def lista_contatos():
 
     contatos = conn.execute(query, params).fetchall()
     all_tags = set()
-    for c in conn.execute("SELECT tags FROM contacts WHERE tags IS NOT NULL AND tags != ''").fetchall():
+    for c in conn.execute("SELECT tags FROM contacts WHERE tags IS NOT NULL AND tags != '' AND user_id=%s", (uid,)).fetchall():
         for t in c['tags'].split(','):
             if t.strip(): all_tags.add(t.strip())
     conn.close()
@@ -3409,20 +3819,22 @@ def lista_contatos():
                            status_filter=status_filter, tag_filter=tag_filter, search=search, sort=sort)
 
 @app.route('/contatos/<path:email>', methods=['GET', 'POST'])
+@login_required
 def contato_perfil(email):
+    uid = _uid()
     conn = get_db()
     contact = conn.execute(
-        'SELECT c.*, COALESCE(cs.score,0) as current_score FROM contacts c LEFT JOIN contact_scores cs ON cs.email=c.email WHERE c.email=%s',
-        (email,)).fetchone()
+        'SELECT c.*, COALESCE(cs.score,0) as current_score FROM contacts c LEFT JOIN contact_scores cs ON cs.email=c.email WHERE c.email=%s AND c.user_id=%s',
+        (email, uid)).fetchone()
     if not contact:
         flash('Contato não encontrado.', 'danger'); conn.close(); return redirect(url_for('lista_contatos'))
 
     if request.method == 'POST':
-        fields = ['name', 'phone', 'company', 'position', 'whatsapp', 'status', 'tags', 'notes', 'whatsapp_notes', 'product_interest', 'source', 'nicho', 'city', 'state', 'country']
+        fields = ['name', 'phone', 'company', 'position', 'whatsapp', 'status', 'tags', 'notes', 'product_interest', 'source', 'nicho', 'city', 'state', 'country']
         updates = {f: request.form.get(f, '').strip() for f in fields}
         conn.execute(
-            "UPDATE contacts SET name=%s,phone=%s,company=%s,position=%s,whatsapp=%s,status=%s,tags=%s,notes=%s,whatsapp_notes=%s,product_interest=%s,source=%s,nicho=%s,city=%s,state=%s,country=%s,updated_at=NOW() WHERE email=%s",
-            (*updates.values(), email))
+            "UPDATE contacts SET name=%s,phone=%s,company=%s,position=%s,whatsapp=%s,status=%s,tags=%s,notes=%s,product_interest=%s,source=%s,nicho=%s,city=%s,state=%s,country=%s,updated_at=NOW() WHERE email=%s AND user_id=%s",
+            (*updates.values(), email, uid))
         # Salva produtos adquiridos
         conn.execute('DELETE FROM contact_purchases WHERE contact_email=%s', (email,))
         for prod, dt in zip(request.form.getlist('purchase_product[]'), request.form.getlist('purchase_date[]')):
@@ -3451,12 +3863,34 @@ def contato_perfil(email):
     contact_mailings = conn.execute(
         'SELECT m.id, m.name, m.contact_count FROM mailing_contacts mc JOIN mailings m ON m.id=mc.mailing_id WHERE mc.email=%s ORDER BY m.name',
         (email,)).fetchall()
+    conversations = conn.execute(
+        'SELECT * FROM contact_conversations WHERE contact_email=%s AND user_id=%s '
+        'ORDER BY conversation_date DESC, created_at DESC',
+        (email, uid)).fetchall()
+    tasks_pending = conn.execute(
+        "SELECT * FROM contact_tasks WHERE contact_email=%s AND user_id=%s AND status='pending' "
+        "ORDER BY due_date ASC, COALESCE(due_time, '00:00'::time) ASC",
+        (email, uid)).fetchall()
+    tasks_done = conn.execute(
+        "SELECT * FROM contact_tasks WHERE contact_email=%s AND user_id=%s AND status<>'pending' "
+        "ORDER BY completed_at DESC NULLS LAST, due_date DESC LIMIT 20",
+        (email, uid)).fetchall()
+    user_sequences = conn.execute(
+        "SELECT id, name FROM sequences WHERE user_id=%s ORDER BY name", (uid,)).fetchall()
+    user_templates = conn.execute(
+        "SELECT id, name, subject, body_html FROM email_templates "
+        "WHERE user_id=%s OR user_id IS NULL ORDER BY name",
+        (uid,)).fetchall()
     best_hour = get_best_send_hour(email)
     is_bl = is_blacklisted(email, conn)
     conn.close()
     return render_template('contato_perfil.html', contact=contact, activities=activities,
                            cadencias=cadencias_do_contato, purchases=purchases,
                            all_mailings=all_mailings, contact_mailings=contact_mailings,
+                           conversations=conversations, tasks_pending=tasks_pending,
+                           tasks_done=tasks_done, user_sequences=user_sequences,
+                           user_templates=user_templates,
+                           today=datetime.now().date(),
                            best_hour=best_hour, is_blacklisted=is_bl)
 
 
@@ -3505,6 +3939,333 @@ def contato_remove_mailing(email, mailing_id):
         log_activity(email, 'removed_from_mailing', f'Removido do mailing: {mailing["name"]}', conn)
         conn.commit()
     conn.close()
+    return redirect(url_for('contato_perfil', email=email))
+
+
+# ── CRM — Conversas registradas ────────────────────────────────────────────
+
+TASK_TYPES = [
+    ('retornar_contato', 'Retornar contato'),
+    ('agendar_servico',  'Agendar serviço'),
+    ('enviar_proposta',  'Enviar proposta'),
+    ('reuniao',          'Reunião'),
+    ('follow_up',        'Follow-up'),
+    ('outro',            'Outro'),
+]
+TASK_TYPES_MAP = dict(TASK_TYPES)
+app.jinja_env.globals['TASK_TYPES'] = TASK_TYPES
+app.jinja_env.globals['TASK_TYPES_MAP'] = TASK_TYPES_MAP
+
+CONVERSATION_CHANNELS = [
+    ('whatsapp',   'WhatsApp'),
+    ('ligacao',    'Ligação'),
+    ('email',      'Email'),
+    ('presencial', 'Presencial'),
+    ('reuniao',    'Reunião'),
+    ('outro',      'Outro'),
+]
+app.jinja_env.globals['CONVERSATION_CHANNELS'] = CONVERSATION_CHANNELS
+
+
+def _ensure_contact_owner(conn, email, uid):
+    row = conn.execute(
+        'SELECT id FROM contacts WHERE email=%s AND user_id=%s', (email, uid)).fetchone()
+    if not row:
+        from werkzeug.exceptions import NotFound
+        raise NotFound('Contato não encontrado.')
+    return row
+
+
+def _refresh_contact_summary(conn, email, uid):
+    """Atualiza last_contact_at e next_action_date do contato (cache)."""
+    last_row = conn.execute(
+        "SELECT MAX(conversation_date) as d FROM contact_conversations "
+        "WHERE contact_email=%s AND user_id=%s",
+        (email, uid)).fetchone()
+    last_dt = last_row['d'] if last_row else None
+    next_row = conn.execute(
+        "SELECT MIN(due_date) as d FROM contact_tasks "
+        "WHERE contact_email=%s AND user_id=%s AND status='pending'",
+        (email, uid)).fetchone()
+    next_dt = next_row['d'] if next_row else None
+    conn.execute(
+        "UPDATE contacts SET last_contact_at=%s, next_action_date=%s "
+        "WHERE email=%s AND user_id=%s",
+        (last_dt, next_dt, email, uid))
+
+
+@app.route('/contatos/<path:email>/conversas', methods=['POST'])
+@login_required
+def adicionar_conversa(email):
+    uid = _uid()
+    conn = get_db()
+    _ensure_contact_owner(conn, email, uid)
+    date_raw = request.form.get('conversation_date', '').strip()
+    channel = (request.form.get('channel', 'whatsapp') or 'whatsapp').strip()
+    notes = (request.form.get('notes', '') or '').strip()
+    if not date_raw or not notes:
+        conn.close()
+        flash('Informe a data e o conteúdo da conversa.', 'danger')
+        return redirect(url_for('contato_perfil', email=email))
+    try:
+        conv_date = datetime.strptime(date_raw, '%Y-%m-%d').date()
+    except ValueError:
+        conn.close()
+        flash('Data inválida.', 'danger')
+        return redirect(url_for('contato_perfil', email=email))
+    conn.execute(
+        'INSERT INTO contact_conversations (user_id, contact_email, conversation_date, channel, notes) '
+        'VALUES (%s, %s, %s, %s, %s)',
+        (uid, email, conv_date, channel, notes))
+    _refresh_contact_summary(conn, email, uid)
+    log_activity(email, 'conversation_logged',
+                 f'{channel.capitalize()} em {conv_date.strftime("%d/%m/%Y")}', conn)
+    conn.commit()
+    conn.close()
+    flash('Conversa registrada.', 'success')
+    return redirect(url_for('contato_perfil', email=email) + '#conversations')
+
+
+@app.route('/contatos/<path:email>/conversas/<int:conv_id>/remover', methods=['POST'])
+@login_required
+def remover_conversa(email, conv_id):
+    uid = _uid()
+    conn = get_db()
+    conn.execute(
+        'DELETE FROM contact_conversations WHERE id=%s AND contact_email=%s AND user_id=%s',
+        (conv_id, email, uid))
+    _refresh_contact_summary(conn, email, uid)
+    conn.commit(); conn.close()
+    flash('Conversa removida.', 'info')
+    return redirect(url_for('contato_perfil', email=email) + '#conversations')
+
+
+# ── CRM — Tarefas / follow-up ──────────────────────────────────────────────
+
+@app.route('/contatos/<path:email>/tarefas', methods=['POST'])
+@login_required
+def adicionar_tarefa(email):
+    uid = _uid()
+    conn = get_db()
+    _ensure_contact_owner(conn, email, uid)
+    task_type = (request.form.get('task_type', 'retornar_contato') or 'retornar_contato').strip()
+    title = (request.form.get('title', '') or '').strip()
+    due_date_raw = (request.form.get('due_date', '') or '').strip()
+    due_time_raw = (request.form.get('due_time', '') or '').strip()
+    notify_days_before = request.form.get('notify_days_before', '0').strip() or '0'
+    if not title or not due_date_raw:
+        conn.close()
+        flash('Informe o título e a data da tarefa.', 'danger')
+        return redirect(url_for('contato_perfil', email=email))
+    try:
+        due_date = datetime.strptime(due_date_raw, '%Y-%m-%d').date()
+    except ValueError:
+        conn.close()
+        flash('Data inválida.', 'danger')
+        return redirect(url_for('contato_perfil', email=email))
+    due_time = None
+    if due_time_raw:
+        try:
+            due_time = datetime.strptime(due_time_raw, '%H:%M').time()
+        except ValueError:
+            due_time = None
+    try:
+        nd = max(0, min(30, int(notify_days_before)))
+    except ValueError:
+        nd = 0
+    conn.execute(
+        'INSERT INTO contact_tasks (user_id, contact_email, task_type, title, due_date, due_time, notify_days_before) '
+        'VALUES (%s, %s, %s, %s, %s, %s, %s)',
+        (uid, email, task_type, title, due_date, due_time, nd))
+    _refresh_contact_summary(conn, email, uid)
+    log_activity(email, 'task_created',
+                 f'{TASK_TYPES_MAP.get(task_type, task_type)}: {title} — {due_date.strftime("%d/%m/%Y")}', conn)
+    conn.commit()
+    conn.close()
+    flash('Tarefa agendada.', 'success')
+    return redirect(url_for('contato_perfil', email=email) + '#tasks')
+
+
+@app.route('/tarefas/<int:task_id>/concluir', methods=['POST'])
+@login_required
+def concluir_tarefa(task_id):
+    uid = _uid()
+    conn = get_db()
+    row = conn.execute(
+        'SELECT * FROM contact_tasks WHERE id=%s AND user_id=%s', (task_id, uid)).fetchone()
+    if not row:
+        conn.close()
+        flash('Tarefa não encontrada.', 'danger')
+        return redirect(url_for('lista_tarefas'))
+    conn.execute(
+        "UPDATE contact_tasks SET status='done', completed_at=NOW() WHERE id=%s AND user_id=%s",
+        (task_id, uid))
+    _refresh_contact_summary(conn, row['contact_email'], uid)
+    log_activity(row['contact_email'], 'task_completed', row['title'], conn)
+    conn.commit(); conn.close()
+    flash('Tarefa concluída.', 'success')
+    return redirect(request.referrer or url_for('lista_tarefas'))
+
+
+@app.route('/tarefas/<int:task_id>/cancelar', methods=['POST'])
+@login_required
+def cancelar_tarefa(task_id):
+    uid = _uid()
+    conn = get_db()
+    row = conn.execute(
+        'SELECT * FROM contact_tasks WHERE id=%s AND user_id=%s', (task_id, uid)).fetchone()
+    if not row:
+        conn.close()
+        flash('Tarefa não encontrada.', 'danger')
+        return redirect(url_for('lista_tarefas'))
+    conn.execute(
+        "UPDATE contact_tasks SET status='canceled' WHERE id=%s AND user_id=%s",
+        (task_id, uid))
+    _refresh_contact_summary(conn, row['contact_email'], uid)
+    conn.commit(); conn.close()
+    flash('Tarefa cancelada.', 'info')
+    return redirect(request.referrer or url_for('lista_tarefas'))
+
+
+@app.route('/tarefas')
+@login_required
+def lista_tarefas():
+    uid = _uid()
+    conn = get_db()
+    view = request.args.get('view', 'pending')  # pending | today | overdue | week | done | all
+    base = "SELECT t.*, c.name as contact_name FROM contact_tasks t " \
+           "LEFT JOIN contacts c ON c.email=t.contact_email AND c.user_id=t.user_id " \
+           "WHERE t.user_id=%s"
+    params = [uid]
+    today = datetime.now().date()
+    if view == 'today':
+        base += " AND t.status='pending' AND t.due_date = %s"
+        params.append(today)
+    elif view == 'overdue':
+        base += " AND t.status='pending' AND t.due_date < %s"
+        params.append(today)
+    elif view == 'week':
+        base += " AND t.status='pending' AND t.due_date BETWEEN %s AND %s"
+        params.extend([today, today + timedelta(days=7)])
+    elif view == 'done':
+        base += " AND t.status='done'"
+    elif view == 'all':
+        pass
+    else:  # pending
+        base += " AND t.status='pending'"
+    base += " ORDER BY t.due_date ASC, COALESCE(t.due_time, '00:00'::time) ASC"
+    tasks = conn.execute(base, params).fetchall()
+    counts = {
+        'today':   conn.execute("SELECT COUNT(*) as n FROM contact_tasks WHERE user_id=%s AND status='pending' AND due_date=%s", (uid, today)).fetchone()['n'],
+        'overdue': conn.execute("SELECT COUNT(*) as n FROM contact_tasks WHERE user_id=%s AND status='pending' AND due_date<%s", (uid, today)).fetchone()['n'],
+        'week':    conn.execute("SELECT COUNT(*) as n FROM contact_tasks WHERE user_id=%s AND status='pending' AND due_date BETWEEN %s AND %s", (uid, today, today + timedelta(days=7))).fetchone()['n'],
+        'pending': conn.execute("SELECT COUNT(*) as n FROM contact_tasks WHERE user_id=%s AND status='pending'", (uid,)).fetchone()['n'],
+    }
+    conn.close()
+    return render_template('tarefas.html', tasks=tasks, view=view, counts=counts, today=today)
+
+
+# ── CRM — Envio direto de email a partir do contato ────────────────────────
+
+@app.route('/contatos/<path:email>/enviar-email', methods=['POST'])
+@login_required
+def enviar_email_contato(email):
+    uid = _uid()
+    conn = get_db()
+    contact = conn.execute(
+        'SELECT * FROM contacts WHERE email=%s AND user_id=%s', (email, uid)).fetchone()
+    if not contact:
+        conn.close()
+        flash('Contato não encontrado.', 'danger')
+        return redirect(url_for('lista_contatos'))
+    if is_blacklisted(email, conn):
+        conn.close()
+        flash(f'{email} está na blacklist — envio bloqueado.', 'danger')
+        return redirect(url_for('contato_perfil', email=email))
+    subject = (request.form.get('subject', '') or '').strip()
+    body_html = (request.form.get('body_html', '') or '').strip()
+    sender = (request.form.get('sender', '') or ADMIN_EMAIL).strip()
+    if not subject or not body_html:
+        conn.close()
+        flash('Assunto e corpo são obrigatórios.', 'danger')
+        return redirect(url_for('contato_perfil', email=email))
+    if not BREVO_API_KEY:
+        conn.close()
+        flash('BREVO_API_KEY não configurada — não é possível enviar.', 'danger')
+        return redirect(url_for('contato_perfil', email=email))
+    try:
+        send_email_brevo(sender, email, contact['name'] or '', subject, body_html)
+        log_activity(email, 'email_sent', f'Envio manual: {subject}', conn)
+        conn.execute(
+            "UPDATE contacts SET last_contact_at=NOW() WHERE email=%s AND user_id=%s",
+            (email, uid))
+        conn.commit()
+        flash(f'Email enviado para {email}.', 'success')
+    except Exception as e:
+        flash(f'Erro ao enviar: {e}', 'danger')
+    conn.close()
+    return redirect(url_for('contato_perfil', email=email))
+
+
+# ── CRM — Iniciar cadência a partir do contato ─────────────────────────────
+
+@app.route('/contatos/<path:email>/iniciar-cadencia', methods=['POST'])
+@login_required
+def iniciar_cadencia_contato(email):
+    uid = _uid()
+    seq_id_raw = (request.form.get('sequence_id', '') or '').strip()
+    if not seq_id_raw:
+        flash('Selecione uma cadência.', 'danger')
+        return redirect(url_for('contato_perfil', email=email))
+    try:
+        seq_id = int(seq_id_raw)
+    except ValueError:
+        flash('Cadência inválida.', 'danger')
+        return redirect(url_for('contato_perfil', email=email))
+    conn = get_db()
+    contact = conn.execute(
+        'SELECT * FROM contacts WHERE email=%s AND user_id=%s', (email, uid)).fetchone()
+    if not contact:
+        conn.close()
+        flash('Contato não encontrado.', 'danger')
+        return redirect(url_for('lista_contatos'))
+    seq = conn.execute(
+        'SELECT * FROM sequences WHERE id=%s AND user_id=%s', (seq_id, uid)).fetchone()
+    if not seq:
+        conn.close()
+        flash('Cadência não encontrada.', 'danger')
+        return redirect(url_for('contato_perfil', email=email))
+    if is_blacklisted(email, conn):
+        conn.close()
+        flash(f'{email} está na blacklist — não pode entrar em cadência.', 'danger')
+        return redirect(url_for('contato_perfil', email=email))
+    first_step = conn.execute(
+        'SELECT * FROM sequence_steps WHERE sequence_id=%s ORDER BY step_number LIMIT 1',
+        (seq_id,)).fetchone()
+    if not first_step:
+        conn.close()
+        flash('Cadência sem passos configurados.', 'danger')
+        return redirect(url_for('contato_perfil', email=email))
+    existing = conn.execute(
+        'SELECT id FROM sequence_contacts WHERE sequence_id=%s AND contact_email=%s',
+        (seq_id, email)).fetchone()
+    if existing:
+        conn.close()
+        flash(f'{email} já está nessa cadência.', 'info')
+        return redirect(url_for('contato_perfil', email=email))
+    now = datetime.now()
+    next_dt = now + timedelta(days=first_step['day_offset'])
+    ph = seq['preferred_hour'] if 'preferred_hour' in seq.keys() else None
+    if ph is not None:
+        next_dt = next_dt.replace(hour=int(ph), minute=0, second=0, microsecond=0)
+    next_send = next_dt.strftime('%Y-%m-%d %H:%M:%S')
+    conn.execute(
+        'INSERT INTO sequence_contacts (sequence_id, contact_email, contact_name, current_step, next_send_at) '
+        'VALUES (%s, %s, %s, %s, %s)',
+        (seq_id, email, contact['name'] or '', first_step['step_number'], next_send))
+    log_activity(email, 'sequence_started', f'Cadência: {seq["name"]}', conn)
+    conn.commit(); conn.close()
+    flash(f'{email} adicionado à cadência "{seq["name"]}". Primeiro envio: {next_dt.strftime("%d/%m/%Y %H:%M")}.', 'success')
     return redirect(url_for('contato_perfil', email=email))
 
 
@@ -3562,9 +4323,13 @@ def adicionar_blacklist_manual():
 # ── Mailings ─────────────────────────────────────────────────────────────────
 
 @app.route('/mailings')
+@login_required
 def lista_mailings():
+    uid = _uid()
     conn = get_db()
-    mailings_raw = conn.execute('SELECT * FROM mailings ORDER BY created_at DESC').fetchall()
+    mailings_raw = conn.execute(
+        'SELECT * FROM mailings WHERE user_id=%s ORDER BY created_at DESC', (uid,)
+    ).fetchall()
     mailings = []
     for m in mailings_raw:
         nichos_rows = conn.execute("""
@@ -3583,6 +4348,7 @@ def lista_mailings():
     return render_template('mailings.html', mailings=mailings)
 
 @app.route('/mailings/upload', methods=['POST'])
+@login_required
 def upload_mailing():
     name = request.form.get('name', '').strip()
     if not name:
@@ -3602,8 +4368,8 @@ def upload_mailing():
     contacts = parse_csv(filepath)
     conn = get_db()
     cur = conn.execute(
-        'INSERT INTO mailings (name,filename,contact_count) VALUES (%s,%s,%s) RETURNING id',
-        (name, filename, len(contacts)))
+        'INSERT INTO mailings (name,filename,contact_count,user_id) VALUES (%s,%s,%s,%s) RETURNING id',
+        (name, filename, len(contacts), _uid()))
     mailing_id = cur.fetchone()['id']
     novos_no_crm = 0
     for c in contacts:
@@ -3628,14 +4394,16 @@ def upload_mailing():
     return redirect(url_for('lista_mailings'))
 
 @app.route('/mailings/atribuir-nicho', methods=['POST'])
+@login_required
 def atribuir_nicho_mailing():
-    mailing_id = request.form.get('mailing_id')
+    mailing_id = request.form.get('mailing_id', type=int)
     nicho = request.form.get('nicho', '').strip()
     sobrescrever = request.form.get('sobrescrever') == 'on'
     if not mailing_id or not nicho:
         flash('Selecione um mailing e um nicho.', 'danger')
         return redirect(url_for('lista_mailings'))
     conn = get_db()
+    _check_owner('mailings', mailing_id, conn)
     if sobrescrever:
         updated_mc = conn.execute(
             "UPDATE mailing_contacts SET nicho=%s WHERE mailing_id=%s RETURNING email",
@@ -3655,8 +4423,10 @@ def atribuir_nicho_mailing():
     return redirect(url_for('lista_mailings'))
 
 @app.route('/mailings/<int:mailing_id>/deletar', methods=['POST'])
+@login_required
 def deletar_mailing(mailing_id):
     conn = get_db()
+    _check_owner('mailings', mailing_id, conn)
     ml = conn.execute('SELECT * FROM mailings WHERE id=%s', (mailing_id,)).fetchone()
     if ml:
         filepath = os.path.join(app.config['UPLOAD_FOLDER'], ml['filename'])
@@ -3680,17 +4450,23 @@ def _csv_response(rows, headers, filename):
                     headers={'Content-Disposition': f'attachment;filename={filename}'})
 
 @app.route('/exportar/campanhas')
+@login_required
 def exportar_campanhas():
+    uid = _uid()
     conn = get_db()
-    camps = conn.execute('SELECT * FROM campaigns ORDER BY created_at DESC').fetchall()
+    camps = conn.execute(
+        'SELECT * FROM campaigns WHERE user_id=%s ORDER BY created_at DESC', (uid,)
+    ).fetchall()
     conn.close()
     rows = [(c['id'], c['name'], c['subject'], c['sender_email'], c['total_contacts'],
              c['sent'], c['errors'], c['status'], c['created_at']) for c in camps]
     return _csv_response(rows, ['ID','Nome','Assunto','Remetente','Total','Enviados','Erros','Status','Criado em'], 'campanhas.csv')
 
 @app.route('/exportar/cadencia/<int:seq_id>')
+@login_required
 def exportar_cadencia(seq_id):
     conn = get_db()
+    _check_owner('sequences', seq_id, conn)
     contacts = conn.execute('''
         SELECT sc.contact_email, sc.contact_name, sc.current_step, sc.status,
                sc.next_send_at, sc.started_at, sc.finished_at, COALESCE(cs.score,0) as score
@@ -3703,10 +4479,13 @@ def exportar_cadencia(seq_id):
     return _csv_response(rows, ['Email','Nome','Passo Atual','Status','Próximo Envio','Iniciado em','Finalizado em','Score'], f'cadencia_{seq_id}.csv')
 
 @app.route('/exportar/contatos')
+@login_required
 def exportar_contatos():
+    uid = _uid()
     conn = get_db()
     contatos = conn.execute(
-        'SELECT c.*, COALESCE(cs.score,0) as current_score FROM contacts c LEFT JOIN contact_scores cs ON cs.email=c.email ORDER BY c.name'
+        'SELECT c.*, COALESCE(cs.score,0) as current_score FROM contacts c LEFT JOIN contact_scores cs ON cs.email=c.email WHERE c.user_id=%s ORDER BY c.name',
+        (uid,)
     ).fetchall()
     conn.close()
     rows = [(c['email'], c['name'], c['phone'], c['company'], c['position'],
@@ -3892,14 +4671,20 @@ def prospeccao_criar_mailing():
 # ── Kit de Marca ──────────────────────────────────────────────────────────────
 
 @app.route('/kit-marca')
+@login_required
 def kit_marca():
+    uid = _uid()
     conn = get_db()
-    kits = conn.execute('SELECT * FROM brand_kits ORDER BY created_at DESC').fetchall()
+    kits = conn.execute(
+        'SELECT * FROM brand_kits WHERE user_id=%s ORDER BY created_at DESC', (uid,)
+    ).fetchall()
     conn.close()
     return render_template('kit_marca.html', kits=kits)
 
 @app.route('/kit-marca/salvar', methods=['POST'])
+@login_required
 def salvar_kit_marca():
+    uid = _uid()
     kit_id = request.form.get('kit_id', '').strip()
     tone_items = request.form.getlist('tone_items')
     tone_custom = request.form.get('tone_custom', '').strip()
@@ -3931,35 +4716,42 @@ def salvar_kit_marca():
         return redirect(url_for('kit_marca'))
     conn = get_db()
     if kit_id:
+        _check_owner('brand_kits', kit_id, conn)
         conn.execute('''UPDATE brand_kits SET name=%s,logo_url=%s,slogan=%s,primary_color=%s,
             secondary_color=%s,accent_color=%s,text_color=%s,bg_color=%s,font_primary=%s,
             font_secondary=%s,tone_of_voice=%s,instagram=%s,facebook=%s,linkedin=%s,
             youtube=%s,whatsapp=%s,website=%s,signature_name=%s,signature_role=%s,signature_phone=%s
-            WHERE id=%s''', dados + (kit_id,))
+            WHERE id=%s AND user_id=%s''', dados + (kit_id, uid))
         flash('Kit de marca atualizado!', 'success')
     else:
         conn.execute('''INSERT INTO brand_kits (name,logo_url,slogan,primary_color,secondary_color,
             accent_color,text_color,bg_color,font_primary,font_secondary,tone_of_voice,instagram,
-            facebook,linkedin,youtube,whatsapp,website,signature_name,signature_role,signature_phone)
-            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)''', dados)
+            facebook,linkedin,youtube,whatsapp,website,signature_name,signature_role,signature_phone,user_id)
+            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)''', dados + (uid,))
         flash('Kit de marca criado!', 'success')
     conn.commit()
     conn.close()
     return redirect(url_for('kit_marca'))
 
 @app.route('/kit-marca/<int:kid>/deletar', methods=['POST'])
+@login_required
 def deletar_kit_marca(kid):
     conn = get_db()
-    conn.execute('DELETE FROM brand_kits WHERE id=%s', (kid,))
+    _check_owner('brand_kits', kid, conn)
+    conn.execute('DELETE FROM brand_kits WHERE id=%s AND user_id=%s', (kid, _uid()))
     conn.commit()
     conn.close()
     flash('Kit removido.', 'info')
     return redirect(url_for('kit_marca'))
 
 @app.route('/api/brand-kits')
+@login_required
 def api_brand_kits():
+    uid = _uid()
     conn = get_db()
-    kits = conn.execute('SELECT * FROM brand_kits ORDER BY name').fetchall()
+    kits = conn.execute(
+        'SELECT * FROM brand_kits WHERE user_id=%s ORDER BY name', (uid,)
+    ).fetchall()
     conn.close()
     return jsonify([dict(k) for k in kits])
 
@@ -4821,7 +5613,9 @@ Regras:
 # ── 1. Re-envio para não-abridores ────────────────────────────────────────────
 
 @app.route('/campanha/<int:campaign_id>/reenviar-nao-abridores', methods=['POST'])
+@login_required
 def reenviar_nao_abridores(campaign_id):
+    _check_owner('campaigns', campaign_id)
     conn = get_db()
     campaign = conn.execute('SELECT * FROM campaigns WHERE id=%s', (campaign_id,)).fetchone()
     if not campaign:
@@ -4848,10 +5642,10 @@ def reenviar_nao_abridores(campaign_id):
         return redirect(url_for('campanha_detalhe', campaign_id=campaign_id))
 
     cur = conn.execute(
-        "INSERT INTO campaigns (name,subject,body,sender_email,total_contacts,status,resent_from) "
-        "VALUES (%s,%s,%s,%s,%s,'pending',%s) RETURNING id",
+        "INSERT INTO campaigns (name,subject,body,sender_email,total_contacts,status,resent_from,user_id) "
+        "VALUES (%s,%s,%s,%s,%s,'pending',%s,%s) RETURNING id",
         (f"Re: {campaign['name']} (não-abridores)", novo_assunto, campaign['body'],
-         campaign['sender_email'], len(non_openers), campaign_id))
+         campaign['sender_email'], len(non_openers), campaign_id, _uid()))
     new_id = cur.fetchone()['id']
     conn.commit()
     conn.close()
@@ -5282,6 +6076,116 @@ def _try_init_db():
 
 _try_init_db()
 
+TASK_NOTIFY_TO = os.environ.get('TASK_NOTIFY_EMAIL', 'consultoria@asamarketingevendas.com.br').strip()
+
+
+def notificar_tarefas_agendadas():
+    """Roda periodicamente. Envia email para TASK_NOTIFY_TO quando:
+       - Tarefa vence hoje e ainda não foi notificada;
+       - Ou faltam <= notify_days_before dias e o lembrete prévio ainda não saiu.
+       Marca timestamps ANTES de tentar enviar para evitar duplicidade em caso
+       de crash — se o envio falhar, a próxima execução do worker vai reprocessar
+       tarefas cujo notified_at foi limpo manualmente."""
+    if not BREVO_API_KEY or not TASK_NOTIFY_TO:
+        return
+    try:
+        conn = get_db()
+    except Exception as e:
+        print(f"[worker-tasks] db indisponivel: {e}", flush=True)
+        return
+    try:
+        today = datetime.now().date()
+
+        # Lembretes prévios (X dias antes)
+        pre = conn.execute(
+            "SELECT t.*, c.name as contact_name, c.phone as contact_phone, c.whatsapp as contact_whatsapp "
+            "FROM contact_tasks t "
+            "LEFT JOIN contacts c ON c.email=t.contact_email AND c.user_id=t.user_id "
+            "WHERE t.status='pending' "
+            "  AND t.notify_days_before > 0 "
+            "  AND t.reminder_notified_at IS NULL "
+            "  AND (t.due_date - INTERVAL '1 day' * t.notify_days_before) <= %s "
+            "  AND t.due_date > %s",
+            (today, today)).fetchall()
+        for row in pre:
+            conn.execute(
+                "UPDATE contact_tasks SET reminder_notified_at=NOW() WHERE id=%s",
+                (row['id'],))
+            conn.commit()
+            try:
+                _enviar_email_tarefa(row, kind='lembrete')
+            except Exception as e:
+                print(f"[worker-tasks] falha lembrete #{row['id']}: {e}", flush=True)
+
+        # Tarefas do dia (ou atrasadas) sem notificação
+        due = conn.execute(
+            "SELECT t.*, c.name as contact_name, c.phone as contact_phone, c.whatsapp as contact_whatsapp "
+            "FROM contact_tasks t "
+            "LEFT JOIN contacts c ON c.email=t.contact_email AND c.user_id=t.user_id "
+            "WHERE t.status='pending' "
+            "  AND t.notified_at IS NULL "
+            "  AND t.due_date <= %s",
+            (today,)).fetchall()
+        for row in due:
+            conn.execute(
+                "UPDATE contact_tasks SET notified_at=NOW() WHERE id=%s",
+                (row['id'],))
+            conn.commit()
+            try:
+                _enviar_email_tarefa(row, kind='hoje')
+            except Exception as e:
+                print(f"[worker-tasks] falha vencimento #{row['id']}: {e}", flush=True)
+    except Exception as e:
+        print(f"[worker-tasks] erro geral: {e}", flush=True)
+    finally:
+        try: conn.close()
+        except Exception: pass
+
+
+def _enviar_email_tarefa(row, kind='hoje'):
+    if not BREVO_API_KEY or not TASK_NOTIFY_TO:
+        return
+    label = TASK_TYPES_MAP.get(row['task_type'], row['task_type'])
+    contact_name = row['contact_name'] or row['contact_email']
+    when = row['due_date']
+    when_str = when.strftime('%d/%m/%Y') if hasattr(when, 'strftime') else str(when)
+    if row['due_time']:
+        when_str += f" {row['due_time']}"
+    subj_prefix = '[LEMBRETE] ' if kind == 'lembrete' else '[TAREFA] '
+    subject = f"{subj_prefix}{label} — {contact_name} — {when_str}"
+    phone = row['contact_whatsapp'] or row['contact_phone'] or ''
+    from urllib.parse import quote as _q
+    link_contato = f'{APP_URL}/contatos/{_q(row["contact_email"])}' if APP_URL else ''
+    link_agenda = f'{APP_URL}/tarefas' if APP_URL else ''
+    body = f'''
+    <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:20px">
+      <h2 style="color:#1a3a6b;margin:0 0 12px">{subj_prefix.strip('[] ')} de tarefa</h2>
+      <p style="color:#333;font-size:15px">
+        <strong>Tipo:</strong> {label}<br>
+        <strong>Contato:</strong> {contact_name} &lt;{row['contact_email']}&gt;<br>
+        {f"<strong>Telefone/WhatsApp:</strong> {phone}<br>" if phone else ""}
+        <strong>Data:</strong> {when_str}
+      </p>
+      <div style="background:#f5f5f5;padding:16px;border-radius:8px;margin:16px 0">
+        <div style="color:#666;font-size:12px;margin-bottom:4px">TAREFA</div>
+        <div style="color:#111;font-size:16px;font-weight:600">{row['title']}</div>
+      </div>
+      {f'<p style="margin:20px 0"><a href="{link_contato}" style="background:#1a3a6b;color:#fff;padding:10px 18px;border-radius:6px;text-decoration:none;font-weight:bold">Abrir contato</a>&nbsp;&nbsp;<a href="{link_agenda}" style="color:#1a3a6b;text-decoration:none;font-weight:bold">Ver agenda</a></p>' if APP_URL else ''}
+      <hr style="border:none;border-top:1px solid #eee;margin:24px 0">
+      <p style="color:#999;font-size:12px">ConvertMail — notificação automática de CRM</p>
+    </div>
+    '''
+    configuration = sib_api_v3_sdk.Configuration()
+    configuration.api_key['api-key'] = BREVO_API_KEY
+    api = sib_api_v3_sdk.TransactionalEmailsApi(sib_api_v3_sdk.ApiClient(configuration))
+    email_obj = sib_api_v3_sdk.SendSmtpEmail(
+        to=[{'email': TASK_NOTIFY_TO}],
+        sender={'email': ADMIN_EMAIL, 'name': 'ConvertMail CRM'},
+        subject=subject,
+        html_content=body)
+    api.send_transac_email(email_obj)
+
+
 def _start_scheduler():
     global _scheduler
     if _scheduler is not None and _scheduler.running:
@@ -5290,6 +6194,7 @@ def _start_scheduler():
     _scheduler.add_job(processar_cadencias, 'interval', minutes=30)
     _scheduler.add_job(processar_campanhas_agendadas, 'interval', minutes=5)
     _scheduler.add_job(calcular_scores_inativos, 'interval', hours=24)
+    _scheduler.add_job(notificar_tarefas_agendadas, 'interval', minutes=15)
     _scheduler.start()
     print("APScheduler iniciado.", flush=True)
 

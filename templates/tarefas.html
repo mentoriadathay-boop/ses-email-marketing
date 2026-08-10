@@ -1,0 +1,154 @@
+{% extends "base.html" %}
+{% block content %}
+
+<div class="d-flex align-items-center justify-content-between mb-4">
+  <div>
+    <h4 class="fw-bold mb-0"><i class="bi bi-calendar-check me-2 text-primary"></i>Agenda de tarefas</h4>
+    <small class="text-muted">Follow-ups, retornos e compromissos com contatos.</small>
+  </div>
+  <div class="text-end">
+    <small class="text-muted d-block">Notificações vão para</small>
+    <strong class="small">consultoria@asamarketingevendas.com.br</strong>
+  </div>
+</div>
+
+<div class="row g-3 mb-4">
+  <div class="col-md-3">
+    <a href="{{ url_for('lista_tarefas', view='today') }}" class="text-decoration-none">
+      <div class="card {% if view == 'today' %}border-primary{% endif %}">
+        <div class="card-body py-3">
+          <div class="text-muted small text-uppercase" style="font-size:.7rem">Hoje</div>
+          <div class="fs-3 fw-bold text-primary">{{ counts.today }}</div>
+        </div>
+      </div>
+    </a>
+  </div>
+  <div class="col-md-3">
+    <a href="{{ url_for('lista_tarefas', view='overdue') }}" class="text-decoration-none">
+      <div class="card {% if view == 'overdue' %}border-danger{% endif %}">
+        <div class="card-body py-3">
+          <div class="text-muted small text-uppercase" style="font-size:.7rem">Atrasadas</div>
+          <div class="fs-3 fw-bold text-danger">{{ counts.overdue }}</div>
+        </div>
+      </div>
+    </a>
+  </div>
+  <div class="col-md-3">
+    <a href="{{ url_for('lista_tarefas', view='week') }}" class="text-decoration-none">
+      <div class="card {% if view == 'week' %}border-warning{% endif %}">
+        <div class="card-body py-3">
+          <div class="text-muted small text-uppercase" style="font-size:.7rem">Próximos 7 dias</div>
+          <div class="fs-3 fw-bold text-warning">{{ counts.week }}</div>
+        </div>
+      </div>
+    </a>
+  </div>
+  <div class="col-md-3">
+    <a href="{{ url_for('lista_tarefas', view='pending') }}" class="text-decoration-none">
+      <div class="card {% if view == 'pending' %}border-info{% endif %}">
+        <div class="card-body py-3">
+          <div class="text-muted small text-uppercase" style="font-size:.7rem">Todas pendentes</div>
+          <div class="fs-3 fw-bold text-info">{{ counts.pending }}</div>
+        </div>
+      </div>
+    </a>
+  </div>
+</div>
+
+<div class="mb-3 d-flex gap-2 flex-wrap">
+  <a href="{{ url_for('lista_tarefas', view='pending') }}" class="btn btn-sm {% if view == 'pending' %}btn-primary{% else %}btn-outline-primary{% endif %}">Pendentes</a>
+  <a href="{{ url_for('lista_tarefas', view='today') }}" class="btn btn-sm {% if view == 'today' %}btn-primary{% else %}btn-outline-primary{% endif %}">Hoje</a>
+  <a href="{{ url_for('lista_tarefas', view='overdue') }}" class="btn btn-sm {% if view == 'overdue' %}btn-danger{% else %}btn-outline-danger{% endif %}">Atrasadas</a>
+  <a href="{{ url_for('lista_tarefas', view='week') }}" class="btn btn-sm {% if view == 'week' %}btn-warning{% else %}btn-outline-warning{% endif %}">Próximos 7 dias</a>
+  <a href="{{ url_for('lista_tarefas', view='done') }}" class="btn btn-sm {% if view == 'done' %}btn-success{% else %}btn-outline-success{% endif %}">Concluídas</a>
+  <a href="{{ url_for('lista_tarefas', view='all') }}" class="btn btn-sm {% if view == 'all' %}btn-secondary{% else %}btn-outline-secondary{% endif %}">Todas</a>
+</div>
+
+<div class="card">
+  <div class="table-responsive">
+    <table class="table table-hover align-middle mb-0">
+      <thead class="table-light">
+        <tr>
+          <th style="width:120px">Data</th>
+          <th style="width:150px">Tipo</th>
+          <th>Tarefa</th>
+          <th>Contato</th>
+          <th style="width:100px">Status</th>
+          <th style="width:120px">Ações</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for t in tasks %}
+        {% set atrasada = t.status == 'pending' and t.due_date < today %}
+        {% set hoje = t.status == 'pending' and t.due_date == today %}
+        <tr class="{% if atrasada %}table-danger{% elif hoje %}table-warning{% endif %}">
+          <td>
+            <div class="small fw-semibold">{{ t.due_date.strftime('%d/%m/%Y') }}</div>
+            {% if t.due_time %}
+            <div class="text-muted" style="font-size:.7rem">{{ t.due_time.strftime('%H:%M') if t.due_time.strftime is defined else t.due_time }}</div>
+            {% endif %}
+            {% if atrasada %}
+            <span class="badge bg-danger" style="font-size:.6rem">atrasada</span>
+            {% elif hoje %}
+            <span class="badge bg-warning text-dark" style="font-size:.6rem">hoje</span>
+            {% endif %}
+          </td>
+          <td>
+            <span class="badge" style="background:#dbeafe;color:#1e40af;font-size:.7rem">
+              {{ TASK_TYPES_MAP.get(t.task_type, t.task_type) }}
+            </span>
+          </td>
+          <td>
+            <div class="fw-semibold small">{{ t.title }}</div>
+            {% if t.notify_days_before and t.notify_days_before > 0 %}
+            <div class="text-muted" style="font-size:.7rem"><i class="bi bi-bell me-1"></i>lembrete {{ t.notify_days_before }}d antes</div>
+            {% endif %}
+          </td>
+          <td>
+            <a href="{{ url_for('contato_perfil', email=t.contact_email) }}" class="text-decoration-none">
+              <div class="small fw-semibold">{{ t.contact_name or t.contact_email }}</div>
+              <div class="text-muted" style="font-size:.7rem">{{ t.contact_email }}</div>
+            </a>
+          </td>
+          <td>
+            {% if t.status == 'pending' %}
+              <span class="badge bg-primary">Pendente</span>
+            {% elif t.status == 'done' %}
+              <span class="badge bg-success">Concluída</span>
+            {% else %}
+              <span class="badge bg-secondary">Cancelada</span>
+            {% endif %}
+          </td>
+          <td>
+            {% if t.status == 'pending' %}
+            <form method="POST" action="{{ url_for('concluir_tarefa', task_id=t.id) }}" class="d-inline">
+              <button type="submit" class="btn btn-sm btn-outline-success py-0 px-2" title="Concluir">
+                <i class="bi bi-check-lg"></i>
+              </button>
+            </form>
+            <form method="POST" action="{{ url_for('cancelar_tarefa', task_id=t.id) }}" class="d-inline"
+                  onsubmit="return confirm('Cancelar tarefa?')">
+              <button type="submit" class="btn btn-sm btn-outline-danger py-0 px-2" title="Cancelar">
+                <i class="bi bi-x-lg"></i>
+              </button>
+            </form>
+            {% endif %}
+            <a href="{{ url_for('contato_perfil', email=t.contact_email) }}" class="btn btn-sm btn-outline-primary py-0 px-2" title="Abrir contato">
+              <i class="bi bi-arrow-up-right"></i>
+            </a>
+          </td>
+        </tr>
+        {% else %}
+        <tr>
+          <td colspan="6" class="text-center text-muted py-5">
+            <i class="bi bi-calendar-x fs-2 d-block mb-2"></i>
+            Nenhuma tarefa nesta visão.
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+{% endblock %}

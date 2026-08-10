@@ -1,4 +1,8 @@
 flask
+flask-limiter
+flask-talisman
+flask-wtf
+cryptography
 requests
 sib-api-v3-sdk
 python-dotenv
