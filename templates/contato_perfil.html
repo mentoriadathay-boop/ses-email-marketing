@@ -329,6 +329,73 @@
       </div>
     </div>
 
+    <!-- EMAILS ABERTOS -->
+    <div class="card mb-4" id="opens">
+      <div class="card-body">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+          <h6 class="fw-semibold mb-0"><i class="bi bi-envelope-open me-2 text-success"></i>Emails abertos</h6>
+          <span class="badge bg-success">{{ email_opens|length }} abertura(s)</span>
+        </div>
+        {% if email_opens %}
+        {% set ns = namespace(unique_subjects=[]) %}
+        {% for o in email_opens %}
+          {% set subj = o.step_subject or o.campaign_subject or '(sem assunto)' %}
+          {% if subj not in ns.unique_subjects %}{% set _ = ns.unique_subjects.append(subj) %}{% endif %}
+        {% endfor %}
+        <div class="mb-2 text-muted small">
+          <i class="bi bi-info-circle me-1"></i>
+          {{ ns.unique_subjects|length }} email(s) diferente(s) — cada linha é uma abertura.
+        </div>
+        <div class="table-responsive">
+          <table class="table table-sm table-hover mb-0">
+            <thead class="table-light">
+              <tr>
+                <th style="width:130px">Data</th>
+                <th>Email aberto</th>
+                <th>Origem</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for o in email_opens %}
+              <tr>
+                <td class="small">
+                  {{ o.opened_at.strftime('%d/%m/%Y %H:%M') if o.opened_at.strftime is defined else o.opened_at }}
+                </td>
+                <td>
+                  <div class="small fw-semibold">{{ o.step_subject or o.campaign_subject or '(sem assunto)' }}</div>
+                  {% if o.step_number %}
+                  <div class="text-muted" style="font-size:.7rem">Passo {{ o.step_number }}</div>
+                  {% endif %}
+                </td>
+                <td>
+                  {% if o.campaign_id %}
+                    <span class="badge" style="background:#fef3c7;color:#92400e;font-size:.65rem">
+                      <i class="bi bi-megaphone me-1"></i>Campanha
+                    </span>
+                    <div class="small">{{ o.campaign_name or ('#' ~ o.campaign_id) }}</div>
+                  {% elif o.sequence_id %}
+                    <span class="badge" style="background:#e0e7ff;color:#3730a3;font-size:.65rem">
+                      <i class="bi bi-arrow-repeat me-1"></i>Cadência
+                    </span>
+                    <div class="small">{{ o.sequence_name or ('#' ~ o.sequence_id) }}</div>
+                  {% else %}
+                    <span class="text-muted small">—</span>
+                  {% endif %}
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        {% else %}
+        <p class="text-muted small mb-0 text-center py-3">
+          <i class="bi bi-envelope fs-4 d-block mb-2"></i>
+          Nenhuma abertura registrada.
+        </p>
+        {% endif %}
+      </div>
+    </div>
+
     <!-- Mailings vinculados -->
     <div class="card mb-4">
       <div class="card-body">
