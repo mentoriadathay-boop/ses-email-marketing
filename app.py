@@ -5514,6 +5514,17 @@ def _esc(text):
 
 @app.route('/ia/gerar-email', methods=['POST'])
 def ia_gerar_email():
+    try:
+        return _ia_gerar_email_impl()
+    except Exception as e:
+        import traceback
+        tb = traceback.format_exc()
+        print(f'[ia_gerar_email] CRASH inesperado: {e}\n{tb}', flush=True)
+        # Sempre retorna JSON — frontend nunca deve ver HTML de erro
+        return jsonify({'erro': f'Erro interno: {e.__class__.__name__}: {e}'}), 500
+
+
+def _ia_gerar_email_impl():
     if not ANTHROPIC_OK:
         return jsonify({'erro': 'Anthropic SDK não instalado.'}), 500
     api_key = os.environ.get('ANTHROPIC_API_KEY', '')
@@ -5572,16 +5583,24 @@ Kit de Marca — {kit['name']}:
         conteudo_usuario = dados.get('contexto', '').strip()
         if not conteudo_usuario:
             return jsonify({'erro': 'Cole seu conteúdo no campo de texto.'}), 400
-        html = _texto_para_email_html(
-            conteudo_usuario,
-            template_html=template_ref,
-            primary_color=primary_color,
-            tema=dados.get('tema', ''),
-            kit=dict(kit) if kit else None,
-            imagem_url=imagem_url,
-            imagem_posicao=dados.get('imagem_posicao', 'top'),
-        )
-        return jsonify({'html': html})
+        try:
+            html = _texto_para_email_html(
+                conteudo_usuario,
+                template_html=template_ref,
+                primary_color=primary_color,
+                tema=dados.get('tema', ''),
+                kit=dict(kit) if kit else None,
+                imagem_url=imagem_url,
+                imagem_posicao=dados.get('imagem_posicao', 'top'),
+            )
+        except Exception as e:
+            import traceback
+            tb = traceback.format_exc()
+            print(f'[ia_gerar_email/manter] CRASH: {e}\n{tb}', flush=True)
+            return jsonify({'erro': f'Erro ao formatar conteúdo: {e}'}), 500
+        if cta_url:
+            html = html.replace('#LINK_CTA', cta_url)
+        return jsonify({'html': html, 'cta_url_missing': not cta_url})
     else:
         prompt = f"""Crie um email profissional de marketing em HTML, com conteúdo RICO, ESPECÍFICO e APROFUNDADO — nada de texto genérico ou raso.
 
