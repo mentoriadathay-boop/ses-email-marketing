@@ -1080,6 +1080,94 @@ def _absolutize_urls(html):
 _INLINE_IMG_MAX_BYTES = 500 * 1024  # 500 KB — acima disso mantemos URL externa
 
 
+# Ícones brand das redes sociais — caixinha CSS com cor e símbolo da marca.
+# Preferimos CSS pura porque funciona em 100% dos clientes de email (Outlook
+# clássico incluído), sem depender de imagens externas nem base64.
+# Formato: (label_html, background_style)
+_SOCIAL_ICONS = {
+    'instagram': ('IG',  'background:linear-gradient(45deg,#f09433 0%,#e6683c 25%,#dc2743 50%,#cc2366 75%,#bc1888 100%);'),
+    'facebook':  ('f',   'background:#1877F2;'),
+    'linkedin':  ('in',  'background:#0A66C2;'),
+    'whatsapp':  ('✆',  'background:#25D366;'),
+    'youtube':   ('▶',  'background:#FF0000;'),
+    'twitter':   ('𝕏',  'background:#000000;'),
+    'tiktok':    ('♪',  'background:#000000;'),
+    'telegram':  ('✈',  'background:#0088cc;'),
+    'website':   ('WWW', 'background:#4B5563;'),
+    'email':     ('@',   'background:#6B7280;'),
+}
+
+
+def _social_platform_from_url(url):
+    """Detecta plataforma pela URL. Retorna chave de _SOCIAL_ICONS ou None."""
+    if not url:
+        return None
+    u = url.lower()
+    if 'instagram.com' in u:            return 'instagram'
+    if 'facebook.com' in u or 'fb.com' in u: return 'facebook'
+    if 'linkedin.com' in u:             return 'linkedin'
+    if 'wa.me' in u or 'whatsapp.com' in u or 'api.whatsapp' in u: return 'whatsapp'
+    if 'youtube.com' in u or 'youtu.be' in u: return 'youtube'
+    if 'twitter.com' in u or 'x.com' in u: return 'twitter'
+    if 'tiktok.com' in u:               return 'tiktok'
+    if 't.me' in u or 'telegram.me' in u or 'telegram.org' in u: return 'telegram'
+    if u.startswith('mailto:'):         return 'email'
+    return None
+
+
+def _social_icon_html(url, platform=None, size=36):
+    """Gera <a> estilizado como caixinha brand — 100% CSS, funciona em qualquer email."""
+    if platform is None:
+        platform = _social_platform_from_url(url) or 'website'
+    label, bg_style = _SOCIAL_ICONS.get(platform, _SOCIAL_ICONS['website'])
+    # font-size proporcional ao box (60% do size)
+    fs = max(11, int(size * 0.44))
+    return (
+        f'<a href="{url}" target="_blank" '
+        f'style="display:inline-block;width:{size}px;height:{size}px;line-height:{size}px;'
+        f'text-align:center;{bg_style}color:#fff;border-radius:8px;text-decoration:none;'
+        f'font-weight:bold;font-family:Arial,Helvetica,sans-serif;font-size:{fs}px;'
+        f'margin:0 4px;vertical-align:middle;">{label}</a>'
+    )
+
+
+_SOCIAL_EMOJIS_HINT = {
+    '📸': 'instagram', '📷': 'instagram',
+    '📘': 'facebook',
+    '💼': 'linkedin',
+    '📱': 'whatsapp', '✆': 'whatsapp',
+    '▶': 'youtube', '📺': 'youtube', '🎥': 'youtube',
+    '🌐': 'website', '🔗': 'website',
+    '✈': 'telegram',
+}
+
+
+def _upgrade_social_icons_in_html(html):
+    """Post-process: encontra <a href="URL"> cujo conteúdo é apenas emoji/símbolo
+    e substitui pela caixinha brand. Detecta plataforma primeiro pela URL, e se
+    a URL for genérica (site pessoal), pelo emoji do conteúdo."""
+    if not html:
+        return html
+    pat = re.compile(r'<a\b([^>]*?)href=(["\'])([^"\']+)\2([^>]*)>(.*?)</a>', re.I | re.S)
+    def _repl(m):
+        pre_attrs, quote, url, post_attrs, inner = m.group(1), m.group(2), m.group(3), m.group(4), m.group(5)
+        inner_text = re.sub(r'<[^>]+>', '', inner).strip()
+        # Se tem texto significativo (> 3 chars visíveis), não altera
+        if len(inner_text) > 3:
+            return m.group(0)
+        platform = _social_platform_from_url(url)
+        if not platform:
+            # Tenta detectar pelo emoji
+            for emoji, plat in _SOCIAL_EMOJIS_HINT.items():
+                if emoji in inner_text:
+                    platform = plat
+                    break
+        if not platform:
+            return m.group(0)
+        return _social_icon_html(url, platform=platform)
+    return pat.sub(_repl, html)
+
+
 def _inline_uploaded_images(html):
     """Substitui <img src="{APP_URL}/img/<id>"> por <img src="data:...;base64,...">
     para imagens carregadas via /upload/imagem. Isso resolve o principal problema
@@ -1130,6 +1218,8 @@ def send_email_brevo(sender, recipient_email, recipient_name, subject, body_html
     personalized_body = _absolutize_urls(personalized_body)
     # Embute imagens da própria plataforma como base64 — evita bloqueio de Gmail/Outlook
     personalized_body = _inline_uploaded_images(personalized_body)
+    # Substitui emoji simples por ícone brand nas redes sociais
+    personalized_body = _upgrade_social_icons_in_html(personalized_body)
     configuration = sib_api_v3_sdk.Configuration()
     configuration.api_key['api-key'] = BREVO_API_KEY
     api_instance = sib_api_v3_sdk.TransactionalEmailsApi(sib_api_v3_sdk.ApiClient(configuration))
@@ -5186,13 +5276,13 @@ def _texto_para_email_html(texto, template_html='', primary_color='#1a3a6b', tem
         assinatura_nome = kit.get('signature_name', '')
         assinatura_cargo = kit.get('signature_role', '')
         links = []
-        for rede, emoji in [('instagram','📸'), ('facebook','📘'), ('linkedin','💼'),
-                            ('whatsapp','📱'), ('website','🌐')]:
+        for rede in ('instagram', 'facebook', 'linkedin', 'whatsapp', 'youtube', 'website'):
             url = kit.get(rede, '')
             if url:
-                if not url.startswith('http'):
+                if not url.startswith(('http://', 'https://', 'mailto:')):
                     url = 'https://' + url
-                links.append(f'<a href="{url}" style="text-decoration:none;font-size:18px;margin:0 4px;">{emoji}</a>')
+                platform = rede if rede in _SOCIAL_ICONS else 'website'
+                links.append(_social_icon_html(url, platform=platform))
         social_links = ' '.join(links)
 
     # --- Strip HTML tags if content came from rich editor ---
