@@ -441,6 +441,7 @@ def init_db():
         "ALTER TABLE nichos ADD COLUMN user_id INTEGER",
         "ALTER TABLE contacts ADD COLUMN last_contact_at TIMESTAMP",
         "ALTER TABLE contacts ADD COLUMN next_action_date DATE",
+        "ALTER TABLE contacts ADD COLUMN temperature_override TEXT",
     ]:
         try:
             conn.execute(f"DO $$ BEGIN {col_sql}; EXCEPTION WHEN duplicate_column THEN NULL; END $$")
@@ -917,7 +918,25 @@ def score_label(score):
     if s >= 21:  return ('Morno', '#ca8a04', '#fef9c3')
     return ('Frio', '#2563eb', '#dbeafe')
 
+TEMPERATURE_LABELS = {
+    'muito_quente': ('Muito Quente', '#5B2A6E', '#EDE0F2'),
+    'quente':       ('Quente',       '#ea580c', '#ffedd5'),
+    'morno':        ('Morno',        '#ca8a04', '#fef9c3'),
+    'frio':         ('Frio',         '#2563eb', '#dbeafe'),
+}
+
+def effective_temperature(score, override):
+    """Devolve (label, fg, bg, is_manual). Se override existir, sobrescreve o
+    cálculo do score."""
+    if override and override in TEMPERATURE_LABELS:
+        lbl = TEMPERATURE_LABELS[override]
+        return (lbl[0], lbl[1], lbl[2], True)
+    lbl = score_label(score)
+    return (lbl[0], lbl[1], lbl[2], False)
+
 app.jinja_env.globals['score_label'] = score_label
+app.jinja_env.globals['effective_temperature'] = effective_temperature
+app.jinja_env.globals['TEMPERATURE_LABELS'] = TEMPERATURE_LABELS
 
 def get_sender_name():
     try:
@@ -3894,6 +3913,19 @@ def contato_perfil(email):
         "  AND (s.user_id=%s OR s.user_id IS NULL OR s.id IS NULL) "
         "ORDER BY o.opened_at DESC LIMIT 200",
         (email, uid, uid)).fetchall()
+
+    # Contexto rápido: último email aberto + próximo email da cadência ativa
+    last_open = email_opens[0] if email_opens else None
+    next_step = conn.execute(
+        "SELECT sc.next_send_at, sc.current_step, s.name AS seq_name, "
+        "       ss.subject AS step_subject, ss.step_number "
+        "FROM sequence_contacts sc "
+        "JOIN sequences s ON s.id = sc.sequence_id "
+        "LEFT JOIN sequence_steps ss ON ss.sequence_id = sc.sequence_id AND ss.step_number = sc.current_step "
+        "WHERE sc.contact_email=%s AND sc.status='active' AND s.user_id=%s "
+        "ORDER BY sc.next_send_at ASC LIMIT 1",
+        (email, uid)).fetchone()
+
     best_hour = get_best_send_hour(email)
     is_bl = is_blacklisted(email, conn)
     conn.close()
@@ -3903,6 +3935,7 @@ def contato_perfil(email):
                            conversations=conversations, tasks_pending=tasks_pending,
                            tasks_done=tasks_done, user_sequences=user_sequences,
                            user_templates=user_templates, email_opens=email_opens,
+                           last_open=last_open, next_step=next_step,
                            today=datetime.now().date(),
                            best_hour=best_hour, is_blacklisted=is_bl)
 
@@ -4176,6 +4209,157 @@ def lista_tarefas():
     }
     conn.close()
     return render_template('tarefas.html', tasks=tasks, view=view, counts=counts, today=today)
+
+
+# ── CRM — Pipeline / Dashboard de negociações ──────────────────────────────
+
+PIPELINE_STATUSES = [
+    ('lead',                'Lead',                 '#2563eb', '#dbeafe'),
+    ('interessado',         'Interessado',          '#0891b2', '#cffafe'),
+    ('em_prospeccao',       'Em Prospecção',        '#7c3aed', '#ede9fe'),
+    ('respondeu_aplicacao', 'Respondeu Aplicação',  '#ca8a04', '#fef9c3'),
+    ('negocio_quente',      'Negócio Quente',       '#ea580c', '#ffedd5'),
+    ('mentoria',            'Mentoria',             '#5B2A6E', '#EDE0F2'),
+    ('cliente',             'Cliente',              '#166534', '#dcfce7'),
+    ('inativo',             'Inativo',              '#64748b', '#f1f5f9'),
+]
+
+
+@app.route('/pipeline')
+@login_required
+def pipeline():
+    uid = _uid()
+    conn = get_db()
+    today = datetime.now().date()
+
+    # ─── BLOCO A — Alertas operacionais ─────────────────────────────────
+    tasks_today = conn.execute(
+        "SELECT t.*, c.name AS contact_name FROM contact_tasks t "
+        "LEFT JOIN contacts c ON c.email=t.contact_email AND c.user_id=t.user_id "
+        "WHERE t.user_id=%s AND t.status='pending' AND t.due_date=%s "
+        "ORDER BY COALESCE(t.due_time, '00:00'::time) ASC LIMIT 20",
+        (uid, today)).fetchall()
+    tasks_overdue = conn.execute(
+        "SELECT t.*, c.name AS contact_name FROM contact_tasks t "
+        "LEFT JOIN contacts c ON c.email=t.contact_email AND c.user_id=t.user_id "
+        "WHERE t.user_id=%s AND t.status='pending' AND t.due_date<%s "
+        "ORDER BY t.due_date ASC LIMIT 20",
+        (uid, today)).fetchall()
+
+    # Sinal quente ignorado: contato abriu 3+ emails em 48h e não tem tarefa pendente
+    hot_signals = conn.execute(
+        "SELECT c.email, c.name, c.status, COUNT(o.id) AS opens_48h, "
+        "       COALESCE(cs.score, 0) AS score "
+        "FROM contacts c "
+        "JOIN email_opens o ON o.contact_email=c.email "
+        "LEFT JOIN contact_scores cs ON cs.email=c.email "
+        "WHERE c.user_id=%s "
+        "  AND o.opened_at >= NOW() - INTERVAL '48 hours' "
+        "  AND NOT EXISTS ( "
+        "    SELECT 1 FROM contact_tasks t "
+        "    WHERE t.contact_email=c.email AND t.user_id=%s AND t.status='pending' "
+        "  ) "
+        "GROUP BY c.email, c.name, c.status, cs.score "
+        "HAVING COUNT(o.id) >= 3 "
+        "ORDER BY COUNT(o.id) DESC, cs.score DESC "
+        "LIMIT 20",
+        (uid, uid)).fetchall()
+
+    # Quentes esfriando: score >= 51 (ou override quente/muito_quente) sem contato há > 7 dias
+    cooling_hot = conn.execute(
+        "SELECT c.email, c.name, c.status, c.last_contact_at, c.temperature_override, "
+        "       COALESCE(cs.score, 0) AS score, "
+        "       EXTRACT(DAY FROM NOW() - COALESCE(c.last_contact_at, c.created_at))::int AS days_since "
+        "FROM contacts c "
+        "LEFT JOIN contact_scores cs ON cs.email=c.email "
+        "WHERE c.user_id=%s "
+        "  AND ( "
+        "    c.temperature_override IN ('quente', 'muito_quente') "
+        "    OR (c.temperature_override IS NULL AND COALESCE(cs.score, 0) >= 51) "
+        "  ) "
+        "  AND COALESCE(c.last_contact_at, c.created_at) < NOW() - INTERVAL '7 days' "
+        "ORDER BY days_since DESC LIMIT 20",
+        (uid,)).fetchall()
+
+    # ─── BLOCO B — Funil por status ─────────────────────────────────────
+    funnel_rows = conn.execute(
+        "SELECT status, COUNT(*) AS n FROM contacts WHERE user_id=%s GROUP BY status",
+        (uid,)).fetchall()
+    funnel_map = {r['status']: r['n'] for r in funnel_rows}
+    funnel = [
+        {'key': k, 'label': lbl, 'fg': fg, 'bg': bg, 'count': funnel_map.get(k, 0)}
+        for (k, lbl, fg, bg) in PIPELINE_STATUSES
+    ]
+    total_contacts = sum(r['n'] for r in funnel_rows)
+    other_count = total_contacts - sum(f['count'] for f in funnel)
+
+    # ─── BLOCO C — Ranking dos quentes ──────────────────────────────────
+    top_hot = conn.execute(
+        "SELECT c.email, c.name, c.status, c.temperature_override, c.last_contact_at, "
+        "       COALESCE(cs.score, 0) AS score, "
+        "       EXTRACT(DAY FROM NOW() - COALESCE(c.last_contact_at, c.created_at))::int AS days_since, "
+        "       (SELECT MIN(t.due_date) FROM contact_tasks t "
+        "        WHERE t.contact_email=c.email AND t.user_id=c.user_id AND t.status='pending') AS next_task_date "
+        "FROM contacts c "
+        "LEFT JOIN contact_scores cs ON cs.email=c.email "
+        "WHERE c.user_id=%s "
+        "ORDER BY "
+        "  CASE c.temperature_override "
+        "    WHEN 'muito_quente' THEN 4 "
+        "    WHEN 'quente' THEN 3 "
+        "    WHEN 'morno' THEN 2 "
+        "    WHEN 'frio' THEN 1 "
+        "    ELSE 0 END DESC, "
+        "  cs.score DESC NULLS LAST "
+        "LIMIT 10",
+        (uid,)).fetchall()
+
+    # Contadores rápidos
+    quick = {
+        'tasks_today':   len(tasks_today),
+        'tasks_overdue': len(tasks_overdue),
+        'hot_signals':   len(hot_signals),
+        'cooling_hot':   len(cooling_hot),
+        'total_contacts': total_contacts,
+    }
+
+    conn.close()
+    return render_template('pipeline.html',
+                           tasks_today=tasks_today, tasks_overdue=tasks_overdue,
+                           hot_signals=hot_signals, cooling_hot=cooling_hot,
+                           funnel=funnel, other_count=other_count,
+                           top_hot=top_hot, quick=quick, today=today)
+
+
+# ── CRM — Temperatura manual do contato ────────────────────────────────────
+
+@app.route('/contatos/<path:email>/temperatura', methods=['POST'])
+@login_required
+def set_temperatura(email):
+    uid = _uid()
+    conn = get_db()
+    _ensure_contact_owner(conn, email, uid)
+    temp = (request.form.get('temperature', '') or '').strip().lower()
+    if temp in ('', 'auto', 'automatic'):
+        conn.execute(
+            "UPDATE contacts SET temperature_override=NULL WHERE email=%s AND user_id=%s",
+            (email, uid))
+        log_activity(email, 'temperature_reset', 'Temperatura voltou para automático (score)', conn)
+        msg = 'Temperatura voltou para automático (baseado no score).'
+    elif temp in TEMPERATURE_LABELS:
+        conn.execute(
+            "UPDATE contacts SET temperature_override=%s WHERE email=%s AND user_id=%s",
+            (temp, email, uid))
+        label = TEMPERATURE_LABELS[temp][0]
+        log_activity(email, 'temperature_manual', f'Temperatura definida manualmente: {label}', conn)
+        msg = f'Temperatura definida como {label}.'
+    else:
+        conn.close()
+        flash('Temperatura inválida.', 'danger')
+        return redirect(url_for('contato_perfil', email=email))
+    conn.commit(); conn.close()
+    flash(msg, 'success')
+    return redirect(request.referrer or url_for('contato_perfil', email=email))
 
 
 # ── CRM — Envio direto de email a partir do contato ────────────────────────
