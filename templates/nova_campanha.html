@@ -465,6 +465,10 @@
               <i class="bi bi-shield-check me-1"></i>Spam Score
             </button>
           </div>
+          <button type="button" class="btn btn-success w-100 py-2 mb-2" onclick="previewComoChega()"
+                  title="Ver o email exato que o destinatário recebe (com imagens embutidas, ícones brand, links validados)">
+            <i class="bi bi-envelope-check me-1"></i>Ver como vai chegar
+          </button>
           <div id="spamResult" class="mb-2"></div>
           <button type="button" class="btn btn-outline-secondary w-100 py-2" onclick="salvarRascunho()">
             <i class="bi bi-save me-2"></i>Salvar Rascunho
@@ -1130,8 +1134,18 @@ function _inserirNoEditor(quillContainerId, textareaId, html) {
   }
 }
 
+function _lerHtmlAtual() {
+  // getEditorContent está definido em editor.js — devolve HTML atual (Quill ou textarea)
+  if (typeof getEditorContent === 'function') {
+    return getEditorContent('quill-main','textarea-main') || '';
+  }
+  // fallback direto na textarea
+  const ta = document.getElementById('textarea-main');
+  return ta ? ta.value : '';
+}
+
 function previewEmail() {
-  const html = getEditorHTML();
+  const html = _lerHtmlAtual();
   if (!html || html.length < 10) { alert('Crie o conteúdo do email primeiro.'); return; }
   const form = document.createElement('form');
   form.method = 'POST'; form.action = '/preview-email'; form.target = '_blank';
@@ -1140,20 +1154,39 @@ function previewEmail() {
   form.appendChild(input); document.body.appendChild(form); form.submit(); form.remove();
 }
 
+function previewComoChega() {
+  const html = _lerHtmlAtual();
+  if (!html || html.length < 10) { alert('Crie o conteúdo do email primeiro.'); return; }
+  const form = document.createElement('form');
+  form.method = 'POST'; form.action = '/preview-envio-html'; form.target = '_blank';
+  const input = document.createElement('input');
+  input.type = 'hidden'; input.name = 'html'; input.value = html;
+  form.appendChild(input); document.body.appendChild(form); form.submit(); form.remove();
+}
+
 function checkSpam() {
-  const html = getEditorHTML();
+  const html = _lerHtmlAtual();
   const subject = document.getElementById('subject').value;
   if (!html || html.length < 10) { alert('Crie o conteúdo do email primeiro.'); return; }
   const el = document.getElementById('spamResult');
   el.innerHTML = '<div class="text-center small"><div class="spinner-border spinner-border-sm"></div> Analisando...</div>';
   fetch('/ia/verificar-spam', {method:'POST', headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({html:html, subject:subject})}).then(r=>r.json()).then(d=>{
-    const color = d.score >= 80 ? 'success' : d.score >= 60 ? 'warning' : 'danger';
-    let h = `<div class="alert alert-${color} py-2 small mb-0"><strong>${d.score}/100</strong> — ${d.nivel}`;
-    if (d.problemas.length > 0) h += '<ul class="mb-0 mt-1">' + d.problemas.map(p=>`<li>${p.msg}</li>`).join('') + '</ul>';
-    h += '</div>';
-    el.innerHTML = h;
-  });
+    body:JSON.stringify({html:html, subject:subject})})
+    .then(r=>r.json())
+    .then(d=>{
+      if (d.erro) {
+        el.innerHTML = `<div class="alert alert-danger py-2 small mb-0"><strong>Erro:</strong> ${d.erro}</div>`;
+        return;
+      }
+      const color = d.score >= 80 ? 'success' : d.score >= 60 ? 'warning' : 'danger';
+      let h = `<div class="alert alert-${color} py-2 small mb-0"><strong>${d.score}/100</strong> — ${d.nivel}`;
+      if (d.problemas && d.problemas.length > 0) h += '<ul class="mb-0 mt-1">' + d.problemas.map(p=>`<li>${p.msg}</li>`).join('') + '</ul>';
+      h += '</div>';
+      el.innerHTML = h;
+    })
+    .catch(e => {
+      el.innerHTML = `<div class="alert alert-danger py-2 small mb-0"><strong>Falha:</strong> ${e.message || e}</div>`;
+    });
 }
 </script>
 {% endblock %}
