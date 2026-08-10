@@ -774,19 +774,44 @@ def get_mailing_contacts_db(mailing_id, conn):
         (mailing_id,)).fetchall()
     return [{'email': r['email'], 'name': r['name'] or '', 'tags': r['tags'] or ''} for r in rows]
 
-def upsert_contact(email, name='', tags='', conn=None, force_update=False, **extra):
+def _resolve_uid(conn=None):
+    """Devolve o user_id para operações de CRM.
+    Preferência: session > admin (fallback para operações de sistema/webhooks)."""
+    try:
+        uid = session.get('user_id')
+        if uid:
+            return uid
+    except Exception:
+        pass
+    close = conn is None
+    if close: conn = get_db()
+    try:
+        row = conn.execute(
+            "SELECT id FROM users WHERE role='admin' ORDER BY id LIMIT 1").fetchone()
+        return row['id'] if row else None
+    finally:
+        if close: conn.close()
+
+
+def upsert_contact(email, name='', tags='', conn=None, force_update=False, user_id=None, **extra):
     """Insere ou atualiza contato no CRM.
     extra: phone, company, position, notes, product_interest, source, status, nicho, city, state, country
     force_update=True: sobrescreve campos mesmo que já preenchidos (usado no upload CSV).
     force_update=False: só preenche campos vazios/NULL.
     Tags são sempre mescladas (nunca sobrescritas).
+    user_id: multi-tenancy — se None, resolve da session ou fallback admin.
     """
     close = conn is None
     if close: conn = get_db()
 
+    if user_id is None:
+        user_id = _resolve_uid(conn)
+
+    # ON CONFLICT precisa bater com a UNIQUE existente (user_id, email) — pós multi-tenancy.
     conn.execute(
-        'INSERT INTO contacts (email,name,tags,status) VALUES (%s,%s,%s,%s) ON CONFLICT (email) DO NOTHING',
-        (email, name, tags, extra.get('status') or 'lead'))
+        'INSERT INTO contacts (email,name,tags,status,user_id) VALUES (%s,%s,%s,%s,%s) '
+        'ON CONFLICT (user_id, email) DO NOTHING',
+        (email, name, tags, extra.get('status') or 'lead', user_id))
 
     fill_fields = ('name', 'phone', 'company', 'position', 'notes', 'product_interest', 'source', 'nicho', 'city', 'state', 'country')
     overwrite_fields = ('status', 'product_interest', 'nicho')
@@ -795,28 +820,31 @@ def upsert_contact(email, name='', tags='', conn=None, force_update=False, **ext
         if value:
             if force_update and field in overwrite_fields:
                 conn.execute(
-                    f"UPDATE contacts SET {field}=%s, updated_at=NOW() WHERE email=%s",
-                    (value, email))
+                    f"UPDATE contacts SET {field}=%s, updated_at=NOW() WHERE email=%s AND user_id=%s",
+                    (value, email, user_id))
             else:
                 conn.execute(
                     f"UPDATE contacts SET {field}=%s, updated_at=NOW() "
-                    f"WHERE email=%s AND ({field} IS NULL OR {field}='')",
-                    (value, email))
+                    f"WHERE email=%s AND user_id=%s AND ({field} IS NULL OR {field}='')",
+                    (value, email, user_id))
     if force_update and extra.get('status'):
         conn.execute(
-            "UPDATE contacts SET status=%s, updated_at=NOW() WHERE email=%s",
-            (extra['status'], email))
+            "UPDATE contacts SET status=%s, updated_at=NOW() WHERE email=%s AND user_id=%s",
+            (extra['status'], email, user_id))
 
     # Tags: mescla sem duplicar
     if tags:
-        cur = conn.execute('SELECT tags FROM contacts WHERE email=%s', (email,))
+        cur = conn.execute(
+            'SELECT tags FROM contacts WHERE email=%s AND user_id=%s', (email, user_id))
         existing = cur.fetchone()
         if existing and existing['tags']:
             merged = ','.join(sorted(set(
                 t.strip() for t in (existing['tags'] + ',' + tags).split(',') if t.strip())))
         else:
             merged = tags
-        conn.execute('UPDATE contacts SET tags=%s WHERE email=%s', (merged, email))
+        conn.execute(
+            'UPDATE contacts SET tags=%s WHERE email=%s AND user_id=%s',
+            (merged, email, user_id))
 
     if close: conn.commit(); conn.close()
 
@@ -1264,6 +1292,10 @@ def run_campaign(campaign_id, contacts, sender, subject, body_html, sequence_id=
     conn.execute("UPDATE campaigns SET status='running',total_contacts=%s WHERE id=%s", (len(contacts), campaign_id))
     conn.commit()
 
+    # Multi-tenancy: user_id vem da campanha (session não está viva em thread daemon).
+    owner_row = conn.execute("SELECT user_id FROM campaigns WHERE id=%s", (campaign_id,)).fetchone()
+    owner_uid = owner_row['user_id'] if owner_row and owner_row.get('user_id') else _resolve_uid(conn)
+
     blacklisted_count = 0
     for contact in contacts:
         email = contact['email']
@@ -1273,7 +1305,11 @@ def run_campaign(campaign_id, contacts, sender, subject, body_html, sequence_id=
             blacklisted_count += 1
             continue
 
-        upsert_contact(email, name, contact.get('tags', ''), conn)
+        try:
+            upsert_contact(email, name, contact.get('tags', ''), conn, user_id=owner_uid)
+        except Exception as e:
+            print(f"[CAMPAIGN {campaign_id}] upsert_contact falhou para {email}: {e}", flush=True)
+            conn.rollback()
 
         pixel_url = f"{APP_URL}/track/open?email={quote(email)}&campaign={campaign_id}"
         unsub_url = _unsub_url(email, campaign_id=campaign_id)
@@ -1302,13 +1338,40 @@ def run_campaign(campaign_id, contacts, sender, subject, body_html, sequence_id=
         conn.commit()
 
     if sequence_id:
-        enroll_contacts_in_sequence(int(sequence_id), contacts, conn)
-        conn.commit()
+        try:
+            enroll_contacts_in_sequence(int(sequence_id), contacts, conn)
+            conn.commit()
+        except Exception as e:
+            print(f"[CAMPAIGN {campaign_id}] enroll_contacts_in_sequence falhou: {e}", flush=True)
+            conn.rollback()
 
     campaign_progress[campaign_id]['status'] = 'done'
-    conn.execute("UPDATE campaigns SET status='done',finished_at=NOW() WHERE id=%s", (campaign_id,))
-    conn.commit()
+    try:
+        conn.execute("UPDATE campaigns SET status='done',finished_at=NOW() WHERE id=%s", (campaign_id,))
+        conn.commit()
+    except Exception as e:
+        print(f"[CAMPAIGN {campaign_id}] falha ao marcar done: {e}", flush=True)
+        conn.rollback()
     conn.close()
+
+
+def _run_campaign_safe(*args, **kwargs):
+    """Wrapper que blinda a thread daemon — se algo escapar do run_campaign,
+    ao menos marca a campanha como 'error' em vez de deixar em 'running' pra sempre."""
+    campaign_id = args[0] if args else kwargs.get('campaign_id')
+    try:
+        run_campaign(*args, **kwargs)
+    except Exception as e:
+        import traceback
+        print(f"[CAMPAIGN {campaign_id}] CRASH: {e}\n{traceback.format_exc()}", flush=True)
+        try:
+            conn = get_db()
+            conn.execute(
+                "UPDATE campaigns SET status='error', finished_at=NOW() WHERE id=%s",
+                (campaign_id,))
+            conn.commit(); conn.close()
+        except Exception:
+            pass
 
 # ── Agendador de cadências ────────────────────────────────────────────────────
 
@@ -1490,7 +1553,7 @@ def processar_campanhas_agendadas():
         conn2.commit()
         conn2.close()
         t = threading.Thread(
-            target=run_campaign,
+            target=_run_campaign_safe,
             args=(campaign_id, contacts, sender, subject, body_html, sequence_id),
             daemon=True)
         t.start()
@@ -2014,7 +2077,7 @@ def nova_campanha():
             flash(f'Campanha agendada para {parsed_scheduled_at.strftime("%d/%m/%Y às %H:%M")}!', 'success')
             return redirect(url_for('campanha_detalhe', campaign_id=campaign_id))
 
-        t = threading.Thread(target=run_campaign, args=(campaign_id, contacts, sender, subject, body_html, sequence_id), daemon=True)
+        t = threading.Thread(target=_run_campaign_safe, args=(campaign_id, contacts, sender, subject, body_html, sequence_id), daemon=True)
         t.start()
         flash(f'Campanha iniciada! Enviando para {len(contacts)} contato(s).', 'success')
         return redirect(url_for('campanha_detalhe', campaign_id=campaign_id))
@@ -2388,7 +2451,7 @@ def campanha_segmentada():
         conn.commit()
 
         t = threading.Thread(
-            target=run_campaign,
+            target=_run_campaign_safe,
             args=(campaign_id, contacts, sender, subject, body_html, sequence_id),
             daemon=True)
         t.start()
@@ -3628,7 +3691,7 @@ def adicionar_contatos_cadencia(seq_id):
             conn.execute(
                 'INSERT INTO sequence_contacts (sequence_id,contact_email,contact_name,current_step,next_send_at) VALUES (%s,%s,%s,%s,%s)',
                 (seq_id, c['email'], c.get('name', ''), first_step['step_number'], next_send))
-            upsert_contact(c['email'], c.get('name', ''), c.get('tags', ''), conn)
+            upsert_contact(c['email'], c.get('name', ''), c.get('tags', ''), conn, user_id=_uid())
             added += 1
         else:
             skipped_existing += 1
@@ -4574,8 +4637,11 @@ def upload_mailing():
         conn.execute(
             'INSERT INTO mailing_contacts (mailing_id,email,name,tags,nicho) VALUES (%s,%s,%s,%s,%s) ON CONFLICT (mailing_id,email) DO NOTHING',
             (mailing_id, c['email'], c['name'], c['tags'], nicho_contato))
-        existia = conn.execute('SELECT id FROM contacts WHERE email=%s', (c['email'],)).fetchone()
+        existia = conn.execute(
+            'SELECT id FROM contacts WHERE email=%s AND user_id=%s',
+            (c['email'], _uid())).fetchone()
         upsert_contact(c['email'], c['name'], c['tags'], conn, force_update=True,
+                       user_id=_uid(),
                        phone=c.get('phone'), company=c.get('company'),
                        position=c.get('position'), notes=c.get('notes'),
                        product_interest=c.get('product_interest'),
@@ -4855,8 +4921,11 @@ def prospeccao_criar_mailing():
         conn.execute(
             'INSERT INTO mailing_contacts (mailing_id,email,name,tags) VALUES (%s,%s,%s,%s) ON CONFLICT (mailing_id,email) DO NOTHING',
             (mid, em, ld.get('nome', ''), ''))
-        existia = conn.execute('SELECT id FROM contacts WHERE email=%s', (em,)).fetchone()
+        existia = conn.execute(
+            'SELECT id FROM contacts WHERE email=%s AND user_id=%s',
+            (em, _uid())).fetchone()
         upsert_contact(em, ld.get('nome', ''), '', conn,
+                       user_id=_uid(),
                        phone=ld.get('telefone', ''),
                        company=ld.get('empresa', ''),
                        position=ld.get('cargo', ''))
@@ -5847,7 +5916,7 @@ def reenviar_nao_abridores(campaign_id):
     conn.commit()
     conn.close()
 
-    t = threading.Thread(target=run_campaign,
+    t = threading.Thread(target=_run_campaign_safe,
                          args=(new_id, non_openers, campaign['sender_email'], novo_assunto, campaign['body']),
                          daemon=True)
     t.start()
