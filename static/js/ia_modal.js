@@ -356,15 +356,22 @@ async function iamGerarEmail() {
       clearInterval(timer);
       document.getElementById('iamLoading').classList.add('d-none');
       document.getElementById('iamPlaceholder').classList.remove('d-none');
-      console.error('Resposta nao-JSON:', res.status, texto.substring(0, 200));
-      alert('Erro do servidor (status ' + res.status + '). Tente novamente.');
+      console.error('Resposta nao-JSON:', res.status, texto);
+      // Tenta extrair mensagem útil de HTML de erro Flask/nginx
+      let msg = 'Erro do servidor (status ' + res.status + ').';
+      const stripTags = s => (s || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+      const titleMatch = texto.match(/<title>(.*?)<\/title>/i);
+      const bodyText = stripTags(texto).substring(0, 300);
+      if (titleMatch && titleMatch[1]) msg += '\n\nTítulo: ' + titleMatch[1];
+      if (bodyText) msg += '\n\nDetalhe: ' + bodyText;
+      alert(msg);
       return;
     }
     clearInterval(timer);
     document.getElementById('iamLoading').classList.add('d-none');
     if (data.erro) {
       document.getElementById('iamPlaceholder').classList.remove('d-none');
-      alert('Erro ao gerar email: ' + data.erro);
+      alert('Erro ao gerar email: ' + data.erro + (data.ref ? '\n\nRef: ' + data.ref : ''));
       return;
     }
     _iamHtmlGerado = data.html;
