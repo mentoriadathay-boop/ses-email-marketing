@@ -4401,6 +4401,7 @@ def lista_contatos():
     conn = get_db()
     status_filter = request.args.get('status', '')
     tag_filter = request.args.get('tag', '')
+    mailing_filter = request.args.get('mailing', '').strip()
     search = request.args.get('q', '')
     sort = request.args.get('sort', 'score')
 
@@ -4409,6 +4410,16 @@ def lista_contatos():
     params = [uid]
     if status_filter: query += ' AND c.status=%s'; params.append(status_filter)
     if tag_filter: query += ' AND c.tags ILIKE %s'; params.append(f'%{tag_filter}%')
+    if mailing_filter:
+        # Filtra contatos que estão em um mailing específico do próprio usuário
+        query += (' AND EXISTS ('
+                  ' SELECT 1 FROM mailing_contacts mc'
+                  ' JOIN mailings m ON m.id = mc.mailing_id'
+                  ' WHERE LOWER(mc.email) = LOWER(c.email)'
+                  '   AND m.user_id = %s'
+                  '   AND m.id = %s'
+                  ')')
+        params += [uid, int(mailing_filter)] if mailing_filter.isdigit() else [uid, -1]
     if search:
         query += ' AND (c.email ILIKE %s OR c.name ILIKE %s OR c.company ILIKE %s)'
         params += [f'%{search}%', f'%{search}%', f'%{search}%']
@@ -4421,9 +4432,14 @@ def lista_contatos():
     for c in conn.execute("SELECT tags FROM contacts WHERE tags IS NOT NULL AND tags != '' AND user_id=%s", (uid,)).fetchall():
         for t in c['tags'].split(','):
             if t.strip(): all_tags.add(t.strip())
+    # Mailings do usuário para o dropdown de filtro
+    mailings_list = conn.execute(
+        'SELECT id, name, contact_count FROM mailings WHERE user_id=%s ORDER BY name',
+        (uid,)).fetchall()
     conn.close()
     return render_template('contatos.html', contatos=contatos, all_tags=sorted(all_tags),
-                           status_filter=status_filter, tag_filter=tag_filter, search=search, sort=sort)
+                           status_filter=status_filter, tag_filter=tag_filter, search=search, sort=sort,
+                           mailings_list=mailings_list, mailing_filter=mailing_filter)
 
 @app.route('/contatos/<path:email>', methods=['GET', 'POST'])
 @login_required
