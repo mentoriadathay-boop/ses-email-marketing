@@ -1221,29 +1221,62 @@ def _wrap_links_for_tracking(html, email, campaign_id=None, sequence_id=None, st
     return pat.sub(_repl, html)
 
 
+# Textos que são "só o nome da rede" — se aparecerem como conteúdo de um <a>
+# apontando pra rede social correspondente, viram caixinha brand.
+# Inclui variações com emoji prefixado (ex: "📷 Instagram") e uppercase.
+_SOCIAL_PLATFORM_NAMES = {
+    'instagram': 'instagram', 'insta': 'instagram', 'ig': 'instagram',
+    'facebook': 'facebook', 'fb': 'facebook',
+    'linkedin': 'linkedin', 'in': 'linkedin',
+    'whatsapp': 'whatsapp', 'wpp': 'whatsapp', 'wa': 'whatsapp', 'zap': 'whatsapp',
+    'youtube': 'youtube', 'yt': 'youtube', 'canal': 'youtube',
+    'twitter': 'twitter', 'x': 'twitter',
+    'tiktok': 'tiktok', 'tt': 'tiktok',
+    'telegram': 'telegram', 'tg': 'telegram',
+    'site': 'website', 'website': 'website', 'blog': 'website', 'home': 'website',
+    'email': 'email', 'e-mail': 'email',
+}
+
+
 def _upgrade_social_icons_in_html(html):
-    """Post-process: encontra <a href="URL"> cujo conteúdo é apenas emoji/símbolo
-    e substitui pela caixinha brand. Detecta plataforma primeiro pela URL, e se
-    a URL for genérica (site pessoal), pelo emoji do conteúdo."""
+    """Post-process: encontra <a href="URL"> apontando pra rede social e
+    substitui pela caixinha brand. Casos aceitos:
+    1) inner text curto (<=3 chars) — emoji ou símbolo apenas
+    2) inner text é apenas o nome da plataforma ('Instagram', '📷 Instagram', 'Site')
+    3) URL é social e inner text não tem texto significativo além do nome
+    Preserva links tipo "Ver no Instagram" (texto real além do nome)."""
     if not html:
         return html
     pat = re.compile(r'<a\b([^>]*?)href=(["\'])([^"\']+)\2([^>]*)>(.*?)</a>', re.I | re.S)
     def _repl(m):
         pre_attrs, quote, url, post_attrs, inner = m.group(1), m.group(2), m.group(3), m.group(4), m.group(5)
         inner_text = re.sub(r'<[^>]+>', '', inner).strip()
-        # Se tem texto significativo (> 3 chars visíveis), não altera
-        if len(inner_text) > 3:
-            return m.group(0)
         platform = _social_platform_from_url(url)
-        if not platform:
-            # Tenta detectar pelo emoji
-            for emoji, plat in _SOCIAL_EMOJIS_HINT.items():
-                if emoji in inner_text:
-                    platform = plat
-                    break
-        if not platform:
+
+        # Detecta se inner_text é só um nome de plataforma (possivelmente com emoji prefixado)
+        text_only_letters = re.sub(r'[^\w\-]', '', inner_text.lower()).strip()
+        is_platform_label = text_only_letters in _SOCIAL_PLATFORM_NAMES
+
+        # Caso 1: texto curto (emoji, símbolo)
+        if len(inner_text) <= 3:
+            if not platform:
+                for emoji, plat in _SOCIAL_EMOJIS_HINT.items():
+                    if emoji in inner_text:
+                        platform = plat
+                        break
+            if platform:
+                return _social_icon_html(url, platform=platform)
             return m.group(0)
-        return _social_icon_html(url, platform=platform)
+
+        # Caso 2/3: texto é nome da plataforma (com ou sem emoji)
+        if is_platform_label:
+            hinted = _SOCIAL_PLATFORM_NAMES[text_only_letters]
+            # Se URL confirma a plataforma OU não temos URL social, usa o nome do texto
+            final_platform = platform or hinted
+            return _social_icon_html(url, platform=final_platform)
+
+        # Preserva outros casos (ex: "Ver no Instagram")
+        return m.group(0)
     return pat.sub(_repl, html)
 
 
@@ -6013,6 +6046,9 @@ Kit de Marca — {kit['name']}:
             return jsonify({'erro': f'Erro ao formatar conteúdo: {e}'}), 500
         if cta_url:
             html = html.replace('#LINK_CTA', cta_url)
+        # Pós-processa ícones sociais (rodapé) já no preview — pra usuária
+        # ver as caixinhas brand antes de enviar, não só após.
+        html = _upgrade_social_icons_in_html(html)
         return jsonify({'html': html, 'cta_url_missing': not cta_url})
     else:
         prompt = f"""Crie um email profissional de marketing em HTML, com conteúdo RICO, ESPECÍFICO e APROFUNDADO — nada de texto genérico ou raso.
@@ -6047,7 +6083,8 @@ Estrutura de conteúdo obrigatória — cada bloco visualmente diferenciado:
 
 9. **Assinatura pessoal** — nome + cargo coerente com o kit de marca. Fundo branco.
 
-10. **Rodapé** — fundo #f8f9fa, padding:16px, texto centralizado, cor #888, font-size:12px, com nome da empresa e redes sociais como emojis clicáveis.
+10. **Rodapé** — fundo #f8f9fa, padding:16px, texto centralizado, cor #888, font-size:12px, com nome da empresa e redes sociais.
+    ⚠️ IMPORTANTE para o rodapé de redes sociais: use LINKS SIMPLES com o TEXTO curto (só o nome da rede, ex: <a href="...">Instagram</a>, <a href="...">Facebook</a>, <a href="...">Site</a>). NÃO use emojis prefixados como "📷 Instagram" ou "🌐 Site". O sistema tem um pós-processamento que transforma esses links no ícone brand correto automaticamente — mas SÓ funciona se o texto for apenas o nome da rede sem emoji.
 
 Instruções obrigatórias:
 - Retorne APENAS o código HTML, sem explicações, sem markdown, sem blocos ```
@@ -6078,6 +6115,8 @@ Instruções obrigatórias:
             # também escapa caso a IA tenha esquecido do placeholder e usado outro href
             html = html.replace('href="#LINK_CTA"', f'href="{cta_url}"')
             html = html.replace("href='#LINK_CTA'", f'href="{cta_url}"')
+        # Pós-processa ícones sociais (rodapé) já no preview
+        html = _upgrade_social_icons_in_html(html)
         return jsonify({'html': html, 'cta_url_missing': not cta_url})
     except Exception as e:
         return jsonify({'erro': str(e)}), 500
@@ -6130,6 +6169,7 @@ Instruções:
         out = re.sub(r'^```[a-z]*\n?', '', out)
         out = re.sub(r'\n?```$', '', out).strip()
         out = _restore_base64(out, b64_reps)
+        out = _upgrade_social_icons_in_html(out)
         return jsonify({'html': out})
     except Exception as e:
         return jsonify({'erro': str(e)}), 500
