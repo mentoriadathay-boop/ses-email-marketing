@@ -263,6 +263,13 @@ def init_db():
             contact_email TEXT NOT NULL, step_number INTEGER,
             opened_at TIMESTAMP DEFAULT NOW()
         )''',
+        '''CREATE TABLE IF NOT EXISTS email_clicks (
+            id SERIAL PRIMARY KEY,
+            campaign_id INTEGER, sequence_id INTEGER, step_number INTEGER,
+            contact_email TEXT NOT NULL,
+            dest_url TEXT,
+            clicked_at TIMESTAMP DEFAULT NOW()
+        )''',
         '''CREATE TABLE IF NOT EXISTS email_templates (
             id SERIAL PRIMARY KEY, name TEXT NOT NULL, category TEXT,
             subject TEXT, body_html TEXT NOT NULL,
@@ -478,6 +485,8 @@ def init_db():
         "CREATE INDEX IF NOT EXISTS idx_tasks_user_status ON contact_tasks(user_id, status, due_date)",
         "CREATE INDEX IF NOT EXISTS idx_tasks_contact ON contact_tasks(contact_email, status)",
         "CREATE INDEX IF NOT EXISTS idx_tasks_notifier ON contact_tasks(status, due_date) WHERE status='pending'",
+        "CREATE INDEX IF NOT EXISTS idx_clicks_campaign ON email_clicks(campaign_id)",
+        "CREATE INDEX IF NOT EXISTS idx_clicks_contact ON email_clicks(contact_email)",
     ]:
         try:
             conn.execute(idx_sql)
@@ -1171,6 +1180,47 @@ def _neutralize_dead_links(html):
     return pat.sub(_repl, html)
 
 
+def _wrap_links_for_tracking(html, email, campaign_id=None, sequence_id=None, step_number=None):
+    """Envolve <a href="URL"> com /track/click?...&url=... para contar cliques.
+    Só toca URLs externas http(s). Ignora mailto:, tel:, cid:, #, javascript:,
+    o próprio /track/, /descadastrar, /img/ e URLs de social icons já processadas
+    (evitaria conflito com o CSS de brand icon). Idempotente: se URL já aponta
+    pra /track/click, não envolve de novo."""
+    if not html or not email or not APP_URL:
+        return html
+    from urllib.parse import quote as _q
+    base = APP_URL.rstrip('/')
+    # Endpoints internos que não devem ser rastreados como cliques externos.
+    _skip_paths = ('/track/', '/descadastrar', '/img/', '/uploads/')
+    pat = re.compile(r'(<a\b[^>]*\bhref=)(["\'])([^"\']+)\2', re.I)
+
+    def _repl(m):
+        prefix, quote, url = m.group(1), m.group(2), m.group(3)
+        url_stripped = url.strip()
+        low = url_stripped.lower()
+        # Só rastreia http/https externos
+        if not low.startswith(('http://', 'https://')):
+            return m.group(0)
+        # Ignora rotas internas
+        if any(sp in low for sp in _skip_paths):
+            return m.group(0)
+        # Ignora se já é URL de tracking (idempotência)
+        if '/track/click' in low:
+            return m.group(0)
+        params = f'email={_q(email)}'
+        if campaign_id:
+            params += f'&campaign={campaign_id}'
+        if sequence_id:
+            params += f'&seq={sequence_id}'
+        if step_number:
+            params += f'&step={step_number}'
+        params += f'&url={_q(url_stripped, safe="")}'
+        tracked = f'{base}/track/click?{params}'
+        return f'{prefix}{quote}{tracked}{quote}'
+
+    return pat.sub(_repl, html)
+
+
 def _upgrade_social_icons_in_html(html):
     """Post-process: encontra <a href="URL"> cujo conteúdo é apenas emoji/símbolo
     e substitui pela caixinha brand. Detecta plataforma primeiro pela URL, e se
@@ -1294,23 +1344,28 @@ def _inline_uploaded_images(html):
             except Exception: pass
 
 
-def send_email_brevo(sender, recipient_email, recipient_name, subject, body_html):
+def send_email_brevo(sender, recipient_email, recipient_name, subject, body_html,
+                     campaign_id=None, sequence_id=None, step_number=None):
     personalized_subject = subject.replace('{nome}', recipient_name or 'Cliente')
     personalized_body = body_html.replace('{nome}', recipient_name or 'Cliente')
 
-    # Pipeline com log de tamanho em cada etapa (facilita debug de "sumiu conteúdo")
     def _log_size(stage, s):
         print(f'[send_email {stage}] {len(s.encode("utf-8"))} bytes', flush=True)
 
     _log_size('inicial', personalized_body)
     personalized_body = _absolutize_urls(personalized_body)
     _log_size('após absolutize_urls', personalized_body)
-    # IMAGENS: mantém URL absoluta HTTPS. Não embute em base64 (Gmail
-    # não renderiza data URIs confiavelmente + explode tamanho e trunca email).
-    # Não usa CID (API Brevo não suporta contentId — vira anexo baixável).
-    # Endpoint /img/<id> serve a imagem pública sem auth.
     personalized_body = _neutralize_dead_links(personalized_body)
     _log_size('após neutralize_dead_links', personalized_body)
+    # Wrap de tracking de clique — envolve <a href="http..."> com /track/click.
+    # 1º destinatário do split é usado como identificador (para envio 1x1;
+    # emails multi-destino usam o primeiro para rastreamento).
+    first_email_for_track = (re.split(r'[;,]', recipient_email)[0] or '').strip()
+    if first_email_for_track:
+        personalized_body = _wrap_links_for_tracking(
+            personalized_body, first_email_for_track,
+            campaign_id=campaign_id, sequence_id=sequence_id, step_number=step_number)
+        _log_size('após wrap_links_for_tracking', personalized_body)
     personalized_body = _upgrade_social_icons_in_html(personalized_body)
     _log_size('após upgrade_social_icons (final)', personalized_body)
 
@@ -1564,7 +1619,8 @@ def run_campaign(campaign_id, contacts, sender, subject, body_html, sequence_id=
             + f'<div style="text-align:center;margin-top:24px;font-size:11px;color:#aaa"><a href="{unsub_url}" style="color:#aaa">Descadastrar</a></div>')
 
         try:
-            send_email_brevo(sender, email, name, subject, body_with_tracking)
+            send_email_brevo(sender, email, name, subject, body_with_tracking,
+                             campaign_id=campaign_id)
             status = 'sent'
             campaign_progress[campaign_id]['sent'] += 1
             campaign_progress[campaign_id]['logs'].append({'email': email, 'name': name, 'status': 'sent', 'error': None})
@@ -1694,7 +1750,8 @@ def processar_cadencias():
                     + f'<div style="text-align:center;margin-top:24px;font-size:11px;color:#aaa"><a href="{unsub_url}" style="color:#aaa">Descadastrar</a></div>')
 
             try:
-                send_email_brevo(sender, email, name, use_subject, body)
+                send_email_brevo(sender, email, name, use_subject, body,
+                                 sequence_id=seq_id, step_number=step_num)
                 conn.execute(
                     'INSERT INTO sequence_logs (sequence_id,contact_email,step_number,status,ab_version) VALUES (%s,%s,%s,%s,%s)',
                     (seq_id, email, step_num, 'sent', ab_version))
@@ -2148,12 +2205,13 @@ def admin_deletar_usuario(user_id):
 def index():
     uid = _uid()
     conn = get_db()
-    # Traz aberturas únicas por campanha (distinct contact_email evita
-    # contar múltiplas aberturas do mesmo destinatário).
+    # Aberturas e cliques únicos por campanha (DISTINCT contact_email)
     campaigns = conn.execute(
         "SELECT c.*, "
         "  COALESCE((SELECT COUNT(DISTINCT o.contact_email) FROM email_opens o "
-        "            WHERE o.campaign_id=c.id), 0) AS opens_unique "
+        "            WHERE o.campaign_id=c.id), 0) AS opens_unique, "
+        "  COALESCE((SELECT COUNT(DISTINCT cl.contact_email) FROM email_clicks cl "
+        "            WHERE cl.campaign_id=c.id), 0) AS clicks_unique "
         "FROM campaigns c "
         "WHERE c.user_id=%s ORDER BY c.created_at DESC LIMIT 20",
         (uid,)
@@ -3596,18 +3654,26 @@ def track_click():
     email = request.args.get('email', '')
     seq_id = request.args.get('seq', type=int)
     step_num = request.args.get('step', type=int)
+    camp_id = request.args.get('campaign', type=int)
     dest_url = request.args.get('url', '')
     if email:
         try:
             conn = get_db()
             update_score(email, 10, conn)
-            log_activity(email, 'link_clicked', f'Cadência {seq_id}, passo {step_num}', conn)
+            # Grava clique em tabela dedicada — permite contagem por campanha/cadência
+            conn.execute(
+                'INSERT INTO email_clicks (campaign_id, sequence_id, step_number, contact_email, dest_url) '
+                'VALUES (%s, %s, %s, %s, %s)',
+                (camp_id, seq_id, step_num, email, dest_url[:2000] if dest_url else None))
+            contexto = (f'Campanha {camp_id}' if camp_id else
+                        f'Cadência {seq_id}, passo {step_num}' if seq_id else 'Manual')
+            log_activity(email, 'link_clicked', f'{contexto} — {dest_url[:100]}', conn)
             criar_notificacao('clique', f'{email} clicou no seu email',
                               f'Clicou em: {dest_url[:80]}', contact_email=email)
             conn.commit()
             conn.close()
-        except Exception:
-            pass
+        except Exception as e:
+            print(f'[track_click] erro: {e}', flush=True)
     return redirect(dest_url or '/')
 
 @app.route('/descadastrar', methods=['GET', 'POST'])
