@@ -1810,6 +1810,11 @@ _PUBLIC_ENDPOINTS = {
     'webhook_hotmart', 'track_open', 'track_click', 'descadastrar',
     'api_captura', 'ia_chat_landing', 'img_proxy', 'serve_upload',
     'conta_suspensa', 'alterar_senha', 'esqueci_senha',
+    # Endpoints de imagem — DEVEM ser públicos senão clientes de email
+    # (Gmail, Outlook) recebem redirect pra /login em vez da imagem.
+    # ESTE bug fazia imagem quebrada em TODOS os emails enviados.
+    'serve_db_imagem',      # /img/<id>  — upload via /upload/imagem
+    'serve_imagem',         # /uploads/imagens/<filename> — upload legado
 }
 
 @app.before_request
