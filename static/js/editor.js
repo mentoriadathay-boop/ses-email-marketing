@@ -383,12 +383,23 @@ async function melhorarTextoIA(containerId, textareaId, btnEl) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ html })
     });
-    const data = await res.json();
+    const texto = await res.text();
+    let data;
+    try { data = JSON.parse(texto); } catch (pe) {
+      console.error('Resposta nao-JSON de melhorar-texto:', res.status, texto);
+      const titleMatch = texto.match(/<title>(.*?)<\/title>/i);
+      let msg = 'Erro do servidor (status ' + res.status + ').';
+      if (titleMatch) msg += '\n\nTítulo: ' + titleMatch[1];
+      const bodySnip = (texto || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().substring(0, 300);
+      if (bodySnip) msg += '\n\nDetalhe: ' + bodySnip;
+      alert(msg);
+      return;
+    }
     if (data.erro) { alert('Erro ao melhorar texto: ' + data.erro); return; }
     showHtmlInEditor(containerId, textareaId, data.html);
     showToast('Texto melhorado com IA!', 'success');
   } catch (e) {
-    alert('Erro ao melhorar texto com IA.');
+    alert('Erro de conexão ao melhorar texto: ' + (e.message || e));
   } finally {
     if (btnEl) {
       btnEl.disabled = false;
