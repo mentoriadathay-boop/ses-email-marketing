@@ -59,121 +59,175 @@ const _TEMPLATES = [
 </table></td></tr></table></body></html>`
   },
   {
-    id: 'newsletter-rica', name: 'Newsletter Rica', cat: 'Texto Corrido',
-    desc: 'Blocos coloridos, títulos grandes, bullets destacados e imagem de destaque. Alta hierarquia visual.',
+    id: 'newsletter-rica', name: 'Newsletter Rica (Premium)', cat: 'Texto Corrido',
+    desc: 'Layout editorial: capa hero, subtítulo, chapéu de edição, texto serifado, blocos coloridos e assinatura destacada.',
     cor: '#5B2A6E', icone: '📚',
-    html: `<!DOCTYPE html><html><body style="margin:0;padding:20px;background:#f0f2f5;font-family:Arial,Helvetica,sans-serif;">
-<table width="100%" cellpadding="0" cellspacing="0"><tr><td align="center">
-<table cellpadding="0" cellspacing="0" style="width:100%;max-width:600px;background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 4px 12px rgba(0,0,0,0.06);">
+    html: `<!DOCTYPE html><html><body style="margin:0;padding:0;background:#f5f2e9;font-family:Georgia,'Times New Roman',serif;">
+<table width="100%" cellpadding="0" cellspacing="0" style="background:#f5f2e9;"><tr><td align="center" style="padding:24px 12px;">
+<table cellpadding="0" cellspacing="0" style="width:100%;max-width:600px;background:#ffffff;">
 
-<!-- Header colorido grande -->
-<tr><td style="background:linear-gradient(135deg,#5B2A6E,#7B3F8E);padding:36px 32px;text-align:center;">
-  <p style="color:#EDE0F2;margin:0;font-size:12px;letter-spacing:2px;text-transform:uppercase;font-weight:bold;">Edição #01 · Julho 2026</p>
-  <h1 style="color:#fff;margin:12px 0 0;font-size:28px;line-height:1.2;">Título principal da newsletter</h1>
-  <p style="color:#EDE0F2;margin:8px 0 0;font-size:15px;">Subtítulo que resume o tema desta edição</p>
+<!-- Chapéu de edição (topo minimalista com barras douradas) -->
+<tr><td style="background:#fefaf1;border-top:6px solid #c9a86a;border-bottom:1px solid #eee5d0;padding:14px 40px;">
+  <table width="100%"><tr>
+    <td style="font-family:Arial,sans-serif;font-size:11px;letter-spacing:3px;text-transform:uppercase;color:#8a6d3b;font-weight:bold;">Edição #01</td>
+    <td align="right" style="font-family:Arial,sans-serif;font-size:11px;letter-spacing:1px;color:#8a6d3b;">Julho · 2026</td>
+  </tr></table>
 </td></tr>
 
-<!-- Saudação -->
-<tr><td style="padding:28px 32px 8px;background:#fff;">
-  <p style="font-size:16px;color:#333;line-height:1.6;margin:0;">
-    Olá, <strong>{nome}</strong>! Nesta edição você vai encontrar o destaque da semana,
-    uma dica prática para aplicar hoje e uma recomendação especial. Boa leitura!
+<!-- Capa editorial (título hero + subtítulo + linha decorativa) -->
+<tr><td style="padding:52px 40px 20px;background:#fff;text-align:center;">
+  <p style="margin:0 0 18px;font-family:Arial,sans-serif;font-size:12px;letter-spacing:4px;text-transform:uppercase;color:#c9a86a;font-weight:bold;">Boletim Semanal</p>
+  <h1 style="margin:0;font-family:Georgia,serif;font-size:38px;line-height:1.15;color:#1a1a1a;font-weight:normal;">
+    O <em style="color:#5B2A6E;">tema principal</em> desta edição
+  </h1>
+  <p style="margin:16px auto 0;max-width:440px;font-family:Georgia,serif;font-size:17px;line-height:1.55;color:#666;font-style:italic;">
+    Uma linha de subtítulo que resume o que a pessoa vai aprender ou levar dessa edição
+  </p>
+  <div style="width:60px;height:3px;background:#c9a86a;margin:32px auto 0;"></div>
+</td></tr>
+
+<!-- Imagem hero (grande, sem padding lateral) -->
+<tr><td style="padding:0;background:#fff;">
+  <img src="https://via.placeholder.com/600x320/f5f2e9/5B2A6E?text=Imagem+de+capa+(600x320)"
+       alt="Capa" width="600"
+       style="display:block;width:100%;max-width:600px;height:auto;">
+</td></tr>
+
+<!-- Corpo com drop cap (letra capitular) -->
+<tr><td style="padding:32px 40px 8px;background:#fff;">
+  <p style="margin:0;font-family:Georgia,serif;font-size:18px;line-height:1.7;color:#2a2a2a;">
+    <span style="float:left;font-size:64px;line-height:0.85;color:#5B2A6E;padding:6px 10px 0 0;font-weight:bold;">O</span>lá, <strong>{nome}</strong>. Nesta edição você vai encontrar três leituras cuidadas — uma análise, uma prática e uma recomendação. Comece por qual quiser.
   </p>
 </td></tr>
 
-<!-- Imagem de destaque (substitua a URL) -->
-<tr><td style="padding:16px 32px;background:#fff;text-align:center;">
-  <img src="https://via.placeholder.com/536x240/EDE0F2/5B2A6E?text=Sua+imagem+aqui+(536x240)"
-       alt="Imagem de destaque"
-       style="display:block;width:100%;max-width:536px;height:auto;border-radius:8px;margin:0 auto;">
-</td></tr>
-
-<!-- Seção 1: Destaque -->
-<tr><td style="padding:24px 32px;background:#fff;">
-  <h2 style="color:#5B2A6E;font-size:22px;margin:0 0 12px;border-left:4px solid #5B2A6E;padding-left:12px;">
-    📌 Destaque da Semana
+<!-- Seção 1: título numerado editorial -->
+<tr><td style="padding:36px 40px 8px;background:#fff;">
+  <p style="margin:0;font-family:Arial,sans-serif;font-size:12px;letter-spacing:3px;color:#c9a86a;text-transform:uppercase;font-weight:bold;">
+    01 · Análise
+  </p>
+  <h2 style="margin:8px 0 0;font-family:Georgia,serif;font-size:26px;line-height:1.25;color:#1a1a1a;font-weight:normal;">
+    Título forte da primeira seção
   </h2>
-  <p style="color:#444;line-height:1.7;font-size:15px;margin:0;">
-    Texto do destaque principal — explique o contexto (o que aconteceu ou o que você descobriu),
-    por que isso importa para o leitor e qual é o próximo passo prático.
+</td></tr>
+<tr><td style="padding:12px 40px 20px;background:#fff;">
+  <p style="margin:0;font-family:Georgia,serif;font-size:17px;line-height:1.7;color:#333;">
+    Explique o contexto: o que aconteceu, o que você descobriu, por que isso importa para quem lê. Use frases mais longas e ritmadas aqui — é o parágrafo âncora do texto.
   </p>
 </td></tr>
 
-<!-- Bloco destacado colorido -->
-<tr><td style="padding:0 32px;background:#fff;">
-  <div style="background:#F8F4FA;border-left:4px solid #5B2A6E;padding:20px;border-radius:8px;margin:8px 0;">
-    <p style="margin:0;color:#5B2A6E;font-size:15px;font-weight:bold;">💡 Você sabia?</p>
-    <p style="margin:8px 0 0;color:#444;font-size:14px;line-height:1.6;">
-      Insira aqui um dado marcante, curiosidade ou estatística que reforce sua mensagem.
-    </p>
-  </div>
+<!-- Citação em destaque (blockquote editorial) -->
+<tr><td style="padding:8px 40px;background:#fff;">
+  <table cellpadding="0" cellspacing="0" style="width:100%;">
+    <tr>
+      <td style="padding:24px 28px;background:#fefaf1;border-left:4px solid #c9a86a;">
+        <p style="margin:0;font-family:Georgia,serif;font-size:20px;line-height:1.5;color:#5B2A6E;font-style:italic;">
+          &ldquo;Uma frase de destaque que o leitor vai lembrar depois de terminar a leitura.&rdquo;
+        </p>
+        <p style="margin:12px 0 0;font-family:Arial,sans-serif;font-size:12px;color:#8a6d3b;letter-spacing:1px;text-transform:uppercase;">— Autor ou fonte</p>
+      </td>
+    </tr>
+  </table>
 </td></tr>
 
-<!-- Seção 2: Dica Rápida com tópicos destacados -->
-<tr><td style="padding:24px 32px;background:#fff;">
-  <h2 style="color:#5B2A6E;font-size:22px;margin:0 0 16px;border-left:4px solid #5B2A6E;padding-left:12px;">
-    ✅ Dica prática (passo a passo)
+<!-- Divisor ornamental -->
+<tr><td style="padding:24px 40px;background:#fff;text-align:center;">
+  <span style="font-family:Georgia,serif;font-size:24px;color:#c9a86a;letter-spacing:16px;">◆ ◆ ◆</span>
+</td></tr>
+
+<!-- Seção 2: prática -->
+<tr><td style="padding:12px 40px 8px;background:#fff;">
+  <p style="margin:0;font-family:Arial,sans-serif;font-size:12px;letter-spacing:3px;color:#c9a86a;text-transform:uppercase;font-weight:bold;">
+    02 · Na Prática
+  </p>
+  <h2 style="margin:8px 0 16px;font-family:Georgia,serif;font-size:26px;line-height:1.25;color:#1a1a1a;font-weight:normal;">
+    Passo a passo para aplicar hoje
   </h2>
-  <ul style="padding:0;margin:0;list-style:none;">
-    <li style="background:#F8F9FA;border-left:3px solid #5B2A6E;padding:14px 16px;margin-bottom:10px;border-radius:4px;">
-      <strong style="color:#5B2A6E;">1. Primeiro passo:</strong>
-      <span style="color:#444;">explique o que fazer primeiro e por quê.</span>
-    </li>
-    <li style="background:#F8F9FA;border-left:3px solid #5B2A6E;padding:14px 16px;margin-bottom:10px;border-radius:4px;">
-      <strong style="color:#5B2A6E;">2. Segundo passo:</strong>
-      <span style="color:#444;">detalhe a próxima ação e o que esperar.</span>
-    </li>
-    <li style="background:#F8F9FA;border-left:3px solid #5B2A6E;padding:14px 16px;margin-bottom:10px;border-radius:4px;">
-      <strong style="color:#5B2A6E;">3. Terceiro passo:</strong>
-      <span style="color:#444;">descreva o resultado e como medir.</span>
-    </li>
-  </ul>
+  <table cellpadding="0" cellspacing="0" width="100%">
+    <tr>
+      <td width="44" valign="top" style="padding:0 12px 0 0;">
+        <div style="width:32px;height:32px;background:#5B2A6E;color:#fff;border-radius:50%;text-align:center;line-height:32px;font-family:Georgia,serif;font-size:16px;font-weight:bold;">1</div>
+      </td>
+      <td valign="top" style="padding-bottom:16px;">
+        <h3 style="margin:0;font-family:Georgia,serif;font-size:18px;color:#1a1a1a;font-weight:bold;">Primeiro passo</h3>
+        <p style="margin:4px 0 0;font-family:Georgia,serif;font-size:16px;line-height:1.6;color:#444;">Descreva o que fazer primeiro e por quê.</p>
+      </td>
+    </tr>
+    <tr>
+      <td valign="top" style="padding:0 12px 0 0;">
+        <div style="width:32px;height:32px;background:#5B2A6E;color:#fff;border-radius:50%;text-align:center;line-height:32px;font-family:Georgia,serif;font-size:16px;font-weight:bold;">2</div>
+      </td>
+      <td valign="top" style="padding-bottom:16px;">
+        <h3 style="margin:0;font-family:Georgia,serif;font-size:18px;color:#1a1a1a;font-weight:bold;">Segundo passo</h3>
+        <p style="margin:4px 0 0;font-family:Georgia,serif;font-size:16px;line-height:1.6;color:#444;">Detalhe a próxima ação e o que esperar.</p>
+      </td>
+    </tr>
+    <tr>
+      <td valign="top" style="padding:0 12px 0 0;">
+        <div style="width:32px;height:32px;background:#5B2A6E;color:#fff;border-radius:50%;text-align:center;line-height:32px;font-family:Georgia,serif;font-size:16px;font-weight:bold;">3</div>
+      </td>
+      <td valign="top">
+        <h3 style="margin:0;font-family:Georgia,serif;font-size:18px;color:#1a1a1a;font-weight:bold;">Terceiro passo</h3>
+        <p style="margin:4px 0 0;font-family:Georgia,serif;font-size:16px;line-height:1.6;color:#444;">Descreva o resultado esperado e como medir.</p>
+      </td>
+    </tr>
+  </table>
 </td></tr>
 
-<!-- Seção 3: Recomendado com fundo alternado -->
-<tr><td style="padding:24px 32px;background:#FAFAFA;">
-  <h2 style="color:#5B2A6E;font-size:22px;margin:0 0 12px;border-left:4px solid #5B2A6E;padding-left:12px;">
-    🎯 Recomendado para você
+<!-- Divisor ornamental -->
+<tr><td style="padding:32px 40px 16px;background:#fff;text-align:center;">
+  <span style="font-family:Georgia,serif;font-size:24px;color:#c9a86a;letter-spacing:16px;">◆ ◆ ◆</span>
+</td></tr>
+
+<!-- Seção 3: recomendação com card premium -->
+<tr><td style="padding:8px 40px 32px;background:#fff;">
+  <p style="margin:0;font-family:Arial,sans-serif;font-size:12px;letter-spacing:3px;color:#c9a86a;text-transform:uppercase;font-weight:bold;">
+    03 · Recomendação
+  </p>
+  <h2 style="margin:8px 0 16px;font-family:Georgia,serif;font-size:26px;line-height:1.25;color:#1a1a1a;font-weight:normal;">
+    O que separamos para você
   </h2>
-  <p style="color:#444;line-height:1.7;font-size:15px;margin:0;">
-    Com base no seu interesse em <em>[tema]</em>, separamos <em>[conteúdo/recurso/oferta]</em>.
-    Vale a pena porque <em>[motivo específico]</em>.
+  <table cellpadding="0" cellspacing="0" width="100%" style="border:1px solid #eee5d0;border-radius:6px;">
+    <tr>
+      <td style="padding:24px 28px;background:#fefaf1;">
+        <p style="margin:0;font-family:Georgia,serif;font-size:17px;line-height:1.6;color:#333;">
+          Com base no seu interesse em <em>[tema]</em>, separamos <em>[conteúdo/recurso/oferta]</em>. Vale porque <em>[motivo específico]</em>.
+        </p>
+        <div style="margin-top:20px;">
+          <a href="#LINK_CTA" style="display:inline-block;background:#5B2A6E;color:#fff;padding:14px 32px;font-family:Arial,sans-serif;font-size:14px;font-weight:bold;letter-spacing:1px;text-transform:uppercase;text-decoration:none;border-radius:2px;">
+            Ler agora
+          </a>
+        </div>
+      </td>
+    </tr>
+  </table>
+</td></tr>
+
+<!-- P.S. -->
+<tr><td style="padding:0 40px 32px;background:#fff;">
+  <p style="margin:0;font-family:Georgia,serif;font-size:16px;line-height:1.7;color:#666;font-style:italic;border-top:1px dashed #ddd;padding-top:20px;">
+    <strong style="color:#5B2A6E;font-style:normal;">P.S.:</strong> se tiver sugestões de tema para as próximas edições, é só responder este email — leio todas.
   </p>
 </td></tr>
 
-<!-- CTA em destaque -->
-<tr><td style="padding:8px 32px 28px;background:#FAFAFA;text-align:center;">
-  <a href="#LINK_CTA" style="display:inline-block;background:#5B2A6E;color:#fff;padding:16px 40px;border-radius:8px;text-decoration:none;font-weight:bold;font-size:16px;box-shadow:0 4px 12px rgba(91,42,110,0.3);">
-    Quero acessar agora →
-  </a>
-  <p style="margin:12px 0 0;font-size:12px;color:#888;">Clique acima para continuar</p>
+<!-- Assinatura pessoal -->
+<tr><td style="padding:0 40px 40px;background:#fff;">
+  <p style="margin:0;font-family:Georgia,serif;font-size:16px;color:#333;">Com carinho,</p>
+  <p style="margin:6px 0 0;font-family:Georgia,serif;font-size:22px;color:#5B2A6E;font-style:italic;">[Seu nome]</p>
+  <p style="margin:2px 0 0;font-family:Arial,sans-serif;font-size:12px;color:#888;letter-spacing:1px;text-transform:uppercase;">[Seu cargo · Empresa]</p>
 </td></tr>
 
-<!-- P.S. com fundo diferenciado -->
-<tr><td style="padding:20px 32px;background:#FFF9E6;border-top:1px solid #F5E6A8;">
-  <p style="margin:0;font-size:14px;color:#7A5A0F;line-height:1.6;">
-    <strong>P.S.:</strong> se tiver sugestões de temas para as próximas edições, é só responder este email — leio todas!
+<!-- Rodapé escuro premium -->
+<tr><td style="background:#1a1a1a;padding:32px 40px;text-align:center;">
+  <p style="margin:0;font-family:Georgia,serif;font-size:16px;color:#c9a86a;letter-spacing:2px;">[NOME DA EMPRESA]</p>
+  <p style="margin:6px 0 20px;font-family:Arial,sans-serif;font-size:11px;color:#888;letter-spacing:2px;text-transform:uppercase;">Boletim de assinantes</p>
+  <p style="margin:0;font-size:20px;">
+    <a href="#" style="color:#c9a86a;text-decoration:none;margin:0 8px;">📷</a>
+    <a href="#" style="color:#c9a86a;text-decoration:none;margin:0 8px;">💼</a>
+    <a href="#" style="color:#c9a86a;text-decoration:none;margin:0 8px;">📺</a>
+    <a href="#" style="color:#c9a86a;text-decoration:none;margin:0 8px;">📱</a>
   </p>
-</td></tr>
-
-<!-- Assinatura -->
-<tr><td style="padding:24px 32px;background:#fff;">
-  <p style="margin:0;color:#333;font-size:15px;">Um abraço,</p>
-  <p style="margin:4px 0 0;color:#5B2A6E;font-size:16px;font-weight:bold;">[Seu nome]</p>
-  <p style="margin:2px 0 0;color:#888;font-size:13px;">[Seu cargo · Empresa]</p>
-</td></tr>
-
-<!-- Rodapé -->
-<tr><td style="background:#333;padding:20px 32px;text-align:center;">
-  <p style="margin:0;color:#fff;font-size:13px;font-weight:bold;">[Nome da empresa]</p>
-  <p style="margin:6px 0;font-size:20px;">
-    <a href="#" style="color:#fff;text-decoration:none;margin:0 6px;">📷</a>
-    <a href="#" style="color:#fff;text-decoration:none;margin:0 6px;">💼</a>
-    <a href="#" style="color:#fff;text-decoration:none;margin:0 6px;">📺</a>
-    <a href="#" style="color:#fff;text-decoration:none;margin:0 6px;">📱</a>
-  </p>
-  <p style="margin:8px 0 0;font-size:11px;color:#aaa;">
-    © 2026 · <a href="#" style="color:#aaa;">Descadastrar</a>
+  <p style="margin:20px 0 0;font-family:Arial,sans-serif;font-size:11px;color:#666;">
+    © 2026 · <a href="#" style="color:#c9a86a;text-decoration:underline;">Cancelar inscrição</a>
   </p>
 </td></tr>
 

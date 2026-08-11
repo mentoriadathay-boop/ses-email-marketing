@@ -6084,6 +6084,16 @@ Instruções obrigatórias:
 
 @app.route('/ia/melhorar-texto', methods=['POST'])
 def ia_melhorar_texto():
+    try:
+        return _ia_melhorar_texto_impl()
+    except Exception as e:
+        import traceback
+        tb = traceback.format_exc()
+        print(f'[ia_melhorar_texto] CRASH: {e}\n{tb}', flush=True)
+        return jsonify({'erro': f'Erro interno: {e.__class__.__name__}: {e}'}), 500
+
+
+def _ia_melhorar_texto_impl():
     if not ANTHROPIC_OK:
         return jsonify({'erro': 'Anthropic SDK não instalado.'}), 500
     api_key = os.environ.get('ANTHROPIC_API_KEY', '')
