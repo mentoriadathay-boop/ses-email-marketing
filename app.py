@@ -2931,20 +2931,55 @@ def salvar_email_account():
     use_ssl = request.form.get('use_ssl') == 'on'
     account_id = request.form.get('account_id', '').strip()
 
+    # Se está editando (account_id existe) e senha vazia, reusar a atual do DB.
+    # Assim usuário pode mudar só label/porta/etc sem redigitar senha.
+    is_edit = bool(account_id)
+    existing_acc = None
+    if is_edit:
+        conn = get_db()
+        existing_acc = conn.execute(
+            'SELECT * FROM email_accounts WHERE id=%s', (account_id,)).fetchone()
+        conn.close()
+        if not existing_acc:
+            flash('Conta não encontrada.', 'danger')
+            return redirect(url_for('configuracoes'))
+        if not password:
+            password = _acc_password(existing_acc) or ''
+
     if not all([imap_server, smtp_server, email_addr, password]):
-        flash('Preencha todos os campos obrigatorios.', 'danger')
+        flash('Preencha todos os campos obrigatórios (email + servidores + senha).', 'danger')
         return redirect(url_for('configuracoes'))
 
-    try:
-        imap_conn = ec.imap_connect(imap_server, imap_port, email_addr, password, use_ssl)
-        sent_folder = ec.detect_sent_folder(imap_conn)
-        imap_conn.logout()
-    except Exception as e:
-        flash(f'Erro ao conectar IMAP: {e}', 'danger')
-        return redirect(url_for('configuracoes'))
+    # Só reautentica se a senha OU o servidor OU a porta OU o email mudaram.
+    precisa_reautenticar = True
+    if is_edit and existing_acc:
+        creds_iguais = (
+            password == _acc_password(existing_acc) and
+            imap_server == existing_acc['imap_server'] and
+            imap_port == existing_acc['imap_port'] and
+            email_addr == existing_acc['email'] and
+            use_ssl == existing_acc['use_ssl']
+        )
+        if creds_iguais:
+            precisa_reautenticar = False
+
+    if precisa_reautenticar:
+        try:
+            imap_conn = ec.imap_connect(imap_server, imap_port, email_addr, password, use_ssl)
+            sent_folder = ec.detect_sent_folder(imap_conn)
+            imap_conn.logout()
+        except Exception as e:
+            msg = str(e)
+            hint = ''
+            if 'AUTHENTICATIONFAILED' in msg.upper() or 'Authentication failed' in msg:
+                hint = ' (Se você estava só mudando o nome/label, deixe o campo Senha em branco — ele mantém a senha atual. Só preencha a senha se ela realmente mudou.)'
+            flash(f'Erro ao conectar IMAP: {msg}{hint}', 'danger')
+            return redirect(url_for('configuracoes'))
+    else:
+        sent_folder = existing_acc['sent_folder']
 
     conn = get_db()
-    if account_id:
+    if is_edit:
         conn.execute("""UPDATE email_accounts SET label=%s,imap_server=%s,imap_port=%s,
             smtp_server=%s,smtp_port=%s,email=%s,password=%s,use_ssl=%s,sent_folder=%s WHERE id=%s""",
             (label, imap_server, imap_port, smtp_server, smtp_port, email_addr, _encrypt_password(password), use_ssl, sent_folder, account_id))

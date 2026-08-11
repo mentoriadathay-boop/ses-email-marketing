@@ -129,9 +129,19 @@
                    placeholder="seu@email.com">
           </div>
           <div class="col-md-6">
-            <label class="form-label small fw-semibold">Senha <span class="text-danger">*</span></label>
-            <input type="password" name="password" class="form-control form-control-sm" required
-                   placeholder="Senha do email">
+            <label class="form-label small fw-semibold">Senha
+              {% if not email_accounts %}<span class="text-danger">*</span>{% endif %}
+            </label>
+            <input type="password" name="password" class="form-control form-control-sm"
+                   {% if not email_accounts %}required{% endif %}
+                   autocomplete="new-password"
+                   placeholder="{% if email_accounts %}Deixe em branco para manter a atual{% else %}Senha do email{% endif %}">
+            {% if email_accounts %}
+            <div class="form-text small">
+              <i class="bi bi-info-circle me-1"></i>
+              Só preencha se a senha mudou. Em branco = mantém a senha salva.
+            </div>
+            {% endif %}
           </div>
           <div class="col-md-6">
             <div class="form-check mt-4">
