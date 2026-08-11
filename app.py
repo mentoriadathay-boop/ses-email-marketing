@@ -2138,8 +2138,15 @@ def admin_deletar_usuario(user_id):
 def index():
     uid = _uid()
     conn = get_db()
+    # Traz aberturas únicas por campanha (distinct contact_email evita
+    # contar múltiplas aberturas do mesmo destinatário).
     campaigns = conn.execute(
-        "SELECT * FROM campaigns WHERE user_id=%s ORDER BY created_at DESC LIMIT 20", (uid,)
+        "SELECT c.*, "
+        "  COALESCE((SELECT COUNT(DISTINCT o.contact_email) FROM email_opens o "
+        "            WHERE o.campaign_id=c.id), 0) AS opens_unique "
+        "FROM campaigns c "
+        "WHERE c.user_id=%s ORDER BY c.created_at DESC LIMIT 20",
+        (uid,)
     ).fetchall()
     total_contacts = conn.execute('SELECT COUNT(*) as n FROM contacts WHERE user_id=%s', (uid,)).fetchone()['n']
     blacklist_count = conn.execute('SELECT COUNT(*) as n FROM blacklist').fetchone()['n']
