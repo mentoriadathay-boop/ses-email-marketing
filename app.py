@@ -1298,16 +1298,13 @@ def send_email_brevo(sender, recipient_email, recipient_name, subject, body_html
     personalized_subject = subject.replace('{nome}', recipient_name or 'Cliente')
     personalized_body = body_html.replace('{nome}', recipient_name or 'Cliente')
     personalized_body = _absolutize_urls(personalized_body)
-    # IMAGENS: extrai as uploadadas para anexar via CID (Brevo strip data URIs
-    # grandes por antispam — CID attachment é o método canonical suportado).
+    # IMAGENS: extrai as uploadadas para anexar via CID
     personalized_body, inline_atts = _extract_inline_images_for_brevo(personalized_body)
     # Neutraliza links mortos (href="#", "#LINK_CTA", vazio)
     personalized_body = _neutralize_dead_links(personalized_body)
     # Substitui emoji simples por ícone brand nas redes sociais
     personalized_body = _upgrade_social_icons_in_html(personalized_body)
-    configuration = sib_api_v3_sdk.Configuration()
-    configuration.api_key['api-key'] = BREVO_API_KEY
-    api_instance = sib_api_v3_sdk.TransactionalEmailsApi(sib_api_v3_sdk.ApiClient(configuration))
+
     emails = [e.strip() for e in re.split(r'[;,]', recipient_email) if e.strip()]
     if not emails:
         raise ValueError(f'Email invalido: {recipient_email}')
@@ -1318,17 +1315,36 @@ def send_email_brevo(sender, recipient_email, recipient_name, subject, body_html
             entry['name'] = recipient_name.strip()
         to_list.append(entry)
     sender_info = {'email': sender, 'name': get_sender_name()}
-    kwargs = dict(
-        to=to_list,
-        sender=sender_info,
-        reply_to=sender_info,
-        subject=personalized_subject,
-        html_content=personalized_body,
-    )
+
+    # HTTP DIRETO pra API Brevo: o SDK sib_api_v3_sdk instalado é uma versão
+    # antiga que NÃO suporta contentId no SendSmtpEmailAttachment (só url,
+    # content, name). Sem contentId a imagem vira anexo comum (baixável),
+    # não inline. Chamando /v3/smtp/email direto controlamos o JSON exato.
+    payload = {
+        'to': to_list,
+        'sender': sender_info,
+        'replyTo': sender_info,
+        'subject': personalized_subject,
+        'htmlContent': personalized_body,
+    }
     if inline_atts:
-        kwargs['attachment'] = inline_atts
-    email_obj = sib_api_v3_sdk.SendSmtpEmail(**kwargs)
-    return api_instance.send_transac_email(email_obj)
+        # Cada attachment: {content: base64, name: str, contentId: str}
+        payload['attachment'] = inline_atts
+    resp = http_requests.post(
+        'https://api.brevo.com/v3/smtp/email',
+        headers={
+            'accept': 'application/json',
+            'content-type': 'application/json',
+            'api-key': BREVO_API_KEY,
+        },
+        json=payload,
+        timeout=30,
+    )
+    if resp.status_code >= 300:
+        # Loga corpo pra debug, e propaga erro pra caller (que já trata)
+        body_snippet = (resp.text or '')[:500]
+        raise RuntimeError(f'Brevo {resp.status_code}: {body_snippet}')
+    return resp.json() if resp.text else {}
 
 # ── Prospecção / Extração de Leads ───────────────────────────────────────────
 
