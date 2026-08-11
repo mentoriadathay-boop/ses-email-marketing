@@ -1298,8 +1298,12 @@ def send_email_brevo(sender, recipient_email, recipient_name, subject, body_html
     personalized_subject = subject.replace('{nome}', recipient_name or 'Cliente')
     personalized_body = body_html.replace('{nome}', recipient_name or 'Cliente')
     personalized_body = _absolutize_urls(personalized_body)
-    # IMAGENS: extrai as uploadadas para anexar via CID
-    personalized_body, inline_atts = _extract_inline_images_for_brevo(personalized_body)
+    # IMAGENS: embute como data:image;base64 diretamente no HTML.
+    # Motivo: a API Brevo /v3/smtp/email não suporta 'contentId' no attachment
+    # (só url/content/name) — attachment vira arquivo baixável, não inline.
+    # Data URI funciona em Gmail/Outlook/Yahoo quando a imagem é pequena
+    # (por isso comprimimos no upload para ~150KB).
+    personalized_body = _inline_uploaded_images(personalized_body)
     # Neutraliza links mortos (href="#", "#LINK_CTA", vazio)
     personalized_body = _neutralize_dead_links(personalized_body)
     # Substitui emoji simples por ícone brand nas redes sociais
@@ -1316,10 +1320,7 @@ def send_email_brevo(sender, recipient_email, recipient_name, subject, body_html
         to_list.append(entry)
     sender_info = {'email': sender, 'name': get_sender_name()}
 
-    # HTTP DIRETO pra API Brevo: o SDK sib_api_v3_sdk instalado é uma versão
-    # antiga que NÃO suporta contentId no SendSmtpEmailAttachment (só url,
-    # content, name). Sem contentId a imagem vira anexo comum (baixável),
-    # não inline. Chamando /v3/smtp/email direto controlamos o JSON exato.
+    # HTTP direto pra API Brevo (não passa pelo SDK)
     payload = {
         'to': to_list,
         'sender': sender_info,
@@ -1327,9 +1328,6 @@ def send_email_brevo(sender, recipient_email, recipient_name, subject, body_html
         'subject': personalized_subject,
         'htmlContent': personalized_body,
     }
-    if inline_atts:
-        # Cada attachment: {content: base64, name: str, contentId: str}
-        payload['attachment'] = inline_atts
     resp = http_requests.post(
         'https://api.brevo.com/v3/smtp/email',
         headers={
@@ -1341,7 +1339,6 @@ def send_email_brevo(sender, recipient_email, recipient_name, subject, body_html
         timeout=30,
     )
     if resp.status_code >= 300:
-        # Loga corpo pra debug, e propaga erro pra caller (que já trata)
         body_snippet = (resp.text or '')[:500]
         raise RuntimeError(f'Brevo {resp.status_code}: {body_snippet}')
     return resp.json() if resp.text else {}
@@ -3437,6 +3434,54 @@ def api_templates():
     conn.close()
     return jsonify([dict(t) for t in tpls])
 
+def _compress_image_for_email(raw_bytes, orig_ext):
+    """Redimensiona/comprime imagem para caber em email inline.
+    Alvo: max 800px de largura, ~150KB. Retorna (bytes_comprimidos, mime).
+    Se falhar (arquivo não é imagem válida OU Pillow indisponível), devolve
+    o original. GIF animado é preservado (não pode virar JPEG)."""
+    try:
+        from PIL import Image
+        import io as _io
+    except ImportError:
+        mime_map = {'jpg':'image/jpeg','jpeg':'image/jpeg','png':'image/png','gif':'image/gif','webp':'image/webp'}
+        return raw_bytes, mime_map.get(orig_ext, 'image/png')
+    try:
+        img = Image.open(_io.BytesIO(raw_bytes))
+        # GIFs animados: preserva original (múltiplos frames)
+        if getattr(img, 'is_animated', False):
+            return raw_bytes, 'image/gif'
+        # Resize se for maior que 800px de largura
+        MAX_WIDTH = 800
+        if img.width > MAX_WIDTH:
+            new_h = int(img.height * (MAX_WIDTH / img.width))
+            img = img.resize((MAX_WIDTH, new_h), Image.LANCZOS)
+        # Preserva transparência: PNG com alpha vira PNG otimizado.
+        # Sem alpha: converte pra JPEG (menor).
+        out = _io.BytesIO()
+        has_alpha = img.mode in ('RGBA', 'LA') or (img.mode == 'P' and 'transparency' in img.info)
+        if has_alpha:
+            if img.mode != 'RGBA':
+                img = img.convert('RGBA')
+            img.save(out, 'PNG', optimize=True)
+            mime = 'image/png'
+        else:
+            if img.mode != 'RGB':
+                img = img.convert('RGB')
+            # Ajusta qualidade pra ficar ~150KB
+            quality = 85
+            img.save(out, 'JPEG', quality=quality, optimize=True, progressive=True)
+            while out.tell() > 150 * 1024 and quality > 55:
+                out = _io.BytesIO()
+                quality -= 10
+                img.save(out, 'JPEG', quality=quality, optimize=True, progressive=True)
+            mime = 'image/jpeg'
+        return out.getvalue(), mime
+    except Exception as e:
+        print(f'[compress_image] falha, usando original: {e}', flush=True)
+        mime_map = {'jpg':'image/jpeg','jpeg':'image/jpeg','png':'image/png','gif':'image/gif','webp':'image/webp'}
+        return raw_bytes, mime_map.get(orig_ext, 'image/png')
+
+
 @app.route('/upload/imagem', methods=['POST'])
 def upload_imagem():
     import base64 as b64mod
@@ -3446,10 +3491,10 @@ def upload_imagem():
     if file.filename == '' or not allowed_image(file.filename):
         return jsonify({'erro': 'Tipo não permitido'}), 400
     ext = file.filename.rsplit('.', 1)[1].lower()
-    mime_map = {'jpg': 'image/jpeg', 'jpeg': 'image/jpeg', 'png': 'image/png', 'gif': 'image/gif', 'webp': 'image/webp'}
-    mime = mime_map.get(ext, 'image/png')
-    data = file.read()
-    b64 = b64mod.b64encode(data).decode('utf-8')
+    raw = file.read()
+    # Comprime para caber em email inline (max 800px, ~150KB)
+    compressed, mime = _compress_image_for_email(raw, ext)
+    b64 = b64mod.b64encode(compressed).decode('utf-8')
     img_id = uuid.uuid4().hex
     conn = get_db()
     conn.execute('INSERT INTO uploaded_images (id, mime_type, data) VALUES (%s, %s, %s)',
@@ -3458,7 +3503,7 @@ def upload_imagem():
     conn.close()
     # URL absoluta — se APP_URL for relativo/vazio por erro de config, força https + host.
     base = APP_URL if APP_URL.startswith(('http://', 'https://')) else f'https://{request.host}'
-    return jsonify({'url': f'{base}/img/{img_id}'})
+    return jsonify({'url': f'{base}/img/{img_id}', 'size_kb': round(len(compressed) / 1024, 1)})
 
 @app.route('/img/<img_id>')
 def serve_db_imagem(img_id):
