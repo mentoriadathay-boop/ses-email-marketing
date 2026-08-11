@@ -53,6 +53,16 @@
         </select>
       </div>
       <div class="col-md-2">
+        <select name="mailing" class="form-select form-select-sm" title="Filtrar por mailing">
+          <option value="">Todos os mailings</option>
+          {% for m in mailings_list %}
+          <option value="{{ m.id }}" {% if mailing_filter == m.id|string %}selected{% endif %}>
+            {{ m.name }} ({{ m.contact_count }})
+          </option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-md-2">
         <select name="sort" class="form-select form-select-sm">
           <option value="score" {% if sort == 'score' %}selected{% endif %}>Ordenar: Score</option>
           <option value="name" {% if sort == 'name' %}selected{% endif %}>Ordenar: Nome</option>
@@ -63,7 +73,7 @@
         <button type="submit" class="btn btn-sm btn-primary">
           <i class="bi bi-search me-1"></i> Filtrar
         </button>
-        <a href="{{ url_for('lista_contatos') }}" class="btn btn-sm btn-outline-secondary">
+        <a href="{{ url_for('lista_contatos') }}" class="btn btn-sm btn-outline-secondary" title="Limpar">
           <i class="bi bi-x"></i>
         </a>
       </div>
@@ -74,7 +84,18 @@
 <!-- Tabela de contatos -->
 <div class="card">
   <div class="card-header bg-white border-0 pt-4 pb-0 px-4 d-flex justify-content-between align-items-center">
-    <span class="fw-semibold"><i class="bi bi-people me-2"></i>{{ contatos|length }} contato(s)</span>
+    <span class="fw-semibold">
+      <i class="bi bi-people me-2"></i>{{ contatos|length }} contato(s)
+      {% if mailing_filter %}
+        {% for m in mailings_list %}
+          {% if m.id|string == mailing_filter %}
+          <span class="badge ms-2" style="background:#dbeafe;color:#1e40af">
+            <i class="bi bi-collection me-1"></i>{{ m.name }}
+          </span>
+          {% endif %}
+        {% endfor %}
+      {% endif %}
+    </span>
   </div>
   <div class="card-body p-0">
     {% if contatos %}
@@ -176,7 +197,7 @@
     <div class="text-center py-5 text-muted">
       <i class="bi bi-people fs-1 d-block mb-2"></i>
       Nenhum contato encontrado.
-      {% if search or status_filter or tag_filter %}
+      {% if search or status_filter or tag_filter or mailing_filter %}
       <div class="mt-2"><a href="{{ url_for('lista_contatos') }}">Limpar filtros</a></div>
       {% endif %}
     </div>
