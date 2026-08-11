@@ -1297,17 +1297,22 @@ def _inline_uploaded_images(html):
 def send_email_brevo(sender, recipient_email, recipient_name, subject, body_html):
     personalized_subject = subject.replace('{nome}', recipient_name or 'Cliente')
     personalized_body = body_html.replace('{nome}', recipient_name or 'Cliente')
+
+    # Pipeline com log de tamanho em cada etapa (facilita debug de "sumiu conteúdo")
+    def _log_size(stage, s):
+        print(f'[send_email {stage}] {len(s.encode("utf-8"))} bytes', flush=True)
+
+    _log_size('inicial', personalized_body)
     personalized_body = _absolutize_urls(personalized_body)
-    # IMAGENS: embute como data:image;base64 diretamente no HTML.
-    # Motivo: a API Brevo /v3/smtp/email não suporta 'contentId' no attachment
-    # (só url/content/name) — attachment vira arquivo baixável, não inline.
-    # Data URI funciona em Gmail/Outlook/Yahoo quando a imagem é pequena
-    # (por isso comprimimos no upload para ~150KB).
-    personalized_body = _inline_uploaded_images(personalized_body)
-    # Neutraliza links mortos (href="#", "#LINK_CTA", vazio)
+    _log_size('após absolutize_urls', personalized_body)
+    # IMAGENS: mantém URL absoluta HTTPS. Não embute em base64 (Gmail
+    # não renderiza data URIs confiavelmente + explode tamanho e trunca email).
+    # Não usa CID (API Brevo não suporta contentId — vira anexo baixável).
+    # Endpoint /img/<id> serve a imagem pública sem auth.
     personalized_body = _neutralize_dead_links(personalized_body)
-    # Substitui emoji simples por ícone brand nas redes sociais
+    _log_size('após neutralize_dead_links', personalized_body)
     personalized_body = _upgrade_social_icons_in_html(personalized_body)
+    _log_size('após upgrade_social_icons (final)', personalized_body)
 
     emails = [e.strip() for e in re.split(r'[;,]', recipient_email) if e.strip()]
     if not emails:
@@ -3514,6 +3519,11 @@ def upload_imagem():
 
 @app.route('/img/<img_id>')
 def serve_db_imagem(img_id):
+    """Endpoint público de imagem para consumo em emails.
+    IMPORTANTE: sem auth, sem sessão, sem cookie, sem redirect.
+    Retorna Content-Type: image/* pra Gmail e outros proxies conseguirem
+    fazer cache. Talisman pode adicionar headers de segurança que
+    atrapalham cache — anulamos aqui explicitamente."""
     import base64 as b64mod
     conn = get_db()
     row = conn.execute('SELECT mime_type, data FROM uploaded_images WHERE id=%s', (img_id,)).fetchone()
@@ -3522,8 +3532,15 @@ def serve_db_imagem(img_id):
         from flask import abort
         abort(404)
     raw = b64mod.b64decode(row['data'])
-    return Response(raw, mimetype=row['mime_type'],
-                    headers={'Cache-Control': 'public, max-age=31536000'})
+    resp = Response(raw, mimetype=row['mime_type'])
+    resp.headers['Content-Type'] = row['mime_type']
+    resp.headers['Cache-Control'] = 'public, max-age=31536000, immutable'
+    resp.headers['Content-Length'] = str(len(raw))
+    # Remove headers de Talisman que confundem proxies de imagem do Gmail
+    resp.headers.pop('X-Frame-Options', None)
+    resp.headers.pop('Content-Security-Policy', None)
+    resp.headers['Access-Control-Allow-Origin'] = '*'
+    return resp
 
 @app.route('/uploads/imagens/<path:filename>')
 def serve_imagem(filename):
@@ -5779,9 +5796,14 @@ def _texto_para_email_html(texto, template_html='', primary_color='#1a3a6b', tem
 
     img_tag = ''
     if imagem_url:
-        img_tag = (f'<div style="text-align:center;margin:16px 0;">'
-                   f'<img src="{_esc(imagem_url)}" alt="imagem" '
-                   f'style="max-width:100%;border-radius:8px;"></div>')
+        # width explícito + display:block são recomendados pra emails renderizarem
+        # a imagem confiavelmente. alt descritivo pra caso o cliente bloqueie
+        # (usuário vê texto amigável em vez de "imagem").
+        img_tag = (f'<div style="text-align:center;margin:20px 0;">'
+                   f'<img src="{_esc(imagem_url)}" alt="Imagem ilustrativa" '
+                   f'width="600" '
+                   f'style="display:block;width:100%;max-width:600px;height:auto;'
+                   f'border-radius:8px;margin:0 auto;"></div>')
 
     if img_tag and imagem_posicao == 'before_cta' and content_parts:
         cta_idx = None
