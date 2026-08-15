@@ -3305,32 +3305,69 @@ def email_enviar():
     attachments = request.files.getlist('attachments')
     attachments = [f for f in attachments if f.filename]
 
+    # Pré-processa anexos: lê bytes e converte pra base64 (necessário pro Brevo).
+    # Faz agora pra pegar erro de leitura ANTES de tentar enviar.
+    import base64 as _b64mod
+    prepared_atts = []
+    total_size = 0
+    for f in attachments:
+        try:
+            data = f.read()
+            total_size += len(data)
+            prepared_atts.append({
+                'name': secure_filename(f.filename) or 'anexo',
+                'content_b64': _b64mod.b64encode(data).decode('ascii'),
+                'raw': data,
+                'mimetype': f.mimetype or 'application/octet-stream',
+            })
+        except Exception as e:
+            flash(f'Erro ao ler anexo "{f.filename}": {e}', 'danger')
+            return redirect(url_for('email_compor'))
+    # Brevo aceita até ~10MB total no email (payload)
+    if total_size > 9 * 1024 * 1024:
+        flash(f'Anexos totais têm {total_size/1024/1024:.1f}MB — limite recomendado é 9MB. Remova algum ou comprima.', 'danger')
+        return redirect(url_for('email_compor'))
+
     try:
         if BREVO_API_KEY:
-            configuration = sib_api_v3_sdk.Configuration()
-            configuration.api_key['api-key'] = BREVO_API_KEY
-            api_instance = sib_api_v3_sdk.TransactionalEmailsApi(sib_api_v3_sdk.ApiClient(configuration))
-            to_list = [{'email': addr.strip()} for addr in to.split(',')]
-            params = {
-                'to': to_list,
+            # HTTP direto pra API Brevo — SDK antigo não expõe todos os campos
+            # de attachment/headers corretamente. Aqui montamos o JSON EXATO.
+            payload = {
+                'to': [{'email': addr.strip()} for addr in to.split(',') if addr.strip()],
                 'sender': {'email': acc['email'], 'name': get_sender_name()},
                 'subject': subject,
-                'html_content': body_html,
+                'htmlContent': body_html,
             }
             if cc:
-                params['cc'] = [{'email': addr.strip()} for addr in cc.split(',')]
+                payload['cc'] = [{'email': addr.strip()} for addr in cc.split(',') if addr.strip()]
             if bcc:
-                params['bcc'] = [{'email': addr.strip()} for addr in bcc.split(',')]
+                payload['bcc'] = [{'email': addr.strip()} for addr in bcc.split(',') if addr.strip()]
             if reply_to_msg_id:
-                params['headers'] = {'In-Reply-To': reply_to_msg_id}
-            email_obj = sib_api_v3_sdk.SendSmtpEmail(**params)
-            api_instance.send_transac_email(email_obj)
+                payload['headers'] = {'In-Reply-To': reply_to_msg_id}
+            if prepared_atts:
+                payload['attachment'] = [
+                    {'name': a['name'], 'content': a['content_b64']} for a in prepared_atts
+                ]
+            resp = http_requests.post(
+                'https://api.brevo.com/v3/smtp/email',
+                headers={
+                    'accept': 'application/json',
+                    'content-type': 'application/json',
+                    'api-key': BREVO_API_KEY,
+                },
+                json=payload,
+                timeout=60,
+            )
+            if resp.status_code >= 300:
+                snippet = (resp.text or '')[:500]
+                raise RuntimeError(f'Brevo {resp.status_code}: {snippet}')
         else:
             ec.send_email(acc['smtp_server'], acc['smtp_port'], acc['email'], _acc_password(acc),
                           to, subject, body_html, cc=cc, bcc=bcc,
                           reply_to_msg_id=reply_to_msg_id, references=references,
                           attachments=attachments if attachments else None)
-        flash('Email enviado com sucesso!', 'success')
+        atts_info = f' ({len(prepared_atts)} anexo(s))' if prepared_atts else ''
+        flash(f'Email enviado com sucesso!{atts_info}', 'success')
     except Exception as e:
         flash(f'Erro ao enviar: {e}', 'danger')
         return redirect(url_for('email_compor'))
