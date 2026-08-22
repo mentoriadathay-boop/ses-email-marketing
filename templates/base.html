@@ -97,6 +97,9 @@
       <a href="{{ url_for('pipeline') }}" class="nav-link {% if request.endpoint == 'pipeline' %}active{% endif %}">
         <i class="bi bi-kanban"></i> Pipeline
       </a>
+      <a href="{{ url_for('segmentos') }}" class="nav-link {% if request.endpoint in ('segmentos','segmentos_criar_mailing') %}active{% endif %}">
+        <i class="bi bi-bullseye"></i> Segmentos
+      </a>
       <a href="{{ url_for('lista_tags') }}" class="nav-link {% if request.endpoint == 'lista_tags' %}active{% endif %}">
         <i class="bi bi-tags"></i> Tags
       </a>
