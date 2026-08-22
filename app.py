@@ -5063,6 +5063,137 @@ def pipeline():
                            top_hot=top_hot, quick=quick, today=today)
 
 
+# ── CRM — Segmentos (filtro por temperatura + período para campanhas) ─────
+
+def _query_contatos_por_segmento(conn, uid, temperaturas, periodo_dias, atividade):
+    """Devolve contatos que batem com um segmento (temperatura + período + atividade).
+    temperaturas: lista de strings ('muito_quente','quente','morno','frio').
+    periodo_dias: int — filtra por atividade nos últimos N dias (0 = qualquer).
+    atividade: 'qualquer' | 'abriu_email' | 'clicou_email' | 'sem_atividade'."""
+    # Constrói WHERE de temperatura considerando override + score derivado
+    temp_conditions = []
+    if 'muito_quente' in temperaturas:
+        temp_conditions.append("(c.temperature_override='muito_quente' OR (c.temperature_override IS NULL AND COALESCE(cs.score,0) >= 100))")
+    if 'quente' in temperaturas:
+        temp_conditions.append("(c.temperature_override='quente' OR (c.temperature_override IS NULL AND COALESCE(cs.score,0) BETWEEN 51 AND 99))")
+    if 'morno' in temperaturas:
+        temp_conditions.append("(c.temperature_override='morno' OR (c.temperature_override IS NULL AND COALESCE(cs.score,0) BETWEEN 21 AND 50))")
+    if 'frio' in temperaturas:
+        temp_conditions.append("(c.temperature_override='frio' OR (c.temperature_override IS NULL AND COALESCE(cs.score,0) < 21))")
+    if not temp_conditions:
+        return []
+
+    where_parts = [f"c.user_id = %s", "(" + " OR ".join(temp_conditions) + ")"]
+    params = [uid]
+
+    # Filtro de atividade recente
+    if atividade == 'abriu_email' and periodo_dias > 0:
+        where_parts.append(
+            "EXISTS (SELECT 1 FROM email_opens o WHERE o.contact_email=c.email "
+            "AND o.opened_at >= NOW() - (%s || ' days')::interval)")
+        params.append(str(periodo_dias))
+    elif atividade == 'clicou_email' and periodo_dias > 0:
+        where_parts.append(
+            "EXISTS (SELECT 1 FROM email_clicks cl WHERE cl.contact_email=c.email "
+            "AND cl.clicked_at >= NOW() - (%s || ' days')::interval)")
+        params.append(str(periodo_dias))
+    elif atividade == 'sem_atividade' and periodo_dias > 0:
+        where_parts.append(
+            "NOT EXISTS (SELECT 1 FROM email_opens o WHERE o.contact_email=c.email "
+            "AND o.opened_at >= NOW() - (%s || ' days')::interval)")
+        params.append(str(periodo_dias))
+    elif atividade == 'qualquer' and periodo_dias > 0:
+        # Qualquer atividade nos últimos N dias (última_contact_at OU abertura OU clique)
+        where_parts.append(
+            "(c.last_contact_at >= NOW() - (%s || ' days')::interval "
+            " OR EXISTS (SELECT 1 FROM email_opens o WHERE o.contact_email=c.email "
+            "            AND o.opened_at >= NOW() - (%s || ' days')::interval) "
+            " OR EXISTS (SELECT 1 FROM email_clicks cl WHERE cl.contact_email=c.email "
+            "            AND cl.clicked_at >= NOW() - (%s || ' days')::interval))")
+        params += [str(periodo_dias), str(periodo_dias), str(periodo_dias)]
+
+    query = (
+        "SELECT c.email, c.name, c.status, c.tags, c.temperature_override, c.last_contact_at, "
+        "       COALESCE(cs.score, 0) AS score, "
+        "       (SELECT COUNT(*) FROM email_opens o WHERE o.contact_email=c.email) AS total_opens, "
+        "       (SELECT COUNT(*) FROM email_clicks cl WHERE cl.contact_email=c.email) AS total_clicks, "
+        "       (SELECT o.opened_at FROM email_opens o WHERE o.contact_email=c.email "
+        "         ORDER BY o.opened_at DESC LIMIT 1) AS last_open_at, "
+        "       (SELECT COALESCE(ss.subject, camp.subject) FROM email_opens o "
+        "          LEFT JOIN sequence_steps ss ON ss.sequence_id=o.sequence_id AND ss.step_number=o.step_number "
+        "          LEFT JOIN campaigns camp ON camp.id=o.campaign_id "
+        "          WHERE o.contact_email=c.email ORDER BY o.opened_at DESC LIMIT 1) AS last_open_subject "
+        "FROM contacts c "
+        "LEFT JOIN contact_scores cs ON cs.email=c.email "
+        "WHERE " + " AND ".join(where_parts) + " "
+        "ORDER BY COALESCE(cs.score,0) DESC "
+        "LIMIT 1000"
+    )
+    return conn.execute(query, params).fetchall()
+
+
+@app.route('/segmentos')
+@login_required
+def segmentos():
+    uid = _uid()
+    conn = get_db()
+    temperaturas = request.args.getlist('temp') or ['muito_quente', 'quente']
+    periodo_dias = int(request.args.get('periodo', '30') or '30')
+    atividade = request.args.get('atividade', 'qualquer')
+    contatos = _query_contatos_por_segmento(conn, uid, temperaturas, periodo_dias, atividade)
+    conn.close()
+    return render_template('segmentos.html',
+                           contatos=contatos,
+                           temperaturas_selecionadas=temperaturas,
+                           periodo_dias=periodo_dias,
+                           atividade=atividade)
+
+
+@app.route('/segmentos/criar-mailing', methods=['POST'])
+@login_required
+def segmentos_criar_mailing():
+    """Salva o segmento atual como mailing efêmero e redireciona pra
+    nova campanha com esse mailing pré-selecionado."""
+    uid = _uid()
+    conn = get_db()
+    temperaturas = request.form.getlist('temp') or ['muito_quente', 'quente']
+    periodo_dias = int(request.form.get('periodo', '30') or '30')
+    atividade = request.form.get('atividade', 'qualquer')
+    contatos = _query_contatos_por_segmento(conn, uid, temperaturas, periodo_dias, atividade)
+    if not contatos:
+        conn.close()
+        flash('Segmento vazio — nenhum contato bate com esses filtros.', 'warning')
+        return redirect(url_for('segmentos', temp=temperaturas, periodo=periodo_dias, atividade=atividade))
+
+    # Nome descritivo do mailing efêmero
+    temp_label = ', '.join(TEMPERATURE_LABELS.get(t, (t,))[0] for t in temperaturas)
+    label_periodo = f' — últimos {periodo_dias}d' if periodo_dias > 0 else ''
+    now_label = datetime.now().strftime('%d/%m/%Y %H:%M')
+    mailing_name = f'🎯 Segmento: {temp_label}{label_periodo} ({now_label})'
+
+    try:
+        cur = conn.execute(
+            "INSERT INTO mailings (name, filename, contact_count, user_id) "
+            "VALUES (%s, %s, %s, %s) RETURNING id",
+            (mailing_name, '', len(contatos), uid))
+        mailing_id = cur.fetchone()['id']
+        for c in contatos:
+            conn.execute(
+                'INSERT INTO mailing_contacts (mailing_id, email, name, tags) '
+                'VALUES (%s, %s, %s, %s) ON CONFLICT (mailing_id, email) DO NOTHING',
+                (mailing_id, c['email'], c['name'] or '', c['tags'] or ''))
+        conn.commit()
+    except Exception as e:
+        conn.rollback()
+        conn.close()
+        flash(f'Erro ao criar segmento como mailing: {e}', 'danger')
+        return redirect(url_for('segmentos'))
+    conn.close()
+
+    flash(f'Segmento salvo como mailing "{mailing_name}" com {len(contatos)} contatos.', 'success')
+    return redirect(url_for('nova_campanha') + f'?src=mailing&mailing_ids={mailing_id}')
+
+
 # ── CRM — Temperatura manual do contato ────────────────────────────────────
 
 @app.route('/contatos/<path:email>/temperatura', methods=['POST'])

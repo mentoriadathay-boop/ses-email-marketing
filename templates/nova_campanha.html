@@ -727,6 +727,23 @@ document.addEventListener('DOMContentLoaded', function() {
   }
   {% endif %}
 
+  // Pré-seleciona mailing vindo de /segmentos (?src=mailing&mailing_ids=<id>)
+  (function() {
+    const qs = new URLSearchParams(window.location.search);
+    if (qs.get('src') === 'mailing') {
+      const ids = (qs.get('mailing_ids') || '').split(',').filter(Boolean);
+      let algum = false;
+      ids.forEach(id => {
+        const chk = document.getElementById('mailing-' + id);
+        if (chk) { chk.checked = true; algum = true; }
+      });
+      if (algum) {
+        if (typeof atualizarMailingsSelecionados === 'function') atualizarMailingsSelecionados();
+        setSendMode('mailing');
+      }
+    }
+  })();
+
   // Pré-selecionar cadência se reutilizando/editando campanha com cadência
   {% if camp and camp.sequence_id %}
   const seqSelect = document.querySelector('select[name="sequence_id"]');

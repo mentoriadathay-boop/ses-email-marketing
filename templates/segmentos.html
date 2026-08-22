@@ -1,0 +1,149 @@
+{% extends "base.html" %}
+{% block content %}
+
+<div class="d-flex align-items-center justify-content-between mb-4 flex-wrap gap-2">
+  <div>
+    <h4 class="fw-bold mb-0"><i class="bi bi-bullseye me-2 text-danger"></i>Segmentos de Leads</h4>
+    <small class="text-muted">Filtre por temperatura + período e crie campanhas direcionadas.</small>
+  </div>
+</div>
+
+<!-- Filtros -->
+<div class="card mb-4">
+  <div class="card-body">
+    <form method="GET" class="row g-3 align-items-end">
+      <div class="col-md-5">
+        <label class="form-label small fw-semibold mb-2">Temperatura dos leads</label>
+        <div class="d-flex gap-2 flex-wrap">
+          {% for key, label in [('muito_quente','Muito Quente'),('quente','Quente'),('morno','Morno'),('frio','Frio')] %}
+          {% set t = TEMPERATURE_LABELS[key] %}
+          <label class="d-flex align-items-center gap-1" style="cursor:pointer;padding:6px 12px;border-radius:6px;background:{{ t[2] }};color:{{ t[1] }};font-weight:600;font-size:.85rem;">
+            <input type="checkbox" name="temp" value="{{ key }}"
+                   {% if key in temperaturas_selecionadas %}checked{% endif %} class="form-check-input mt-0">
+            {{ label }}
+          </label>
+          {% endfor %}
+        </div>
+      </div>
+      <div class="col-md-3">
+        <label class="form-label small fw-semibold">Período</label>
+        <select name="periodo" class="form-select form-select-sm">
+          <option value="0" {% if periodo_dias == 0 %}selected{% endif %}>Qualquer tempo</option>
+          <option value="7"  {% if periodo_dias == 7 %}selected{% endif %}>Últimos 7 dias</option>
+          <option value="15" {% if periodo_dias == 15 %}selected{% endif %}>Últimos 15 dias</option>
+          <option value="30" {% if periodo_dias == 30 %}selected{% endif %}>Últimos 30 dias</option>
+          <option value="60" {% if periodo_dias == 60 %}selected{% endif %}>Últimos 60 dias</option>
+          <option value="90" {% if periodo_dias == 90 %}selected{% endif %}>Últimos 90 dias</option>
+        </select>
+      </div>
+      <div class="col-md-3">
+        <label class="form-label small fw-semibold">Atividade no período</label>
+        <select name="atividade" class="form-select form-select-sm">
+          <option value="qualquer"      {% if atividade == 'qualquer' %}selected{% endif %}>Qualquer atividade</option>
+          <option value="abriu_email"   {% if atividade == 'abriu_email' %}selected{% endif %}>Abriu email</option>
+          <option value="clicou_email"  {% if atividade == 'clicou_email' %}selected{% endif %}>Clicou em link</option>
+          <option value="sem_atividade" {% if atividade == 'sem_atividade' %}selected{% endif %}>Sem atividade (reengajar)</option>
+        </select>
+      </div>
+      <div class="col-md-1">
+        <button type="submit" class="btn btn-primary btn-sm w-100">
+          <i class="bi bi-search"></i>
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Resultado + ação -->
+<div class="card">
+  <div class="card-header bg-white border-0 pt-4 pb-2 px-4 d-flex justify-content-between align-items-center flex-wrap gap-2">
+    <span class="fw-semibold">
+      <i class="bi bi-people me-2"></i>{{ contatos|length }} lead(s) no segmento
+    </span>
+    {% if contatos %}
+    <form method="POST" action="{{ url_for('segmentos_criar_mailing') }}" class="d-inline">
+      {% for t in temperaturas_selecionadas %}<input type="hidden" name="temp" value="{{ t }}">{% endfor %}
+      <input type="hidden" name="periodo" value="{{ periodo_dias }}">
+      <input type="hidden" name="atividade" value="{{ atividade }}">
+      <button type="submit" class="btn btn-danger btn-sm">
+        <i class="bi bi-send-fill me-1"></i>Criar campanha com estes {{ contatos|length }} leads
+      </button>
+    </form>
+    {% endif %}
+  </div>
+  <div class="card-body p-0">
+    {% if contatos %}
+    <div class="table-responsive">
+      <table class="table table-hover mb-0 align-middle">
+        <thead class="table-light">
+          <tr>
+            <th class="ps-4">Nome / Email</th>
+            <th>Temperatura</th>
+            <th class="text-center">Score</th>
+            <th class="text-center" title="Aberturas totais">👁</th>
+            <th class="text-center" title="Cliques totais">👆</th>
+            <th>Último email aberto</th>
+            <th>Último contato</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for c in contatos %}
+          {% set t = effective_temperature(c.score, c.temperature_override) %}
+          <tr>
+            <td class="ps-4">
+              <a href="{{ url_for('contato_perfil', email=c.email) }}" class="text-decoration-none">
+                <div class="fw-semibold small">{{ c.name or c.email }}</div>
+                <div class="text-muted" style="font-size:.72rem">{{ c.email }}</div>
+              </a>
+            </td>
+            <td>
+              <span class="badge fw-semibold" style="background:{{ t[2] }};color:{{ t[1] }}">
+                {% if t[3] %}<i class="bi bi-lock-fill me-1" style="font-size:.65rem"></i>{% endif %}
+                {{ t[0] }}
+              </span>
+            </td>
+            <td class="text-center fw-bold">{{ c.score }}</td>
+            <td class="text-center">
+              {% if c.total_opens and c.total_opens > 0 %}
+              <span class="badge" style="background:#dbeafe;color:#1e40af">{{ c.total_opens }}</span>
+              {% else %}<span class="text-muted">—</span>{% endif %}
+            </td>
+            <td class="text-center">
+              {% if c.total_clicks and c.total_clicks > 0 %}
+              <span class="badge" style="background:#dcfce7;color:#166534">{{ c.total_clicks }}</span>
+              {% else %}<span class="text-muted">—</span>{% endif %}
+            </td>
+            <td class="small">
+              {% if c.last_open_at %}
+                <div class="text-truncate" style="max-width:220px" title="{{ c.last_open_subject or '(sem assunto)' }}">
+                  <i class="bi bi-envelope-open text-success me-1"></i>{{ c.last_open_subject or '(sem assunto)' }}
+                </div>
+                <div class="text-muted" style="font-size:.7rem">
+                  {{ c.last_open_at.strftime('%d/%m/%Y %H:%M') if c.last_open_at.strftime is defined else c.last_open_at }}
+                </div>
+              {% else %}
+                <span class="text-muted">nunca</span>
+              {% endif %}
+            </td>
+            <td class="small">
+              {% if c.last_contact_at %}
+                {{ c.last_contact_at.strftime('%d/%m/%Y') if c.last_contact_at.strftime is defined else c.last_contact_at }}
+              {% else %}
+                <span class="text-muted">—</span>
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <div class="text-center py-5 text-muted">
+      <i class="bi bi-bullseye fs-1 d-block mb-2"></i>
+      Nenhum lead bate com esses filtros. Tente outras temperaturas ou aumente o período.
+    </div>
+    {% endif %}
+  </div>
+</div>
+
+{% endblock %}
