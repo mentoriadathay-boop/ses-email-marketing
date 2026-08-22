@@ -4629,6 +4629,97 @@ def contato_remove_mailing(email, mailing_id):
     return redirect(url_for('contato_perfil', email=email))
 
 
+@app.route('/contatos/<path:email>/purgar', methods=['POST'])
+@login_required
+def purgar_contato(email):
+    """Remove COMPLETAMENTE o contato: do CRM, de todos os mailings,
+    de todas as cadências, tarefas, conversas, aberturas, cliques, scores,
+    activities e purchases. Opcionalmente adiciona à blacklist para não voltar.
+    Ação irreversível. Só toca dados do próprio user_id."""
+    uid = _uid()
+    conn = get_db()
+    contato = conn.execute(
+        'SELECT id, name FROM contacts WHERE email=%s AND user_id=%s',
+        (email, uid)).fetchone()
+    if not contato:
+        # Contato pode não estar no CRM mas estar em mailings/cadencias legados
+        pass
+    nome = contato['name'] if contato else email
+    add_bl = request.form.get('add_blacklist') == 'on'
+    reason = (request.form.get('reason', '') or 'Excluído pelo admin').strip()
+
+    counts = {'mailings': 0, 'cadencias': 0, 'tarefas': 0, 'conversas': 0,
+              'atividades': 0, 'compras': 0, 'aberturas': 0, 'cliques': 0}
+
+    try:
+        # 1) Remove de mailings (só dos mailings do próprio user)
+        r = conn.execute(
+            'DELETE FROM mailing_contacts WHERE LOWER(email)=LOWER(%s) '
+            'AND mailing_id IN (SELECT id FROM mailings WHERE user_id=%s) '
+            'RETURNING mailing_id', (email, uid))
+        mailing_ids_afetados = [row['mailing_id'] for row in r.fetchall()]
+        counts['mailings'] = len(mailing_ids_afetados)
+        # Recontar cada mailing afetado
+        for mid in mailing_ids_afetados:
+            conn.execute(
+                'UPDATE mailings SET contact_count = '
+                '(SELECT COUNT(*) FROM mailing_contacts WHERE mailing_id=%s) WHERE id=%s',
+                (mid, mid))
+
+        # 2) Remove de todas cadências (das cadências do próprio user)
+        r = conn.execute(
+            "DELETE FROM sequence_contacts WHERE contact_email=%s "
+            "AND sequence_id IN (SELECT id FROM sequences WHERE user_id=%s)",
+            (email, uid))
+        counts['cadencias'] = r.rowcount or 0
+
+        # 3) Remove tarefas, conversas do próprio user_id
+        r = conn.execute(
+            'DELETE FROM contact_tasks WHERE contact_email=%s AND user_id=%s',
+            (email, uid)); counts['tarefas'] = r.rowcount or 0
+        r = conn.execute(
+            'DELETE FROM contact_conversations WHERE contact_email=%s AND user_id=%s',
+            (email, uid)); counts['conversas'] = r.rowcount or 0
+
+        # 4) Atividades, compras, aberturas, cliques (sem user_id — filtro por email)
+        r = conn.execute('DELETE FROM contact_activities WHERE contact_email=%s', (email,))
+        counts['atividades'] = r.rowcount or 0
+        r = conn.execute('DELETE FROM contact_purchases WHERE contact_email=%s', (email,))
+        counts['compras'] = r.rowcount or 0
+        r = conn.execute('DELETE FROM email_opens WHERE contact_email=%s', (email,))
+        counts['aberturas'] = r.rowcount or 0
+        r = conn.execute('DELETE FROM email_clicks WHERE contact_email=%s', (email,))
+        counts['cliques'] = r.rowcount or 0
+        conn.execute('DELETE FROM contact_scores WHERE email=%s', (email,))
+        conn.execute('DELETE FROM send_analytics WHERE contact_email=%s', (email,))
+
+        # 5) Remove do CRM (contacts)
+        conn.execute('DELETE FROM contacts WHERE email=%s AND user_id=%s', (email, uid))
+
+        # 6) Blacklist opcional
+        if add_bl:
+            try:
+                conn.execute(
+                    'INSERT INTO blacklist (email, reason) VALUES (%s, %s) '
+                    'ON CONFLICT (email) DO UPDATE SET reason=EXCLUDED.reason',
+                    (email, reason))
+            except Exception:
+                pass
+
+        conn.commit()
+    except Exception as e:
+        conn.rollback()
+        conn.close()
+        flash(f'Erro ao excluir contato: {e}', 'danger')
+        return redirect(url_for('lista_contatos'))
+    conn.close()
+
+    detalhes = ', '.join(f'{v} {k}' for k, v in counts.items() if v > 0) or 'nada'
+    extra_bl = ' + adicionado à blacklist' if add_bl else ''
+    flash(f'Contato "{nome}" excluído de todas as listas ({detalhes}){extra_bl}.', 'success')
+    return redirect(url_for('lista_contatos'))
+
+
 # ── CRM — Conversas registradas ────────────────────────────────────────────
 
 TASK_TYPES = [
