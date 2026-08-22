@@ -183,10 +183,19 @@
               </span>
             </td>
             <td>
-              <a href="{{ url_for('contato_perfil', email=c.email) }}"
-                 class="btn btn-sm btn-outline-primary">
-                <i class="bi bi-person-lines-fill"></i>
-              </a>
+              <div class="d-flex gap-1">
+                <a href="{{ url_for('contato_perfil', email=c.email) }}"
+                   class="btn btn-sm btn-outline-primary" title="Ver perfil">
+                  <i class="bi bi-person-lines-fill"></i>
+                </a>
+                <form method="POST" action="{{ url_for('purgar_contato', email=c.email) }}"
+                      class="d-inline"
+                      onsubmit="return confirm('EXCLUIR {{ (c.name or c.email)|e }} de TODAS as listas (mailings, cadências, tarefas, conversas, histórico)? Esta ação NÃO pode ser desfeita.');">
+                  <button type="submit" class="btn btn-sm btn-outline-danger" title="Excluir de todas as listas">
+                    <i class="bi bi-trash"></i>
+                  </button>
+                </form>
+              </div>
             </td>
           </tr>
           {% endfor %}
