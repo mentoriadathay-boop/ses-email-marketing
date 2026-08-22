@@ -5116,6 +5116,8 @@ def _query_contatos_por_segmento(conn, uid, temperaturas, periodo_dias, atividad
         "SELECT c.email, c.name, c.status, c.tags, c.temperature_override, c.last_contact_at, "
         "       COALESCE(cs.score, 0) AS score, "
         "       (SELECT COUNT(*) FROM email_opens o WHERE o.contact_email=c.email) AS total_opens, "
+        "       (SELECT COUNT(DISTINCT COALESCE(o.campaign_id::text,'')||'|'||COALESCE(o.sequence_id::text,'')||'|'||COALESCE(o.step_number::text,'')) "
+        "          FROM email_opens o WHERE o.contact_email=c.email) AS unique_opens, "
         "       (SELECT COUNT(*) FROM email_clicks cl WHERE cl.contact_email=c.email) AS total_clicks, "
         "       (SELECT o.opened_at FROM email_opens o WHERE o.contact_email=c.email "
         "         ORDER BY o.opened_at DESC LIMIT 1) AS last_open_at, "

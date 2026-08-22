@@ -80,7 +80,8 @@
             <th class="ps-4">Nome / Email</th>
             <th>Temperatura</th>
             <th class="text-center">Score</th>
-            <th class="text-center" title="Aberturas totais">👁</th>
+            <th class="text-center" title="Aberturas totais (conta reabrir do mesmo email)">👁 Total</th>
+            <th class="text-center" title="Emails únicos abertos (assuntos diferentes)">👁 Únicos</th>
             <th class="text-center" title="Cliques totais">👆</th>
             <th>Último email aberto</th>
             <th>Último contato</th>
@@ -106,6 +107,11 @@
             <td class="text-center">
               {% if c.total_opens and c.total_opens > 0 %}
               <span class="badge" style="background:#dbeafe;color:#1e40af">{{ c.total_opens }}</span>
+              {% else %}<span class="text-muted">—</span>{% endif %}
+            </td>
+            <td class="text-center">
+              {% if c.unique_opens and c.unique_opens > 0 %}
+              <span class="badge" style="background:#e0e7ff;color:#3730a3">{{ c.unique_opens }}</span>
               {% else %}<span class="text-muted">—</span>{% endif %}
             </td>
             <td class="text-center">
