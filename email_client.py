@@ -258,6 +258,10 @@ def fetch_attachment(imap_conn, uid, attachment_index, folder='INBOX'):
 def send_email(smtp_server, smtp_port, email_addr, password,
                to, subject, body_html, cc=None, bcc=None,
                reply_to_msg_id=None, references=None, attachments=None):
+    """attachments: lista de dicts {'name': str, 'raw': bytes} — já lidos
+    pelo chamador (evita depender de streams de upload que só podem ser
+    lidos uma vez, já que o mesmo anexo também precisa virar base64 para
+    o path Brevo e ser salvo em 'Enviados')."""
     msg = MIMEMultipart('mixed')
     msg['From'] = email_addr
     msg['To'] = to
@@ -272,11 +276,11 @@ def send_email(smtp_server, smtp_port, email_addr, password,
     msg.attach(html_part)
 
     if attachments:
-        for file_obj in attachments:
+        for att in attachments:
             part = MIMEBase('application', 'octet-stream')
-            part.set_payload(file_obj.read())
+            part.set_payload(att['raw'])
             encoders.encode_base64(part)
-            part.add_header('Content-Disposition', 'attachment', filename=file_obj.filename)
+            part.add_header('Content-Disposition', 'attachment', filename=att['name'])
             msg.attach(part)
 
     recipients = [addr.strip() for addr in to.split(',')]
@@ -375,6 +379,51 @@ def save_draft(imap_conn, email_addr, to, subject, body_html, drafts_folder='Dra
     msg['Date'] = email.utils.formatdate(localtime=True)
     msg.attach(MIMEText(body_html or '', 'html', 'utf-8'))
     imap_conn.append(drafts_folder, '\\Draft', None, msg.as_bytes())
+
+
+def append_to_sent(imap_conn, email_addr, to, subject, body_html, sent_folder='Sent',
+                    cc=None, bcc=None, reply_to_msg_id=None, references=None,
+                    attachments=None):
+    """Monta o email como MIME e grava (IMAP APPEND) na pasta de Enviados.
+    Necessário porque nem envio via API transacional (Brevo) nem envio via
+    SMTP direto salvam cópia automática na caixa do usuário — diferente de
+    um cliente de email de verdade (Gmail/Outlook), que sempre salva ao
+    enviar. Sem isso, a aba 'Enviados' do webmail integrado nunca mostra
+    os emails disparados por aqui.
+
+    attachments: lista de dicts {'name': str, 'raw': bytes, 'mimetype': str}
+    (formato já preparado por quem chama — não são FileStorage do Flask).
+    Best-effort: se a pasta não existir, tenta criar; se tudo falhar,
+    a exceção sobe para o chamador decidir (loga mas não desfaz o envio).
+    """
+    msg = MIMEMultipart('mixed')
+    msg['From'] = email_addr
+    msg['To'] = to or ''
+    msg['Subject'] = subject or '(sem assunto)'
+    msg['Date'] = email.utils.formatdate(localtime=True)
+    if cc:
+        msg['Cc'] = cc
+    if reply_to_msg_id:
+        msg['In-Reply-To'] = reply_to_msg_id
+        msg['References'] = (references + ' ' + reply_to_msg_id).strip() if references else reply_to_msg_id
+
+    msg.attach(MIMEText(body_html or '', 'html', 'utf-8'))
+
+    for att in (attachments or []):
+        part = MIMEBase('application', 'octet-stream')
+        part.set_payload(att['raw'])
+        encoders.encode_base64(part)
+        part.add_header('Content-Disposition', 'attachment', filename=att['name'])
+        msg.attach(part)
+
+    try:
+        status, _ = imap_conn.append(sent_folder, '\\Seen', None, msg.as_bytes())
+    except Exception:
+        status = None
+    if status != 'OK':
+        # Pasta pode não existir ainda (conta nova) — cria e tenta de novo
+        imap_conn.create(sent_folder)
+        imap_conn.append(sent_folder, '\\Seen', None, msg.as_bytes())
 
 
 def format_size(size_bytes):
