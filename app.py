@@ -3393,9 +3393,31 @@ def email_enviar():
             ec.send_email(acc['smtp_server'], acc['smtp_port'], acc['email'], _acc_password(acc),
                           to, subject, body_html, cc=cc, bcc=bcc,
                           reply_to_msg_id=reply_to_msg_id, references=references,
-                          attachments=attachments if attachments else None)
+                          attachments=prepared_atts if prepared_atts else None)
+
+        # Grava cópia na pasta "Enviados" — nem a API do Brevo nem o SMTP
+        # direto fazem isso sozinhos (diferente de um cliente de email real).
+        # Best-effort: se falhar, o email já foi entregue ao destinatário,
+        # então só avisa e não desfaz nada.
+        sent_saved = False
+        try:
+            imap_conn = ec.imap_connect(acc['imap_server'], acc['imap_port'],
+                                         acc['email'], _acc_password(acc), acc['use_ssl'])
+            sent_folder = acc.get('sent_folder') or ec.detect_sent_folder(imap_conn)
+            ec.append_to_sent(imap_conn, acc['email'], to, subject, body_html,
+                              sent_folder=sent_folder, cc=cc, bcc=bcc,
+                              reply_to_msg_id=reply_to_msg_id, references=references,
+                              attachments=prepared_atts if prepared_atts else None)
+            imap_conn.logout()
+            sent_saved = True
+        except Exception as e:
+            print(f'[email_enviar] falha ao salvar cópia em Enviados: {e}', flush=True)
+
         atts_info = f' ({len(prepared_atts)} anexo(s))' if prepared_atts else ''
-        flash(f'Email enviado com sucesso!{atts_info}', 'success')
+        if sent_saved:
+            flash(f'Email enviado com sucesso!{atts_info}', 'success')
+        else:
+            flash(f'Email enviado com sucesso!{atts_info} (não foi possível salvar cópia em "Enviados" — verifique sua conexão IMAP)', 'warning')
     except Exception as e:
         flash(f'Erro ao enviar: {e}', 'danger')
         return redirect(url_for('email_compor'))
