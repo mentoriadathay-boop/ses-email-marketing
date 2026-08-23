@@ -2397,7 +2397,13 @@ def nova_campanha():
         conn = get_db()
         draft_id = request.form.get('draft_id', '').strip() or None
         if draft_id:
-            existing = conn.execute("SELECT id FROM campaigns WHERE id=%s AND status='draft'", (draft_id,)).fetchone()
+            # Aceita editar rascunho OU agendada (ainda não enviada)
+            existing = conn.execute(
+                "SELECT id, user_id FROM campaigns WHERE id=%s AND status IN ('draft','scheduled')",
+                (draft_id,)).fetchone()
+            # Multi-tenancy: garante que a campanha é do usuário logado
+            if existing and existing.get('user_id') and existing['user_id'] != _uid() and not _is_admin():
+                existing = None
             if existing:
                 conn.execute(
                     "UPDATE campaigns SET name=%s,subject=%s,body=%s,sender_email=%s,"
@@ -2513,15 +2519,37 @@ def campanha_editar(campaign_id):
     uid = _uid()
     conn = get_db()
     _check_owner('campaigns', campaign_id, conn)
-    campaign = conn.execute("SELECT * FROM campaigns WHERE id=%s AND status='draft'", (campaign_id,)).fetchone()
+    # Permite editar rascunhos E campanhas agendadas (ainda não enviadas)
+    campaign = conn.execute(
+        "SELECT * FROM campaigns WHERE id=%s AND status IN ('draft','scheduled')",
+        (campaign_id,)).fetchone()
     if not campaign:
         conn.close()
-        flash('Rascunho não encontrado ou já foi enviado.', 'danger')
-        return redirect(url_for('index'))
+        flash('Campanha não pode ser editada — já foi enviada ou está em envio.', 'danger')
+        return redirect(url_for('campanha_detalhe', campaign_id=campaign_id))
     mailings = conn.execute('SELECT * FROM mailings WHERE user_id=%s ORDER BY created_at DESC', (uid,)).fetchall()
     sequences = conn.execute("SELECT id, name FROM sequences WHERE status='active' AND user_id=%s ORDER BY name", (uid,)).fetchall()
     conn.close()
     return render_template('nova_campanha.html', mailings=mailings, sequences=sequences, reutilizar=None, editar=campaign)
+
+
+@app.route('/campanha/<int:campaign_id>/cancelar-agendamento', methods=['POST'])
+@login_required
+def campanha_cancelar_agendamento(campaign_id):
+    """Cancela o agendamento da campanha (vira rascunho de volta)."""
+    conn = get_db()
+    _check_owner('campaigns', campaign_id, conn)
+    row = conn.execute('SELECT name, status FROM campaigns WHERE id=%s', (campaign_id,)).fetchone()
+    if not row or row['status'] != 'scheduled':
+        conn.close()
+        flash('Só campanhas agendadas podem ter o agendamento cancelado.', 'warning')
+        return redirect(url_for('campanha_detalhe', campaign_id=campaign_id))
+    conn.execute(
+        "UPDATE campaigns SET status='draft', scheduled_at=NULL WHERE id=%s",
+        (campaign_id,))
+    conn.commit(); conn.close()
+    flash(f'Agendamento cancelado. "{row["name"]}" virou rascunho — edite e envie/agende de novo quando quiser.', 'info')
+    return redirect(url_for('campanha_detalhe', campaign_id=campaign_id))
 
 @app.route('/campanha/<int:campaign_id>/campanha-abridores')
 @login_required

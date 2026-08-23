@@ -189,6 +189,12 @@
                 <a href="{{ url_for('campanha_detalhe', campaign_id=c.id) }}" class="btn btn-sm btn-outline-primary" title="Ver detalhes">
                   <i class="bi bi-eye"></i>
                 </a>
+                {% if c.status in ('draft','scheduled') %}
+                <a href="{{ url_for('campanha_editar', campaign_id=c.id) }}" class="btn btn-sm btn-outline-warning"
+                   title="{% if c.status == 'draft' %}Editar rascunho{% else %}Editar agendamento{% endif %}">
+                  <i class="bi bi-pencil-square"></i>
+                </a>
+                {% endif %}
                 <a href="{{ url_for('campanha_reutilizar', campaign_id=c.id) }}" class="btn btn-sm btn-outline-secondary" title="Reutilizar campanha">
                   <i class="bi bi-arrow-repeat"></i>
                 </a>
