@@ -16,6 +16,18 @@
        class="btn btn-primary">
       <i class="bi bi-pencil-square me-1"></i> Editar Rascunho
     </a>
+    {% elif campaign.status == 'scheduled' %}
+    <a href="{{ url_for('campanha_editar', campaign_id=campaign.id) }}"
+       class="btn btn-primary">
+      <i class="bi bi-pencil-square me-1"></i> Editar Agendamento
+    </a>
+    <form method="POST" action="{{ url_for('campanha_cancelar_agendamento', campaign_id=campaign.id) }}"
+          class="d-inline"
+          onsubmit="return confirm('Cancelar agendamento? A campanha vira rascunho e você poderá reeditar/reenviar quando quiser.');">
+      <button type="submit" class="btn btn-outline-warning">
+        <i class="bi bi-calendar-x me-1"></i> Cancelar Agendamento
+      </button>
+    </form>
     {% endif %}
     {% if campaign.status == 'done' %}
     <button class="btn btn-outline-warning" data-bs-toggle="modal" data-bs-target="#modalReenviar">
