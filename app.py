@@ -502,6 +502,18 @@ def init_db():
         "CREATE INDEX IF NOT EXISTS idx_tasks_notifier ON contact_tasks(status, due_date) WHERE status='pending'",
         "CREATE INDEX IF NOT EXISTS idx_clicks_campaign ON email_clicks(campaign_id)",
         "CREATE INDEX IF NOT EXISTS idx_clicks_contact ON email_clicks(contact_email)",
+        # email_opens nunca teve índice — cresce a cada email aberto e é
+        # consultado em subqueries correlacionadas por campanha na home,
+        # sem índice isso vira scan completo da tabela a cada linha.
+        "CREATE INDEX IF NOT EXISTS idx_opens_campaign ON email_opens(campaign_id)",
+        "CREATE INDEX IF NOT EXISTS idx_opens_contact ON email_opens(contact_email)",
+        "CREATE INDEX IF NOT EXISTS idx_opens_sequence ON email_opens(sequence_id)",
+        # sequence_logs também nunca teve índice — usado pra contar envios
+        # de cadência na home (total e do mês) a cada carregamento.
+        "CREATE INDEX IF NOT EXISTS idx_seqlogs_sequence_status ON sequence_logs(sequence_id, status)",
+        "CREATE INDEX IF NOT EXISTS idx_seqlogs_sent_at ON sequence_logs(sent_at)",
+        # Composto pra acelerar a query principal da home (WHERE user_id + ORDER BY created_at)
+        "CREATE INDEX IF NOT EXISTS idx_campaigns_user_created ON campaigns(user_id, created_at DESC)",
     ]:
         try:
             conn.execute(idx_sql)
@@ -1971,6 +1983,14 @@ def _merged_field_options(conn, field_name, uid):
     return defaults + extras
 
 
+# Só essas telas usam nichos_list/produtos_interesse_list/fontes_list — o
+# context_processor roda em TODA renderização de página do sistema, então
+# sem esse filtro ele faria de 1 a 3 queries extras em toda página (home,
+# pipeline, segmentos, campanhas...), mesmo onde ninguém usa essas listas.
+_ENDPOINTS_NEED_NICHOS = {'lista_contatos', 'contato_perfil', 'lista_mailings'}
+_ENDPOINTS_NEED_CONTACT_FIELDS = {'lista_contatos', 'contato_perfil'}
+
+
 @app.context_processor
 def inject_user():
     ctx = {}
@@ -1978,21 +1998,29 @@ def inject_user():
         ctx['current_user'] = {'id': session.get('user_id'), 'email': session.get('user_email'), 'name': session.get('user_name'), 'role': session.get('user_role')}
     else:
         ctx['current_user'] = None
+
+    ctx['nichos_list'] = []
+    ctx['produtos_interesse_list'] = PRODUTOS_INTERESSE_DEFAULT
+    ctx['fontes_list'] = FONTES_CONTATO_DEFAULT
+
+    endpoint = request.endpoint
+    needs_nichos = endpoint in _ENDPOINTS_NEED_NICHOS
+    needs_fields = endpoint in _ENDPOINTS_NEED_CONTACT_FIELDS
+    if not (needs_nichos or needs_fields):
+        return ctx
+
     try:
         conn = get_db()
-        ctx['nichos_list'] = [r['name'] for r in conn.execute('SELECT name FROM nichos ORDER BY name').fetchall()]
-        uid_for_fields = session.get('user_id')
-        if uid_for_fields:
-            ctx['produtos_interesse_list'] = _merged_field_options(conn, 'product_interest', uid_for_fields)
-            ctx['fontes_list'] = _merged_field_options(conn, 'source', uid_for_fields)
-        else:
-            ctx['produtos_interesse_list'] = PRODUTOS_INTERESSE_DEFAULT
-            ctx['fontes_list'] = FONTES_CONTATO_DEFAULT
+        if needs_nichos:
+            ctx['nichos_list'] = [r['name'] for r in conn.execute('SELECT name FROM nichos ORDER BY name').fetchall()]
+        if needs_fields:
+            uid_for_fields = session.get('user_id')
+            if uid_for_fields:
+                ctx['produtos_interesse_list'] = _merged_field_options(conn, 'product_interest', uid_for_fields)
+                ctx['fontes_list'] = _merged_field_options(conn, 'source', uid_for_fields)
         conn.close()
     except Exception:
-        ctx['nichos_list'] = []
-        ctx['produtos_interesse_list'] = PRODUTOS_INTERESSE_DEFAULT
-        ctx['fontes_list'] = FONTES_CONTATO_DEFAULT
+        pass
     return ctx
 
 @app.route('/setup')
