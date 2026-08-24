@@ -1,5 +1,59 @@
 // editor.js — Editor visual Quill para ConvertMail
 
+// ─────────────────────────────────────────────
+// Campos de contato com opções editáveis (Produto de Interesse, Como me
+// Conheceu, Nicho). Usado nos formulários de "Novo Contato" e "Editar
+// Contato" — cada select tem um botão "+" que abre um prompt simples,
+// salva a opção nova no backend e já deixa selecionada no formulário
+// atual (sem perder o que já foi preenchido, sem reload de página).
+// ─────────────────────────────────────────────
+function _adicionarOpcaoNoSelect(selectElId, valor) {
+  const sel = document.getElementById(selectElId);
+  if (!sel) return;
+  let opt = Array.from(sel.options).find(o => o.value.toLowerCase() === valor.toLowerCase());
+  if (!opt) {
+    opt = document.createElement('option');
+    opt.value = valor;
+    opt.textContent = valor;
+    sel.appendChild(opt);
+  }
+  sel.value = opt.value;
+}
+
+async function adicionarOpcaoCampo(fieldName, selectElId, label) {
+  const valor = prompt('Novo valor para "' + label + '":');
+  if (!valor || !valor.trim()) return;
+  try {
+    const res = await fetch('/campos-personalizados/adicionar', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ field_name: fieldName, value: valor.trim() })
+    });
+    const data = await res.json();
+    if (!res.ok || data.erro) { alert(data.erro || 'Erro ao adicionar opção.'); return; }
+    _adicionarOpcaoNoSelect(selectElId, data.value);
+  } catch (e) {
+    alert('Erro de conexão ao adicionar opção: ' + (e.message || e));
+  }
+}
+
+async function adicionarNicho(selectElId) {
+  const valor = prompt('Nome do novo nicho/segmento:');
+  if (!valor || !valor.trim()) return;
+  try {
+    const res = await fetch('/nichos/adicionar', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fetch' },
+      body: JSON.stringify({ name: valor.trim() })
+    });
+    const data = await res.json();
+    if (!res.ok || data.erro) { alert(data.erro || 'Erro ao adicionar nicho.'); return; }
+    _adicionarOpcaoNoSelect(selectElId, data.value);
+  } catch (e) {
+    alert('Erro de conexão ao adicionar nicho: ' + (e.message || e));
+  }
+}
+
 const _quillMap = new Map();   // containerId -> quill instance
 window._quillMap = _quillMap;  // exposto para consumidores externos (nova_campanha.html)
 let _tplTarget = null;         // { quill, subjectId } — editor alvo do modal de templates

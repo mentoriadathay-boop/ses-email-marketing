@@ -389,9 +389,24 @@ def init_db():
             completed_at TIMESTAMP,
             created_at TIMESTAMP DEFAULT NOW()
         )''',
+        '''CREATE TABLE IF NOT EXISTS custom_field_options (
+            id SERIAL PRIMARY KEY,
+            user_id INTEGER,
+            field_name TEXT NOT NULL,
+            value TEXT NOT NULL,
+            created_at TIMESTAMP DEFAULT NOW()
+        )''',
     ]
     for sql in tables:
         conn.execute(sql)
+
+    try:
+        conn.execute(
+            "CREATE UNIQUE INDEX IF NOT EXISTS uq_custom_field_options "
+            "ON custom_field_options (COALESCE(user_id,0), field_name, LOWER(value))")
+        conn.commit()
+    except Exception:
+        conn.rollback()
 
     _NICHOS_SEED = [
         'Empreendedorismo e Negócios','Saúde e Bem-Estar','Desenvolvimento Pessoal e Espiritualidade',
@@ -1924,6 +1939,38 @@ def require_db_and_auth():
             if request.endpoint not in ('conta_suspensa', 'logout'):
                 return redirect(url_for('conta_suspensa'))
 
+# Campos do contato com opções editáveis pelo usuário (além do Nicho, que já
+# tinha sua própria tabela `nichos`). CUSTOM_FIELDS_WHITELIST define os únicos
+# field_name aceitos por /campos-personalizados/adicionar — protege contra
+# alguém injetar opções em campos arbitrários.
+PRODUTOS_INTERESSE_DEFAULT = [
+    'Estruturação de Mentoria', 'Estruturação de negócio digital', 'Curso MMP',
+    'Curso Mentoria Profissional', 'Sessão avulsa de mentoria', 'Consultoria Vibe Coding',
+    'Serviços Vibe Coding', 'Carrosséis Mágicos', 'Serviços Autoescolas',
+    'ASA Marketing e Vendas', 'Agente de IA',
+]
+FONTES_CONTATO_DEFAULT = [
+    'Youtube', 'Instagram', 'IA indicou', 'Indicação', 'TikTok',
+    'LinkedIn', 'Google', 'Facebook', 'Outro',
+]
+CUSTOM_FIELDS_WHITELIST = {
+    'product_interest': PRODUTOS_INTERESSE_DEFAULT,
+    'source': FONTES_CONTATO_DEFAULT,
+}
+
+
+def _merged_field_options(conn, field_name, uid):
+    """Lista de opções pra um select: defaults (ordem fixa) + customizadas
+    do usuário que ainda não estejam nos defaults (case-insensitive)."""
+    defaults = CUSTOM_FIELDS_WHITELIST.get(field_name, [])
+    defaults_lower = {d.lower() for d in defaults}
+    custom = conn.execute(
+        'SELECT value FROM custom_field_options WHERE field_name=%s AND user_id=%s ORDER BY value',
+        (field_name, uid)).fetchall()
+    extras = [c['value'] for c in custom if c['value'].lower() not in defaults_lower]
+    return defaults + extras
+
+
 @app.context_processor
 def inject_user():
     ctx = {}
@@ -1934,9 +1981,18 @@ def inject_user():
     try:
         conn = get_db()
         ctx['nichos_list'] = [r['name'] for r in conn.execute('SELECT name FROM nichos ORDER BY name').fetchall()]
+        uid_for_fields = session.get('user_id')
+        if uid_for_fields:
+            ctx['produtos_interesse_list'] = _merged_field_options(conn, 'product_interest', uid_for_fields)
+            ctx['fontes_list'] = _merged_field_options(conn, 'source', uid_for_fields)
+        else:
+            ctx['produtos_interesse_list'] = PRODUTOS_INTERESSE_DEFAULT
+            ctx['fontes_list'] = FONTES_CONTATO_DEFAULT
         conn.close()
     except Exception:
         ctx['nichos_list'] = []
+        ctx['produtos_interesse_list'] = PRODUTOS_INTERESSE_DEFAULT
+        ctx['fontes_list'] = FONTES_CONTATO_DEFAULT
     return ctx
 
 @app.route('/setup')
@@ -2639,20 +2695,64 @@ def pagina_nichos():
 @app.route('/nichos/adicionar', methods=['POST'])
 @login_required
 def adicionar_nicho():
-    name = request.form.get('name', '').strip()
+    # AJAX (chamado pelo botão "+" ao lado do select de Nicho em formulários
+    # de contato) pede JSON explicitamente — não interrompe o fluxo normal
+    # da página /nichos, que continua fazendo redirect com flash.
+    wants_json = request.headers.get('X-Requested-With') == 'fetch' or request.is_json
+    name = (request.get_json(silent=True) or {}).get('name', '').strip() if request.is_json \
+        else request.form.get('name', '').strip()
     if not name:
+        if wants_json:
+            return jsonify({'erro': 'Informe o nome do nicho.'}), 400
         flash('Informe o nome do nicho.', 'danger')
         return redirect(url_for('pagina_nichos'))
     conn = get_db()
     existing = conn.execute('SELECT id FROM nichos WHERE name=%s', (name,)).fetchone()
     if existing:
+        if wants_json:
+            conn.close()
+            return jsonify({'ok': True, 'value': name, 'ja_existia': True})
         flash(f'Nicho "{name}" já existe.', 'warning')
     else:
         conn.execute('INSERT INTO nichos (name) VALUES (%s)', (name,))
         conn.commit()
+        if wants_json:
+            conn.close()
+            return jsonify({'ok': True, 'value': name, 'ja_existia': False})
         flash(f'Nicho "{name}" adicionado!', 'success')
     conn.close()
     return redirect(url_for('pagina_nichos'))
+
+
+@app.route('/campos-personalizados/adicionar', methods=['POST'])
+@login_required
+def adicionar_campo_personalizado():
+    """Adiciona uma opção nova a um select de contato (Produto/Serviço de
+    Interesse ou Como me Conheceu). field_name é validado contra uma
+    whitelist — não é possível injetar opções em campos arbitrários."""
+    uid = _uid()
+    data = request.get_json(silent=True) or {}
+    field_name = (data.get('field_name') or '').strip()
+    value = (data.get('value') or '').strip()
+    if field_name not in CUSTOM_FIELDS_WHITELIST:
+        return jsonify({'erro': 'Campo inválido.'}), 400
+    if not value:
+        return jsonify({'erro': 'Informe um valor.'}), 400
+    if len(value) > 100:
+        return jsonify({'erro': 'Valor muito longo (máx. 100 caracteres).'}), 400
+    conn = get_db()
+    try:
+        conn.execute(
+            'INSERT INTO custom_field_options (user_id, field_name, value) VALUES (%s, %s, %s) '
+            'ON CONFLICT (COALESCE(user_id,0), field_name, LOWER(value)) DO NOTHING',
+            (uid, field_name, value))
+        conn.commit()
+    except Exception as e:
+        conn.rollback()
+        conn.close()
+        return jsonify({'erro': str(e)}), 500
+    conn.close()
+    return jsonify({'ok': True, 'value': value})
 
 
 @app.route('/nichos/<int:nicho_id>/remover', methods=['POST'])
