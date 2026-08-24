@@ -115,7 +115,7 @@
                 <i class="bi bi-link-45deg me-1"></i> Editar Links
               </button>
               <button type="button" class="btn btn-sm btn-outline-secondary"
-                      onclick="reinserirAssinatura('quill-main')">
+                      onclick="reinserirAssinatura('quill-main', document.getElementById('campaignBrandKitId') ? (document.getElementById('campaignBrandKitId').value || null) : null)">
                 <i class="bi bi-pen me-1"></i> Assinatura
               </button>
             </div>
@@ -402,6 +402,25 @@
           <h6 class="fw-semibold mb-2"><i class="bi bi-people me-2 text-primary"></i>Contatos Carregados</h6>
           <div id="contacts-count" class="fs-5 fw-bold text-success mb-2">0 contatos</div>
           <div id="contacts-preview" class="small text-muted"></div>
+        </div>
+      </div>
+
+      <!-- Kit de Marca da campanha -->
+      <div class="card mb-4">
+        <div class="card-body">
+          <h6 class="fw-semibold mb-3"><i class="bi bi-palette me-2 text-primary"></i>Kit de Marca</h6>
+          <select name="brand_kit_id" id="campaignBrandKitId" class="form-select form-select-sm">
+            <option value="">Sem kit (usa nome padrão em Configurações)</option>
+            {% for k in kits %}
+            <option value="{{ k.id }}">{{ k.name }}{{ ' — ' + k.signature_name if k.signature_name else '' }}</option>
+            {% endfor %}
+          </select>
+          <div class="form-text">
+            Se você tem negócios diferentes com o mesmo e-mail, escolha aqui qual kit usar.
+            O nome do remetente ("De:") desta campanha será o da assinatura do kit escolhido.
+            Clique em <strong>Assinatura</strong> no editor para inserir os links/assinatura deste kit no corpo do email.
+            Kits são criados em <a href="{{ url_for('kit_marca') }}" target="_blank">Kit de Marca</a>.
+          </div>
         </div>
       </div>
 
@@ -748,6 +767,12 @@ document.addEventListener('DOMContentLoaded', function() {
   {% if camp and camp.sequence_id %}
   const seqSelect = document.querySelector('select[name="sequence_id"]');
   if (seqSelect) seqSelect.value = '{{ camp.sequence_id }}';
+  {% endif %}
+
+  // Pré-selecionar Kit de Marca se reutilizando/editando campanha com kit
+  {% if camp and camp.brand_kit_id %}
+  const kitSelect = document.getElementById('campaignBrandKitId');
+  if (kitSelect) kitSelect.value = '{{ camp.brand_kit_id }}';
   {% endif %}
 
   // Vindo da galeria de templates ("Personalizar com IA") — abre o modal de IA
