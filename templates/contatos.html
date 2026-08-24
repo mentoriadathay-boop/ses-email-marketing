@@ -252,44 +252,48 @@
           </div>
           <div class="mb-3">
             <label class="form-label fw-semibold">Produto/Servico de Interesse</label>
-            <select name="product_interest" class="form-select form-select-sm">
-              <option value="">— Nenhum selecionado —</option>
-              <option value="Estruturação de Mentoria">Estruturação de Mentoria</option>
-              <option value="Estruturação de negócio digital">Estruturação de negócio digital</option>
-              <option value="Curso MMP">Curso MMP</option>
-              <option value="Curso Mentoria Profissional">Curso Mentoria Profissional</option>
-              <option value="Sessão avulsa de mentoria">Sessão avulsa de mentoria</option>
-              <option value="Consultoria Vibe Coding">Consultoria Vibe Coding</option>
-              <option value="Serviços Vibe Coding">Serviços Vibe Coding</option>
-              <option value="Carrosséis Mágicos">Carrosséis Mágicos</option>
-              <option value="Serviços Autoescolas">Serviços Autoescolas</option>
-              <option value="ASA Marketing e Vendas">ASA Marketing e Vendas</option>
-              <option value="Agente de IA">Agente de IA</option>
-            </select>
+            <div class="d-flex gap-1">
+              <select name="product_interest" id="novo-produto-interesse" class="form-select form-select-sm">
+                <option value="">— Nenhum selecionado —</option>
+                {% for p in produtos_interesse_list %}
+                <option value="{{ p }}">{{ p }}</option>
+                {% endfor %}
+              </select>
+              <button type="button" class="btn btn-outline-secondary btn-sm" title="Adicionar novo produto/serviço"
+                      onclick="adicionarOpcaoCampo('product_interest','novo-produto-interesse','Produto/Serviço de Interesse')">
+                <i class="bi bi-plus-lg"></i>
+              </button>
+            </div>
           </div>
           <div class="mb-3">
             <label class="form-label fw-semibold">Como me Conheceu</label>
-            <select name="source" class="form-select form-select-sm">
-              <option value="">— Nenhum —</option>
-              <option value="Youtube">Youtube</option>
-              <option value="Instagram">Instagram</option>
-              <option value="IA indicou">IA indicou</option>
-              <option value="Indicação">Indicação</option>
-              <option value="TikTok">TikTok</option>
-              <option value="LinkedIn">LinkedIn</option>
-              <option value="Google">Google</option>
-              <option value="Facebook">Facebook</option>
-              <option value="Outro">Outro</option>
-            </select>
+            <div class="d-flex gap-1">
+              <select name="source" id="novo-fonte" class="form-select form-select-sm">
+                <option value="">— Nenhum —</option>
+                {% for f in fontes_list %}
+                <option value="{{ f }}">{{ f }}</option>
+                {% endfor %}
+              </select>
+              <button type="button" class="btn btn-outline-secondary btn-sm" title="Adicionar nova origem"
+                      onclick="adicionarOpcaoCampo('source','novo-fonte','Como me Conheceu')">
+                <i class="bi bi-plus-lg"></i>
+              </button>
+            </div>
           </div>
           <div class="mb-3">
             <label class="form-label fw-semibold">Nicho / Segmento</label>
-            <select name="nicho" class="form-select form-select-sm">
-              <option value="">— Nenhum —</option>
-              {% for n in nichos_list %}
-              <option value="{{ n }}">{{ n }}</option>
-              {% endfor %}
-            </select>
+            <div class="d-flex gap-1">
+              <select name="nicho" id="novo-nicho" class="form-select form-select-sm">
+                <option value="">— Nenhum —</option>
+                {% for n in nichos_list %}
+                <option value="{{ n }}">{{ n }}</option>
+                {% endfor %}
+              </select>
+              <button type="button" class="btn btn-outline-secondary btn-sm" title="Adicionar novo nicho"
+                      onclick="adicionarNicho('novo-nicho')">
+                <i class="bi bi-plus-lg"></i>
+              </button>
+            </div>
           </div>
           <div class="row g-2 mb-3">
             <div class="col">

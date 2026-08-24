@@ -181,31 +181,48 @@
             </div>
             <div class="col-md-4">
               <label class="form-label small fw-semibold">Produto de Interesse</label>
-              <select name="product_interest" class="form-select form-select-sm">
-                <option value="">— Nenhum —</option>
-                {% set produtos = ['Estruturação de Mentoria','Estruturação de negócio digital','Curso MMP','Curso Mentoria Profissional','Sessão avulsa de mentoria','Consultoria Vibe Coding','Serviços Vibe Coding','Carrosséis Mágicos','Serviços Autoescolas','ASA Marketing e Vendas','Agente de IA'] %}
-                {% for p in produtos %}
-                <option value="{{ p }}" {% if contact.product_interest == p %}selected{% endif %}>{{ p }}</option>
-                {% endfor %}
-              </select>
+              <div class="d-flex gap-1">
+                <select name="product_interest" id="perfil-produto-interesse" class="form-select form-select-sm">
+                  <option value="">— Nenhum —</option>
+                  {% for p in produtos_interesse_list %}
+                  <option value="{{ p }}" {% if contact.product_interest == p %}selected{% endif %}>{{ p }}</option>
+                  {% endfor %}
+                </select>
+                <button type="button" class="btn btn-outline-secondary btn-sm" title="Adicionar novo produto/serviço"
+                        onclick="adicionarOpcaoCampo('product_interest','perfil-produto-interesse','Produto/Serviço de Interesse')">
+                  <i class="bi bi-plus-lg"></i>
+                </button>
+              </div>
             </div>
             <div class="col-md-4">
               <label class="form-label small fw-semibold">Como me Conheceu</label>
-              <select name="source" class="form-select form-select-sm">
-                <option value="">— Nenhum —</option>
-                {% for src in ['Youtube','Instagram','IA indicou','Indicação','TikTok','LinkedIn','Google','Facebook','Outro'] %}
-                <option value="{{ src }}" {% if contact.source == src %}selected{% endif %}>{{ src }}</option>
-                {% endfor %}
-              </select>
+              <div class="d-flex gap-1">
+                <select name="source" id="perfil-fonte" class="form-select form-select-sm">
+                  <option value="">— Nenhum —</option>
+                  {% for src in fontes_list %}
+                  <option value="{{ src }}" {% if contact.source == src %}selected{% endif %}>{{ src }}</option>
+                  {% endfor %}
+                </select>
+                <button type="button" class="btn btn-outline-secondary btn-sm" title="Adicionar nova origem"
+                        onclick="adicionarOpcaoCampo('source','perfil-fonte','Como me Conheceu')">
+                  <i class="bi bi-plus-lg"></i>
+                </button>
+              </div>
             </div>
             <div class="col-md-4">
               <label class="form-label small fw-semibold">Nicho / Segmento</label>
-              <select name="nicho" class="form-select form-select-sm">
-                <option value="">— Nenhum —</option>
-                {% for n in nichos_list %}
-                <option value="{{ n }}" {% if contact.nicho == n %}selected{% endif %}>{{ n }}</option>
-                {% endfor %}
-              </select>
+              <div class="d-flex gap-1">
+                <select name="nicho" id="perfil-nicho" class="form-select form-select-sm">
+                  <option value="">— Nenhum —</option>
+                  {% for n in nichos_list %}
+                  <option value="{{ n }}" {% if contact.nicho == n %}selected{% endif %}>{{ n }}</option>
+                  {% endfor %}
+                </select>
+                <button type="button" class="btn btn-outline-secondary btn-sm" title="Adicionar novo nicho"
+                        onclick="adicionarNicho('perfil-nicho')">
+                  <i class="bi bi-plus-lg"></i>
+                </button>
+              </div>
             </div>
             <div class="col-md-4">
               <label class="form-label small fw-semibold">Cidade</label>
@@ -224,6 +241,7 @@
           <hr class="my-3">
 
           <!-- Produtos Adquiridos -->
+          {% set produtos = ['Estruturação de Mentoria','Estruturação de negócio digital','Curso MMP','Curso Mentoria Profissional','Sessão avulsa de mentoria','Consultoria Vibe Coding','Serviços Vibe Coding','Carrosséis Mágicos','Serviços Autoescolas','ASA Marketing e Vendas','Agente de IA'] %}
           <div class="mb-3">
             <div class="d-flex justify-content-between align-items-center mb-2">
               <label class="form-label small fw-semibold mb-0">Produtos Adquiridos</label>
