@@ -439,6 +439,7 @@ def init_db():
         "ALTER TABLE email_opens ADD COLUMN campaign_id INTEGER",
         "ALTER TABLE contact_purchases ADD COLUMN amount NUMERIC(12,2) DEFAULT 0",
         "ALTER TABLE contact_purchases ADD COLUMN campaign_id INTEGER",
+        "ALTER TABLE campaigns ADD COLUMN brand_kit_id INTEGER",
         "ALTER TABLE campaigns ADD COLUMN resent_from INTEGER",
         "ALTER TABLE campaigns ADD COLUMN total_opened INTEGER DEFAULT 0",
         "ALTER TABLE campaigns ADD COLUMN total_clicked INTEGER DEFAULT 0",
@@ -1405,7 +1406,7 @@ def _inline_uploaded_images(html):
 
 
 def send_email_brevo(sender, recipient_email, recipient_name, subject, body_html,
-                     campaign_id=None, sequence_id=None, step_number=None):
+                     campaign_id=None, sequence_id=None, step_number=None, sender_name=None):
     personalized_subject = subject.replace('{nome}', recipient_name or 'Cliente')
     personalized_body = body_html.replace('{nome}', recipient_name or 'Cliente')
 
@@ -1438,7 +1439,10 @@ def send_email_brevo(sender, recipient_email, recipient_name, subject, body_html
         if recipient_name and recipient_name.strip() and len(emails) == 1:
             entry['name'] = recipient_name.strip()
         to_list.append(entry)
-    sender_info = {'email': sender, 'name': get_sender_name()}
+    # sender_name explícito (ex: nome do Kit de Marca da campanha) tem
+    # prioridade sobre o nome global de Configurações — permite ter
+    # "duas identidades" (negócios diferentes) usando o mesmo email.
+    sender_info = {'email': sender, 'name': (sender_name or '').strip() or get_sender_name()}
 
     # HTTP direto pra API Brevo (não passa pelo SDK)
     payload = {
@@ -1656,6 +1660,18 @@ def run_campaign(campaign_id, contacts, sender, subject, body_html, sequence_id=
     owner_row = conn.execute("SELECT user_id FROM campaigns WHERE id=%s", (campaign_id,)).fetchone()
     owner_uid = owner_row['user_id'] if owner_row and owner_row.get('user_id') else _resolve_uid(conn)
 
+    # Nome do remetente: se a campanha tem um Kit de Marca vinculado, usa o
+    # nome de assinatura desse kit (permite "duas identidades" — negócios
+    # diferentes — usando o mesmo endereço de email). Sem kit, cai no nome
+    # global de Configurações (comportamento de sempre).
+    sender_name = None
+    kit_row = conn.execute(
+        "SELECT bk.signature_name, bk.name FROM campaigns c "
+        "JOIN brand_kits bk ON bk.id = c.brand_kit_id "
+        "WHERE c.id=%s", (campaign_id,)).fetchone()
+    if kit_row:
+        sender_name = (kit_row.get('signature_name') or kit_row.get('name') or '').strip() or None
+
     blacklisted_count = 0
     for contact in contacts:
         email = contact['email']
@@ -1680,7 +1696,7 @@ def run_campaign(campaign_id, contacts, sender, subject, body_html, sequence_id=
 
         try:
             send_email_brevo(sender, email, name, subject, body_with_tracking,
-                             campaign_id=campaign_id)
+                             campaign_id=campaign_id, sender_name=sender_name)
             status = 'sent'
             campaign_progress[campaign_id]['sent'] += 1
             campaign_progress[campaign_id]['logs'].append({'email': email, 'name': name, 'status': 'sent', 'error': None})
@@ -2385,6 +2401,7 @@ def nova_campanha():
         mailing_ids_raw = request.form.get('mailing_ids', '').strip()
         mailing_id = mailing_ids_raw.split(',')[0] if mailing_ids_raw else None
         sequence_id = request.form.get('sequence_id', '').strip() or None
+        brand_kit_id = request.form.get('brand_kit_id', '').strip() or None
         schedule_mode = request.form.get('schedule_mode', 'now')
         scheduled_at_raw = request.form.get('scheduled_at', '').strip()
 
@@ -2492,21 +2509,21 @@ def nova_campanha():
                 conn.execute(
                     "UPDATE campaigns SET name=%s,subject=%s,body=%s,sender_email=%s,"
                     "total_contacts=%s,status=%s,mailing_id=%s,sequence_id=%s,"
-                    "scheduled_at=%s,csv_filename=%s WHERE id=%s",
+                    "scheduled_at=%s,csv_filename=%s,brand_kit_id=%s WHERE id=%s",
                     (name, subject, body_html, sender,
                      0 if is_scheduled else len(contacts),
-                     campaign_status, mailing_id, sequence_id, parsed_scheduled_at, csv_filename, draft_id))
+                     campaign_status, mailing_id, sequence_id, parsed_scheduled_at, csv_filename, brand_kit_id, draft_id))
                 campaign_id = int(draft_id)
                 conn.commit()
             else:
                 draft_id = None
         if not draft_id:
             cur = conn.execute(
-                "INSERT INTO campaigns (name,subject,body,sender_email,total_contacts,status,mailing_id,sequence_id,scheduled_at,csv_filename,user_id) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id",
+                "INSERT INTO campaigns (name,subject,body,sender_email,total_contacts,status,mailing_id,sequence_id,scheduled_at,csv_filename,user_id,brand_kit_id) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id",
                 (name, subject, body_html, sender,
                  0 if is_scheduled else len(contacts),
                  campaign_status, mailing_id, sequence_id, parsed_scheduled_at, csv_filename,
-                 _uid()))
+                 _uid(), brand_kit_id))
             campaign_id = cur.fetchone()['id']
             conn.commit()
         conn.close()
@@ -2523,8 +2540,9 @@ def nova_campanha():
     conn = get_db()
     mailings = conn.execute('SELECT * FROM mailings ORDER BY created_at DESC').fetchall()
     sequences = conn.execute("SELECT id, name FROM sequences WHERE status='active' ORDER BY name").fetchall()
+    kits = conn.execute('SELECT id, name, signature_name FROM brand_kits WHERE user_id=%s ORDER BY name', (_uid(),)).fetchall()
     conn.close()
-    return render_template('nova_campanha.html', mailings=mailings, sequences=sequences, reutilizar=None, editar=None)
+    return render_template('nova_campanha.html', mailings=mailings, sequences=sequences, kits=kits, reutilizar=None, editar=None)
 
 @app.route('/campanha/<int:campaign_id>')
 @login_required
@@ -2594,8 +2612,9 @@ def campanha_reutilizar(campaign_id):
         return redirect(url_for('index'))
     mailings = conn.execute('SELECT * FROM mailings WHERE user_id=%s ORDER BY created_at DESC', (uid,)).fetchall()
     sequences = conn.execute("SELECT id, name FROM sequences WHERE status='active' AND user_id=%s ORDER BY name", (uid,)).fetchall()
+    kits = conn.execute('SELECT id, name, signature_name FROM brand_kits WHERE user_id=%s ORDER BY name', (uid,)).fetchall()
     conn.close()
-    return render_template('nova_campanha.html', mailings=mailings, sequences=sequences, reutilizar=campaign, editar=None)
+    return render_template('nova_campanha.html', mailings=mailings, sequences=sequences, kits=kits, reutilizar=campaign, editar=None)
 
 @app.route('/campanha/<int:campaign_id>/editar')
 @login_required
@@ -2613,8 +2632,9 @@ def campanha_editar(campaign_id):
         return redirect(url_for('campanha_detalhe', campaign_id=campaign_id))
     mailings = conn.execute('SELECT * FROM mailings WHERE user_id=%s ORDER BY created_at DESC', (uid,)).fetchall()
     sequences = conn.execute("SELECT id, name FROM sequences WHERE status='active' AND user_id=%s ORDER BY name", (uid,)).fetchall()
+    kits = conn.execute('SELECT id, name, signature_name FROM brand_kits WHERE user_id=%s ORDER BY name', (uid,)).fetchall()
     conn.close()
-    return render_template('nova_campanha.html', mailings=mailings, sequences=sequences, reutilizar=None, editar=campaign)
+    return render_template('nova_campanha.html', mailings=mailings, sequences=sequences, kits=kits, reutilizar=None, editar=campaign)
 
 
 @app.route('/campanha/<int:campaign_id>/cancelar-agendamento', methods=['POST'])
@@ -2669,6 +2689,7 @@ def campanha_para_abridores(campaign_id):
     conn.commit()
     mailings = conn.execute('SELECT * FROM mailings ORDER BY created_at DESC').fetchall()
     sequences = conn.execute("SELECT id, name FROM sequences WHERE status='active' ORDER BY name").fetchall()
+    kits = conn.execute('SELECT id, name, signature_name FROM brand_kits WHERE user_id=%s ORDER BY name', (_uid(),)).fetchall()
     conn.close()
     reutilizar_data = {
         'name': f"Re: {campaign['name']} (abridores)",
@@ -2677,9 +2698,10 @@ def campanha_para_abridores(campaign_id):
         'body': '',
         'mailing_id': mailing_id,
         'sequence_id': campaign.get('sequence_id'),
+        'brand_kit_id': campaign.get('brand_kit_id'),
     }
     flash(f'Mailing "{mailing_name}" criado com {len(openers)} contato(s) que abriram.', 'success')
-    return render_template('nova_campanha.html', mailings=mailings, sequences=sequences,
+    return render_template('nova_campanha.html', mailings=mailings, sequences=sequences, kits=kits,
                            reutilizar=reutilizar_data, editar=None)
 
 @app.route('/nichos')
@@ -6000,6 +6022,45 @@ def api_brand_kits():
     ).fetchall()
     conn.close()
     return jsonify([dict(k) for k in kits])
+
+@app.route('/api/brand-kits/<int:kit_id>/assinatura')
+@login_required
+def api_brand_kit_assinatura(kit_id):
+    """Monta o bloco de assinatura (nome/cargo/telefone + ícones de redes) de um
+    Kit de Marca específico — permite ter identidades/assinaturas diferentes
+    por campanha mesmo usando o mesmo email remetente."""
+    conn = get_db()
+    _check_owner('brand_kits', kit_id, conn)
+    kit = conn.execute('SELECT * FROM brand_kits WHERE id=%s', (kit_id,)).fetchone()
+    conn.close()
+    if not kit:
+        return jsonify({'body_html': ''})
+    nome = (kit.get('signature_name') or '').strip()
+    cargo = (kit.get('signature_role') or '').strip()
+    fone = (kit.get('signature_phone') or '').strip()
+    linhas = []
+    if nome:
+        linhas.append(f'<strong>{nome}</strong>')
+    sub = ' | '.join(p for p in (cargo, fone) if p)
+    if sub:
+        linhas.append(f'<span style="color:#666">{sub}</span>')
+    links = []
+    for rede in ('instagram', 'facebook', 'linkedin', 'whatsapp', 'youtube', 'website'):
+        url = (kit.get(rede) or '').strip()
+        if url:
+            if not url.startswith(('http://', 'https://', 'mailto:')):
+                url = 'https://' + url
+            platform = rede if rede in _SOCIAL_ICONS else 'website'
+            links.append(_social_icon_html(url, platform=platform))
+    if not linhas and not links:
+        return jsonify({'body_html': ''})
+    body = ('<div style="margin-top:16px;padding-top:12px;border-top:1px solid #e5e7eb;'
+            'font-family:Arial,sans-serif;font-size:13px;line-height:1.6">')
+    body += '<br>'.join(linhas)
+    if links:
+        body += '<div style="margin-top:8px">' + ' '.join(links) + '</div>'
+    body += '</div>'
+    return jsonify({'body_html': body})
 
 # ── Email com IA ──────────────────────────────────────────────────────────────
 

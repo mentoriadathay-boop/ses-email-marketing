@@ -655,9 +655,10 @@ function applyEditLinks() {
 // ─────────────────────────────────────────────
 // Assinatura
 // ─────────────────────────────────────────────
-async function _fetchSignature(quill) {
+async function _fetchSignature(quill, kitId) {
   try {
-    const res = await fetch('/api/assinatura');
+    const url = kitId ? `/api/brand-kits/${kitId}/assinatura` : '/api/assinatura';
+    const res = await fetch(url);
     const data = await res.json();
     if (data.body_html) {
       const len = quill.getLength();
@@ -666,9 +667,11 @@ async function _fetchSignature(quill) {
   } catch (e) { /* sem assinatura configurada */ }
 }
 
-function reinserirAssinatura(containerId) {
+// kitId opcional: quando informado, usa a assinatura/links daquele Kit de
+// Marca em vez da assinatura global (permite duas identidades no mesmo email).
+function reinserirAssinatura(containerId, kitId) {
   const quill = _quillMap.get(containerId);
-  if (quill) _fetchSignature(quill);
+  if (quill) _fetchSignature(quill, kitId);
 }
 
 // ─────────────────────────────────────────────
