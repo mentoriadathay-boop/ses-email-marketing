@@ -1494,7 +1494,7 @@ def _enriquecer_claude(texto, url):
     if not api_key or not ANTHROPIC_OK:
         return []
     try:
-        client = _anthropic.Anthropic(api_key=api_key)
+        client = _anthropic.Anthropic(api_key=api_key, timeout=90.0)
         resposta = client.messages.create(
             model='claude-haiku-4-5-20251001',
             max_tokens=2048,
@@ -3015,7 +3015,7 @@ Instruções:
 - 250-400 palavras de conteúdo específico para o nicho
 """
     try:
-        client = _anthropic.Anthropic(api_key=api_key)
+        client = _anthropic.Anthropic(api_key=api_key, timeout=90.0)
         resp = client.messages.create(
             model='claude-haiku-4-5-20251001',
             max_tokens=8000,
@@ -6554,7 +6554,7 @@ Instruções obrigatórias:
 """
 
     try:
-        client = _anthropic.Anthropic(api_key=api_key)
+        client = _anthropic.Anthropic(api_key=api_key, timeout=90.0)
         resp = client.messages.create(
             model='claude-haiku-4-5-20251001',
             max_tokens=8000,
@@ -6614,7 +6614,7 @@ Instruções:
 - Retorne APENAS o HTML completo resultante, sem explicações, sem markdown, sem blocos ```.
 """
     try:
-        client = _anthropic.Anthropic(api_key=api_key)
+        client = _anthropic.Anthropic(api_key=api_key, timeout=90.0)
         resp = client.messages.create(
             model='claude-haiku-4-5-20251001',
             max_tokens=8000,
@@ -6659,7 +6659,7 @@ Instruções obrigatórias:
 - Retorne APENAS o código HTML completo, sem explicações, sem markdown, sem blocos ```.
 """
     try:
-        client = _anthropic.Anthropic(api_key=api_key)
+        client = _anthropic.Anthropic(api_key=api_key, timeout=90.0)
         resp = client.messages.create(
             model='claude-haiku-4-5-20251001',
             max_tokens=8000,
@@ -6707,7 +6707,7 @@ Instruções:
 - Retorne APENAS o HTML completo resultante, sem explicações, sem markdown, sem blocos ```.
 """
     try:
-        client = _anthropic.Anthropic(api_key=api_key)
+        client = _anthropic.Anthropic(api_key=api_key, timeout=90.0)
         resp = client.messages.create(
             model='claude-haiku-4-5-20251001',
             max_tokens=8000,
@@ -6757,7 +6757,7 @@ Instruções obrigatórias:
 - Retorne APENAS o HTML completo resultante, sem explicações, sem markdown, sem blocos ```.
 """
     try:
-        client = _anthropic.Anthropic(api_key=api_key)
+        client = _anthropic.Anthropic(api_key=api_key, timeout=90.0)
         resp = client.messages.create(
             model='claude-haiku-4-5-20251001',
             max_tokens=8000,
@@ -6861,7 +6861,7 @@ Sempre termine convidando a pessoa a se cadastrar ou testar gratuitamente."""
     messages.append({'role': 'user', 'content': mensagem})
 
     try:
-        client = _anthropic.Anthropic(api_key=api_key)
+        client = _anthropic.Anthropic(api_key=api_key, timeout=90.0)
         resp = client.messages.create(
             model='claude-haiku-4-5-20251001',
             max_tokens=300,
@@ -6938,7 +6938,7 @@ Regras:
     messages.append({'role': 'user', 'content': mensagem})
 
     try:
-        client = _anthropic.Anthropic(api_key=api_key)
+        client = _anthropic.Anthropic(api_key=api_key, timeout=90.0)
         resp = client.messages.create(
             model='claude-haiku-4-5-20251001',
             max_tokens=800,
@@ -7022,7 +7022,7 @@ Analise a resposta do lead e retorne um JSON com:
 Retorne APENAS o JSON, sem markdown."""
 
     try:
-        client = _anthropic.Anthropic(api_key=api_key)
+        client = _anthropic.Anthropic(api_key=api_key, timeout=90.0)
         resp = client.messages.create(
             model='claude-haiku-4-5-20251001', max_tokens=400,
             system=system_prompt,
