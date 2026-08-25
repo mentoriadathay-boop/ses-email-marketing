@@ -655,14 +655,26 @@ function applyEditLinks() {
 // ─────────────────────────────────────────────
 // Assinatura
 // ─────────────────────────────────────────────
-async function _fetchSignature(quill, kitId) {
+// forceInsert=true insere a assinatura mesmo que nenhuma exista ainda no
+// corpo (clique manual no botão "Assinatura"). Com forceInsert=false (troca
+// de kit no dropdown), só atualiza uma assinatura já inserida — nunca insere
+// uma nova sozinho, pra não surpreender quem ainda não pediu assinatura nenhuma.
+async function _fetchSignature(quill, kitId, forceInsert) {
   try {
     const url = kitId ? `/api/brand-kits/${kitId}/assinatura` : '/api/assinatura';
     const res = await fetch(url);
     const data = await res.json();
-    if (data.body_html) {
+    const existing = quill.root.querySelector('.cm-assinatura-bloco');
+    if (!data.body_html) {
+      if (existing) existing.remove();
+      return;
+    }
+    const wrapped = `<div class="cm-assinatura-bloco">${data.body_html}</div>`;
+    if (existing) {
+      existing.outerHTML = wrapped;
+    } else if (forceInsert) {
       const len = quill.getLength();
-      quill.clipboard.dangerouslyPasteHTML(len > 1 ? len - 1 : 0, '\n' + data.body_html);
+      quill.clipboard.dangerouslyPasteHTML(len > 1 ? len - 1 : 0, '\n' + wrapped);
     }
   } catch (e) { /* sem assinatura configurada */ }
 }
@@ -671,7 +683,17 @@ async function _fetchSignature(quill, kitId) {
 // Marca em vez da assinatura global (permite duas identidades no mesmo email).
 function reinserirAssinatura(containerId, kitId) {
   const quill = _quillMap.get(containerId);
-  if (quill) _fetchSignature(quill, kitId);
+  if (quill) _fetchSignature(quill, kitId, true);
+}
+
+// Chamado ao trocar o Kit de Marca da campanha: se já existe uma assinatura
+// inserida no corpo do email, atualiza ela na hora para o kit atual.
+function atualizarAssinaturaKitSelecionado() {
+  const quill = _quillMap.get('quill-main');
+  if (!quill) return;
+  const sel = document.getElementById('campaignBrandKitId');
+  const kitId = sel ? (sel.value || null) : null;
+  _fetchSignature(quill, kitId, false);
 }
 
 // ─────────────────────────────────────────────
