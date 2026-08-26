@@ -6177,6 +6177,14 @@ def _texto_para_email_html(texto, template_html='', primary_color='#1a3a6b', tem
     texto = texto.strip()
     texto = texto.replace('\r\n', '\n').replace('\r', '\n')
 
+    # Remove marcadores de markdown (**negrito**, *itálico*) ANTES de
+    # classificar os blocos. Sem isso, uma linha como "**Assinatura mensal**"
+    # começa com "*" e cai na detecção de citação/destaque (pensada pra
+    # aspas/itálico de verdade), virando um bloco de citação em vez de
+    # aparecer como tópico/parágrafo normal.
+    texto = re.sub(r'\*\*(.+?)\*\*', r'\1', texto)
+    texto = re.sub(r'(?<!\*)\*([^\*\n]+)\*(?!\*)', r'\1', texto)
+
     assunto_extraido = ''
     if texto.lower().startswith('assunto:'):
         first_nl = texto.find('\n')
