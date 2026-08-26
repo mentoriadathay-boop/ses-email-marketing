@@ -6532,7 +6532,7 @@ Kit de Marca — {kit['name']}:
     cta_texto = (dados.get('cta_texto', '') or '').strip()
     cta_info = ''
     if cta_url:
-        cta_info = f'\n- O botão CTA (item 6) deve usar EXATAMENTE href="__CTA_URL_PLACEHOLDER__" (não invente URL nem use âncora #).'
+        cta_info = f'\n- O botão CTA deve usar EXATAMENTE href="__CTA_URL_PLACEHOLDER__" (não invente URL nem use âncora #).'
         if cta_texto:
             cta_info += f'\n- O texto exato do botão CTA deve ser "{cta_texto}" (não altere).'
     else:
@@ -6566,6 +6566,36 @@ Kit de Marca — {kit['name']}:
         # ver as caixinhas brand antes de enviar, não só após.
         html = _upgrade_social_icons_in_html(html)
         return jsonify({'html': html, 'cta_url_missing': not cta_url})
+    elif template_ref:
+        # Um template específico da galeria foi escolhido (ex: "Oferta Especial",
+        # com caixa de preço/urgência) — a IA deve preencher o conteúdo desse
+        # template exato, preservando sua estrutura/layout, em vez de gerar um
+        # email genérico do zero que ignora o modelo escolhido pela usuária.
+        prompt = f"""Você vai personalizar o email HTML abaixo, preenchendo o conteúdo com base no contexto informado — SEM mudar a estrutura, o layout, as tags HTML ou os estilos (cores, bordas, tamanhos, espaçamentos) do template original.
+
+TEMPLATE HTML ORIGINAL (preserve a estrutura exata — mesmas tags, mesma ordem, mesmos blocos):
+{template_ref}
+
+Contexto para personalizar o conteúdo:
+Público-alvo: {dados.get('publico', '')}
+Faixa etária: {dados.get('faixa_etaria', '')}
+Nível de conhecimento: {dados.get('nivel', '')}
+Objetivo: {dados.get('objetivo', '')}
+Tema: {dados.get('tema', '')}
+Contexto: {dados.get('contexto', '')}
+Resultado esperado: {dados.get('resultado', '')}
+{kit_info}{imagem_info}{cta_info}
+
+Instruções obrigatórias:
+- Mantenha a MESMA estrutura de tags HTML (<table>/<tr>/<td>/<div>/<ul>/<li> etc.) do template original — não invente blocos novos, não remova blocos existentes, não mude a ordem dos elementos, não mude estilos (cores/bordas/tamanhos) a menos que seja para aplicar as cores do Kit de Marca informado acima.
+- Troque TODO texto entre colchetes (ex: [DATA], [Produto/Serviço], [problema/situação], [Item 1 incluso na oferta]) por conteúdo real, específico e persuasivo, coerente com o contexto acima. Não deixe nenhum colchete no resultado final.
+- Mantenha o placeholder {{nome}} EXATAMENTE como está — é substituído automaticamente pelo sistema pelo nome de cada destinatário.
+- Se o template tiver preço/desconto/porcentagem de exemplo, pode ajustar os valores para fazer sentido com o contexto, mas mantenha o mesmo estilo visual do bloco (mesma caixa, mesmas cores, mesmo destaque).
+- Se houver botão(ões) de call-to-action no template, mantenha a MESMA posição, estilo e o mesmo href (ex: #LINK_CTA) — só ajuste o texto do botão para algo específico ao objetivo, se fizer sentido.
+- NÃO adicione blocos de "prova social", parágrafos extras, listas extras ou seções que não existem no template original — o objetivo é preencher o modelo escolhido, não criar um email novo.
+- Retorne APENAS o código HTML completo, sem explicações, sem markdown, sem blocos ```
+- Se houver placeholder __IMAGEM_PLACEHOLDER__ ou __CTA_URL_PLACEHOLDER__ no template ou nas instruções acima, mantenha EXATAMENTE assim para eu substituir depois.
+"""
     else:
         prompt = f"""Crie um email profissional de marketing em HTML, com conteúdo RICO, ESPECÍFICO e APROFUNDADO — nada de texto genérico ou raso.
 
