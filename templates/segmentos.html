@@ -12,7 +12,7 @@
 <div class="card mb-4">
   <div class="card-body">
     <form method="GET" class="row g-3 align-items-end">
-      <div class="col-md-5">
+      <div class="col-md-4">
         <label class="form-label small fw-semibold mb-2">Temperatura dos leads</label>
         <div class="d-flex gap-2 flex-wrap">
           {% for key, label in [('muito_quente','Muito Quente'),('quente','Quente'),('morno','Morno'),('frio','Frio')] %}
@@ -25,7 +25,7 @@
           {% endfor %}
         </div>
       </div>
-      <div class="col-md-3">
+      <div class="col-md-2">
         <label class="form-label small fw-semibold">Período</label>
         <select name="periodo" class="form-select form-select-sm">
           <option value="0" {% if periodo_dias == 0 %}selected{% endif %}>Qualquer tempo</option>
@@ -36,13 +36,22 @@
           <option value="90" {% if periodo_dias == 90 %}selected{% endif %}>Últimos 90 dias</option>
         </select>
       </div>
-      <div class="col-md-3">
+      <div class="col-md-2">
         <label class="form-label small fw-semibold">Atividade no período</label>
         <select name="atividade" class="form-select form-select-sm">
           <option value="qualquer"      {% if atividade == 'qualquer' %}selected{% endif %}>Qualquer atividade</option>
           <option value="abriu_email"   {% if atividade == 'abriu_email' %}selected{% endif %}>Abriu email</option>
           <option value="clicou_email"  {% if atividade == 'clicou_email' %}selected{% endif %}>Clicou em link</option>
           <option value="sem_atividade" {% if atividade == 'sem_atividade' %}selected{% endif %}>Sem atividade (reengajar)</option>
+        </select>
+      </div>
+      <div class="col-md-3">
+        <label class="form-label small fw-semibold">Nicho</label>
+        <select name="nicho" class="form-select form-select-sm">
+          <option value="" {% if not nicho %}selected{% endif %}>Todos os nichos</option>
+          {% for n in nichos_disponiveis %}
+          <option value="{{ n.nicho }}" {% if nicho == n.nicho %}selected{% endif %}>{{ n.nicho }}</option>
+          {% endfor %}
         </select>
       </div>
       <div class="col-md-1">
@@ -65,6 +74,7 @@
       {% for t in temperaturas_selecionadas %}<input type="hidden" name="temp" value="{{ t }}">{% endfor %}
       <input type="hidden" name="periodo" value="{{ periodo_dias }}">
       <input type="hidden" name="atividade" value="{{ atividade }}">
+      <input type="hidden" name="nicho" value="{{ nicho }}">
       <button type="submit" class="btn btn-danger btn-sm">
         <i class="bi bi-send-fill me-1"></i>Criar campanha com estes {{ contatos|length }} leads
       </button>

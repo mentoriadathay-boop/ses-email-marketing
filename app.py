@@ -5265,11 +5265,12 @@ def pipeline():
 
 # ── CRM — Segmentos (filtro por temperatura + período para campanhas) ─────
 
-def _query_contatos_por_segmento(conn, uid, temperaturas, periodo_dias, atividade):
-    """Devolve contatos que batem com um segmento (temperatura + período + atividade).
+def _query_contatos_por_segmento(conn, uid, temperaturas, periodo_dias, atividade, nicho=None):
+    """Devolve contatos que batem com um segmento (temperatura + período + atividade + nicho).
     temperaturas: lista de strings ('muito_quente','quente','morno','frio').
     periodo_dias: int — filtra por atividade nos últimos N dias (0 = qualquer).
-    atividade: 'qualquer' | 'abriu_email' | 'clicou_email' | 'sem_atividade'."""
+    atividade: 'qualquer' | 'abriu_email' | 'clicou_email' | 'sem_atividade'.
+    nicho: string exata do nicho do contato, ou None/'' para não filtrar."""
     # Constrói WHERE de temperatura considerando override + score derivado
     temp_conditions = []
     if 'muito_quente' in temperaturas:
@@ -5285,6 +5286,10 @@ def _query_contatos_por_segmento(conn, uid, temperaturas, periodo_dias, atividad
 
     where_parts = [f"c.user_id = %s", "(" + " OR ".join(temp_conditions) + ")"]
     params = [uid]
+
+    if nicho:
+        where_parts.append("c.nicho = %s")
+        params.append(nicho)
 
     # Filtro de atividade recente
     if atividade == 'abriu_email' and periodo_dias > 0:
@@ -5342,13 +5347,19 @@ def segmentos():
     temperaturas = request.args.getlist('temp') or ['muito_quente', 'quente']
     periodo_dias = int(request.args.get('periodo', '30') or '30')
     atividade = request.args.get('atividade', 'qualquer')
-    contatos = _query_contatos_por_segmento(conn, uid, temperaturas, periodo_dias, atividade)
+    nicho = request.args.get('nicho', '').strip()
+    nichos_disponiveis = conn.execute(
+        "SELECT DISTINCT nicho FROM contacts WHERE user_id=%s AND nicho IS NOT NULL AND nicho != '' ORDER BY nicho",
+        (uid,)).fetchall()
+    contatos = _query_contatos_por_segmento(conn, uid, temperaturas, periodo_dias, atividade, nicho)
     conn.close()
     return render_template('segmentos.html',
                            contatos=contatos,
                            temperaturas_selecionadas=temperaturas,
                            periodo_dias=periodo_dias,
-                           atividade=atividade)
+                           atividade=atividade,
+                           nicho=nicho,
+                           nichos_disponiveis=nichos_disponiveis)
 
 
 @app.route('/segmentos/criar-mailing', methods=['POST'])
@@ -5361,17 +5372,19 @@ def segmentos_criar_mailing():
     temperaturas = request.form.getlist('temp') or ['muito_quente', 'quente']
     periodo_dias = int(request.form.get('periodo', '30') or '30')
     atividade = request.form.get('atividade', 'qualquer')
-    contatos = _query_contatos_por_segmento(conn, uid, temperaturas, periodo_dias, atividade)
+    nicho = request.form.get('nicho', '').strip()
+    contatos = _query_contatos_por_segmento(conn, uid, temperaturas, periodo_dias, atividade, nicho)
     if not contatos:
         conn.close()
         flash('Segmento vazio — nenhum contato bate com esses filtros.', 'warning')
-        return redirect(url_for('segmentos', temp=temperaturas, periodo=periodo_dias, atividade=atividade))
+        return redirect(url_for('segmentos', temp=temperaturas, periodo=periodo_dias, atividade=atividade, nicho=nicho))
 
     # Nome descritivo do mailing efêmero
     temp_label = ', '.join(TEMPERATURE_LABELS.get(t, (t,))[0] for t in temperaturas)
     label_periodo = f' — últimos {periodo_dias}d' if periodo_dias > 0 else ''
+    label_nicho = f' — {nicho}' if nicho else ''
     now_label = datetime.now().strftime('%d/%m/%Y %H:%M')
-    mailing_name = f'🎯 Segmento: {temp_label}{label_periodo} ({now_label})'
+    mailing_name = f'🎯 Segmento: {temp_label}{label_periodo}{label_nicho} ({now_label})'
 
     try:
         cur = conn.execute(
