@@ -7536,11 +7536,12 @@ Sempre termine convidando a pessoa a se cadastrar ou testar gratuitamente."""
 @app.route('/assistente')
 def assistente_ia():
     conn = get_db()
-    total_contacts = conn.execute('SELECT COUNT(*) as n FROM contacts').fetchone()['n']
-    total_campaigns = conn.execute('SELECT COUNT(*) as n FROM campaigns').fetchone()['n']
-    total_sequences = conn.execute('SELECT COUNT(*) as n FROM sequences').fetchone()['n']
+    total_contacts = conn.execute('SELECT COUNT(*) as n FROM contacts WHERE user_id=%s', (_uid(),)).fetchone()['n']
+    total_campaigns = conn.execute('SELECT COUNT(*) as n FROM campaigns WHERE user_id=%s', (_uid(),)).fetchone()['n']
+    total_sequences = conn.execute('SELECT COUNT(*) as n FROM sequences WHERE user_id=%s', (_uid(),)).fetchone()['n']
     recent_campaigns = conn.execute(
-        "SELECT name, status, subject, total_sent, total_opened, total_clicked FROM campaigns ORDER BY created_at DESC LIMIT 5"
+        "SELECT name, status, subject, sent, total_opened, total_clicked FROM campaigns "
+        "WHERE user_id=%s ORDER BY created_at DESC LIMIT 5", (_uid(),)
     ).fetchall()
     conn.close()
     return render_template('assistente.html',

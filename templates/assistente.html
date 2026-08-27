@@ -147,7 +147,7 @@ Como posso te ajudar?</div>
 Total de campanhas: {{ total_campaigns }}
 Total de cadências: {{ total_sequences }}
 Campanhas recentes:
-{% for c in recent_campaigns %}- "{{ c.name }}" ({{ c.status }}) — Assunto: "{{ c.subject }}", Enviados: {{ c.total_sent or 0 }}, Aberturas: {{ c.total_opened or 0 }}, Cliques: {{ c.total_clicked or 0 }}
+{% for c in recent_campaigns %}- "{{ c.name }}" ({{ c.status }}) — Assunto: "{{ c.subject }}", Enviados: {{ c.sent or 0 }}, Aberturas: {{ c.total_opened or 0 }}, Cliques: {{ c.total_clicked or 0 }}
 {% endfor %}`;
 
   function addMsg(text, role) {
