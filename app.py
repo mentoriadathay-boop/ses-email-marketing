@@ -133,6 +133,11 @@ FIRECRAWL_API_KEY = os.environ.get('FIRECRAWL_API_KEY', '')
 HOTMART_TOKEN = os.environ.get('HOTMART_TOKEN', '')
 HOTMART_SECRET = os.environ.get('HOTMART_SECRET', '')
 ADMIN_EMAIL = os.environ.get('ADMIN_EMAIL', 'mentoriadathay@gmail.com')
+# Versão vigente dos Termos de Uso/Política de Privacidade. Suba esta string
+# (ex.: '2026-09-15') sempre que o texto de /termos ou /privacidade mudar de
+# forma relevante — isso reabre o gate de re-aceite (/aceitar-termos) para
+# todo mundo, inclusive quem já tinha aceitado uma versão anterior.
+TERMS_VERSION = '2026-08-27'
 DATABASE_URL = os.environ.get('DATABASE_URL', '')
 # psycopg2 exige postgresql:// mas Railway/Heroku fornecem postgres://
 if DATABASE_URL.startswith('postgres://'):
@@ -617,6 +622,41 @@ def init_db():
         created_at TIMESTAMP DEFAULT NOW()
     )''')
 
+    # LGPD: registro de aceite de Termos/Privacidade por versão (auditável).
+    conn.execute('''CREATE TABLE IF NOT EXISTS user_consents (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER NOT NULL,
+        document TEXT NOT NULL,
+        version TEXT NOT NULL,
+        accepted_at TIMESTAMP DEFAULT NOW(),
+        ip TEXT
+    )''')
+
+    # LGPD: fila de revisão manual quando um lead pede remoção dos dados
+    # (classificado pela IA em /ia/classificar-resposta, ou manual).
+    conn.execute('''CREATE TABLE IF NOT EXISTS data_removal_requests (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER NOT NULL,
+        contact_id INTEGER NOT NULL,
+        contact_email TEXT NOT NULL,
+        source TEXT DEFAULT 'ia_classificacao',
+        status TEXT DEFAULT 'pending',
+        created_at TIMESTAMP DEFAULT NOW(),
+        reviewed_at TIMESTAMP
+    )''')
+    conn.commit()
+
+    for idx_sql2 in [
+        "CREATE INDEX IF NOT EXISTS idx_consents_user ON user_consents(user_id, document, accepted_at DESC)",
+        "CREATE UNIQUE INDEX IF NOT EXISTS uq_removal_pending ON data_removal_requests(contact_id) WHERE status='pending'",
+        "CREATE INDEX IF NOT EXISTS idx_removal_user_status ON data_removal_requests(user_id, status)",
+    ]:
+        try:
+            conn.execute(idx_sql2)
+            conn.commit()
+        except Exception:
+            conn.rollback()
+
     conn.execute('''CREATE TABLE IF NOT EXISTS users (
         id SERIAL PRIMARY KEY,
         email TEXT UNIQUE NOT NULL,
@@ -634,6 +674,8 @@ def init_db():
 
     for col_sql2 in [
         "ALTER TABLE users ADD COLUMN hotmart_subscription TEXT",
+        "ALTER TABLE users ADD COLUMN deletion_status TEXT DEFAULT 'none'",
+        "ALTER TABLE users ADD COLUMN deletion_scheduled_at TIMESTAMP",
     ]:
         try:
             conn.execute(f"DO $$ BEGIN {col_sql2}; EXCEPTION WHEN duplicate_column THEN NULL; END $$")
@@ -774,6 +816,127 @@ def _send_welcome_email(to_email, to_name, password):
         api.send_transac_email(email)
     except Exception as e:
         app.logger.warning('Erro ao enviar email de boas-vindas: %s', e)
+
+def _send_account_deletion_scheduled_email(to_email, to_name, data_exclusao):
+    if not BREVO_API_KEY:
+        return
+    try:
+        config = sib_api_v3_sdk.Configuration()
+        config.api_key['api-key'] = BREVO_API_KEY
+        api = sib_api_v3_sdk.TransactionalEmailsApi(sib_api_v3_sdk.ApiClient(config))
+        data_fmt = data_exclusao.strftime('%d/%m/%Y')
+        html = f'''<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:20px">
+            <h2 style="color:#1AC78A">Exclusão de conta agendada</h2>
+            <p>Olá, <strong>{to_name or "cliente"}</strong>!</p>
+            <p>Confirmamos o agendamento de exclusão da sua conta ConvertMail e de todos os dados associados (contatos, campanhas, cadências) para <strong>{data_fmt}</strong>.</p>
+            <p>Se mudar de ideia, você pode cancelar a qualquer momento antes dessa data em Configurações &gt; Minha Conta.</p>
+            <p>Acesse a plataforma: <a href="{APP_URL}/login" style="color:#1AC78A;font-weight:bold">{APP_URL}/login</a></p>
+            <hr style="border:none;border-top:1px solid #eee;margin:20px 0">
+            <p style="color:#999;font-size:0.8rem">ConvertMail — TFA Soluções Digitais</p>
+        </div>'''
+        email = sib_api_v3_sdk.SendSmtpEmail(
+            to=[{'email': to_email, 'name': to_name or to_email}],
+            sender={'name': 'ConvertMail', 'email': 'naoresponda@convertmail.com.br'},
+            subject='ConvertMail — Exclusão de conta agendada',
+            html_content=html
+        )
+        api.send_transac_email(email)
+    except Exception as e:
+        app.logger.warning('Erro ao enviar email de exclusão agendada: %s', e)
+
+def _send_account_deleted_email(to_email, to_name):
+    if not BREVO_API_KEY:
+        return
+    try:
+        config = sib_api_v3_sdk.Configuration()
+        config.api_key['api-key'] = BREVO_API_KEY
+        api = sib_api_v3_sdk.TransactionalEmailsApi(sib_api_v3_sdk.ApiClient(config))
+        html = f'''<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:20px">
+            <h2 style="color:#1AC78A">Sua conta foi excluída</h2>
+            <p>Olá, <strong>{to_name or "cliente"}</strong>!</p>
+            <p>Confirmamos a exclusão da sua conta ConvertMail e de todos os dados associados (contatos, campanhas, cadências, contas de email conectadas).</p>
+            <p>Se foi um engano, entre em contato com o suporte — mas atenção: os dados não podem ser recuperados após este envio.</p>
+            <hr style="border:none;border-top:1px solid #eee;margin:20px 0">
+            <p style="color:#999;font-size:0.8rem">ConvertMail — TFA Soluções Digitais</p>
+        </div>'''
+        email = sib_api_v3_sdk.SendSmtpEmail(
+            to=[{'email': to_email, 'name': to_name or to_email}],
+            sender={'name': 'ConvertMail', 'email': 'naoresponda@convertmail.com.br'},
+            subject='ConvertMail — Sua conta foi excluída',
+            html_content=html
+        )
+        api.send_transac_email(email)
+    except Exception as e:
+        app.logger.warning('Erro ao enviar email de confirmação de exclusão: %s', e)
+
+def _excluir_dados_usuario(user_id, conn=None):
+    """Apaga em cascade todos os dados de um assinante e a própria conta.
+
+    `blacklist` é preservada de propósito — é uma lista global de supressão
+    (sem user_id), não pertence a este tenant especificamente, e existe
+    justamente para impedir reimportação futura de contatos que já pediram
+    remoção/descadastro.
+
+    Para as tabelas chaveadas só por contact_email, sem user_id
+    (contact_activities, contact_scores, contact_purchases, send_analytics,
+    email_opens, email_clicks): só apaga se nenhum OUTRO assinante ainda tiver
+    um contato com aquele mesmo email — hoje é possível dois tenants
+    compartilharem o mesmo email de lead (contacts já é UNIQUE(user_id,email),
+    mas essas tabelas-filhas não têm essa granularidade)."""
+    close_after = False
+    if conn is None:
+        conn = get_db()
+        close_after = True
+    try:
+        emails = [r['email'] for r in conn.execute(
+            'SELECT email FROM contacts WHERE user_id=%s', (user_id,)).fetchall()]
+
+        campaign_ids = [r['id'] for r in conn.execute(
+            'SELECT id FROM campaigns WHERE user_id=%s', (user_id,)).fetchall()]
+        if campaign_ids:
+            conn.execute('DELETE FROM campaign_logs WHERE campaign_id = ANY(%s)', (campaign_ids,))
+
+        sequence_ids = [r['id'] for r in conn.execute(
+            'SELECT id FROM sequences WHERE user_id=%s', (user_id,)).fetchall()]
+        if sequence_ids:
+            conn.execute('DELETE FROM sequence_steps WHERE sequence_id = ANY(%s)', (sequence_ids,))
+            conn.execute('DELETE FROM sequence_contacts WHERE sequence_id = ANY(%s)', (sequence_ids,))
+            conn.execute('DELETE FROM sequence_logs WHERE sequence_id = ANY(%s)', (sequence_ids,))
+
+        mailing_ids = [r['id'] for r in conn.execute(
+            'SELECT id FROM mailings WHERE user_id=%s', (user_id,)).fetchall()]
+        if mailing_ids:
+            conn.execute('DELETE FROM mailing_contacts WHERE mailing_id = ANY(%s)', (mailing_ids,))
+
+        for email in emails:
+            other_owner = conn.execute(
+                'SELECT 1 FROM contacts WHERE email=%s AND user_id != %s LIMIT 1',
+                (email, user_id)).fetchone()
+            if other_owner:
+                continue
+            conn.execute('DELETE FROM contact_activities WHERE contact_email=%s', (email,))
+            conn.execute('DELETE FROM contact_scores WHERE email=%s', (email,))
+            conn.execute('DELETE FROM contact_purchases WHERE contact_email=%s', (email,))
+            conn.execute('DELETE FROM send_analytics WHERE contact_email=%s', (email,))
+            conn.execute('DELETE FROM email_opens WHERE contact_email=%s', (email,))
+            conn.execute('DELETE FROM email_clicks WHERE contact_email=%s', (email,))
+
+        for table in ('campaigns', 'sequences', 'mailings', 'contacts', 'email_accounts',
+                      'brand_kits', 'email_templates', 'signature', 'capture_forms',
+                      'uploaded_images', 'warmup_plans', 'nichos', 'contact_conversations',
+                      'contact_tasks', 'custom_field_options'):
+            conn.execute(f'DELETE FROM {table} WHERE user_id=%s', (user_id,))
+
+        conn.execute('DELETE FROM user_consents WHERE user_id=%s', (user_id,))
+        conn.execute('DELETE FROM data_removal_requests WHERE user_id=%s', (user_id,))
+        conn.execute('DELETE FROM users WHERE id=%s', (user_id,))
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        if close_after:
+            conn.close()
 
 # ── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -1999,6 +2162,7 @@ _PUBLIC_ENDPOINTS = {
     'webhook_hotmart', 'track_open', 'track_click', 'descadastrar',
     'api_captura', 'ia_chat_landing', 'img_proxy', 'serve_upload',
     'conta_suspensa', 'alterar_senha', 'esqueci_senha',
+    'termos', 'privacidade',
     # Endpoints de imagem — DEVEM ser públicos senão clientes de email
     # (Gmail, Outlook) recebem redirect pra /login em vez da imagem.
     # ESTE bug fazia imagem quebrada em TODOS os emails enviados.
@@ -2042,6 +2206,21 @@ def require_db_and_auth():
         if user_status != 'active':
             if request.endpoint not in ('conta_suspensa', 'logout'):
                 return redirect(url_for('conta_suspensa'))
+        # LGPD: exige aceite dos Termos/Privacidade vigentes antes de liberar
+        # qualquer outra rota autenticada — cobre tanto contas novas quanto
+        # sessões antigas que já estavam logadas antes desta feature existir.
+        if request.endpoint not in ('aceitar_termos', 'logout'):
+            if session.get('terms_version') != TERMS_VERSION:
+                conn = get_db()
+                row = conn.execute(
+                    "SELECT version FROM user_consents WHERE user_id=%s AND document='termos' "
+                    "ORDER BY accepted_at DESC LIMIT 1", (uid,)).fetchone()
+                conn.close()
+                session['terms_version'] = row['version'] if row else None
+            if session.get('terms_version') != TERMS_VERSION:
+                if request.path.startswith('/api/') or request.path.startswith('/ia/'):
+                    return jsonify({'erro': 'É necessário aceitar os Termos de Uso e a Política de Privacidade.'}), 403
+                return redirect(url_for('aceitar_termos'))
 
 # Campos do contato com opções editáveis pelo usuário (além do Nicho, que já
 # tinha sua própria tabela `nichos`). CUSTOM_FIELDS_WHITELIST define os únicos
@@ -2172,6 +2351,36 @@ def logout():
 @app.route('/conta-suspensa')
 def conta_suspensa():
     return render_template('conta_suspensa.html')
+
+@app.route('/termos')
+def termos():
+    return render_template('termos.html', versao=TERMS_VERSION)
+
+@app.route('/privacidade')
+def privacidade():
+    return render_template('privacidade.html', versao=TERMS_VERSION)
+
+@app.route('/aceitar-termos', methods=['GET', 'POST'])
+@login_required
+def aceitar_termos():
+    if request.method == 'POST':
+        if request.form.get('aceite') != 'on':
+            flash('É necessário marcar o aceite para continuar.', 'warning')
+            return render_template('aceitar_termos.html', versao=TERMS_VERSION)
+        conn = get_db()
+        ip = request.headers.get('X-Forwarded-For', request.remote_addr or '').split(',')[0].strip()
+        conn.execute(
+            "INSERT INTO user_consents (user_id, document, version, ip) VALUES (%s,'termos',%s,%s)",
+            (session['user_id'], TERMS_VERSION, ip))
+        conn.execute(
+            "INSERT INTO user_consents (user_id, document, version, ip) VALUES (%s,'privacidade',%s,%s)",
+            (session['user_id'], TERMS_VERSION, ip))
+        conn.commit()
+        conn.close()
+        session['terms_version'] = TERMS_VERSION
+        flash('Aceite registrado. Bem-vindo(a)!', 'success')
+        return redirect(url_for('index'))
+    return render_template('aceitar_termos.html', versao=TERMS_VERSION)
 
 @app.route('/alterar-senha', methods=['GET', 'POST'])
 def alterar_senha():
@@ -2402,10 +2611,16 @@ def admin_resetar_senha(user_id):
 @admin_required
 def admin_deletar_usuario(user_id):
     conn = get_db()
-    conn.execute('DELETE FROM users WHERE id=%s AND role != %s', (user_id, 'admin'))
-    conn.commit()
+    target = conn.execute('SELECT role FROM users WHERE id=%s', (user_id,)).fetchone()
+    if not target or target['role'] == 'admin':
+        conn.close()
+        flash('Não é possível excluir esta conta.', 'danger')
+        return redirect(url_for('admin_usuarios'))
+    # Usa a mesma exclusão em cascade do fluxo self-service — evita deixar
+    # contatos/campanhas/etc. órfãos no banco (bug corrigido em 2026-08-27).
+    _excluir_dados_usuario(user_id, conn)
     conn.close()
-    flash('Usuário removido.', 'success')
+    flash('Usuário e todos os dados associados foram removidos.', 'success')
     return redirect(url_for('admin_usuarios'))
 
 # ── Rotas de campanhas ────────────────────────────────────────────────────────
@@ -3251,8 +3466,11 @@ def configuracoes():
     conn = get_db()
     sig = conn.execute('SELECT * FROM signature WHERE user_id=%s ORDER BY id DESC LIMIT 1', (_uid(),)).fetchone()
     email_accounts = conn.execute('SELECT * FROM email_accounts WHERE user_id=%s ORDER BY id', (_uid(),)).fetchall()
+    minha_conta = conn.execute(
+        'SELECT deletion_status, deletion_scheduled_at FROM users WHERE id=%s', (_uid(),)).fetchone()
     conn.close()
-    return render_template('configuracoes.html', signature=sig, email_accounts=email_accounts)
+    return render_template('configuracoes.html', signature=sig, email_accounts=email_accounts,
+                            minha_conta=minha_conta)
 
 @app.route('/configuracoes/assinatura', methods=['POST'])
 def salvar_assinatura():
@@ -3271,6 +3489,85 @@ def salvar_assinatura():
     conn.close()
     flash('Configuracoes salvas com sucesso!', 'success')
     return redirect(url_for('configuracoes'))
+
+@app.route('/conta/exportar-dados')
+@login_required
+def conta_exportar_dados():
+    conn = get_db()
+    user = conn.execute(
+        'SELECT id,email,name,created_at,last_login FROM users WHERE id=%s', (_uid(),)).fetchone()
+    consents = conn.execute(
+        "SELECT document,version,accepted_at,ip FROM user_consents WHERE user_id=%s ORDER BY accepted_at",
+        (_uid(),)).fetchall()
+    accounts = conn.execute(
+        'SELECT label,email,imap_server,smtp_server,active,created_at FROM email_accounts WHERE user_id=%s',
+        (_uid(),)).fetchall()
+    kits = conn.execute(
+        'SELECT name,primary_color,secondary_color,created_at FROM brand_kits WHERE user_id=%s',
+        (_uid(),)).fetchall()
+    conn.close()
+    data = {
+        'perfil': dict(user) if user else {},
+        'consentimentos_registrados': [dict(r) for r in consents],
+        'contas_de_email_conectadas': [dict(r) for r in accounts],
+        'kits_de_marca': [dict(r) for r in kits],
+        'observacao': ('Esta exportação cobre os dados da sua conta. Contatos, campanhas e '
+                        'cadências podem ser exportados em CSV nas respectivas telas do sistema.'),
+    }
+    body = json.dumps(data, ensure_ascii=False, indent=2, default=str)
+    return Response(body, mimetype='application/json',
+                     headers={'Content-Disposition': 'attachment; filename=meus-dados-convertmail.json'})
+
+@app.route('/conta/agendar-exclusao', methods=['POST'])
+@login_required
+@limiter.limit('10 per hour')
+def conta_agendar_exclusao():
+    senha = request.form.get('senha', '')
+    conn = get_db()
+    user = conn.execute('SELECT * FROM users WHERE id=%s', (_uid(),)).fetchone()
+    if not user or not check_password_hash(user['password_hash'], senha):
+        conn.close()
+        flash('Senha incorreta.', 'danger')
+        return redirect(url_for('configuracoes'))
+    data_exclusao = datetime.now() + timedelta(days=30)
+    conn.execute(
+        "UPDATE users SET deletion_status='scheduled', deletion_scheduled_at=%s WHERE id=%s",
+        (data_exclusao, _uid()))
+    conn.commit()
+    conn.close()
+    _send_account_deletion_scheduled_email(user['email'], user['name'], data_exclusao)
+    flash(f'Exclusão agendada para {data_exclusao.strftime("%d/%m/%Y")}. Você pode cancelar até lá em Configurações.', 'warning')
+    return redirect(url_for('configuracoes'))
+
+@app.route('/conta/cancelar-exclusao', methods=['POST'])
+@login_required
+def conta_cancelar_exclusao():
+    conn = get_db()
+    conn.execute(
+        "UPDATE users SET deletion_status='none', deletion_scheduled_at=NULL WHERE id=%s", (_uid(),))
+    conn.commit()
+    conn.close()
+    flash('Exclusão cancelada. Sua conta continua ativa normalmente.', 'success')
+    return redirect(url_for('configuracoes'))
+
+@app.route('/conta/excluir-agora', methods=['POST'])
+@login_required
+@limiter.limit('5 per hour')
+def conta_excluir_agora():
+    senha = request.form.get('senha', '')
+    conn = get_db()
+    user = conn.execute('SELECT * FROM users WHERE id=%s', (_uid(),)).fetchone()
+    if not user or not check_password_hash(user['password_hash'], senha):
+        conn.close()
+        flash('Senha incorreta.', 'danger')
+        return redirect(url_for('configuracoes'))
+    to_email, to_name = user['email'], user['name']
+    _excluir_dados_usuario(_uid(), conn)
+    conn.close()
+    session.clear()
+    _send_account_deleted_email(to_email, to_name)
+    flash('Sua conta e todos os dados associados foram excluídos.', 'info')
+    return redirect(url_for('login'))
 
 # ── Email Client (IMAP/SMTP) ──────────────────────────────────────────────────
 
@@ -7394,6 +7691,78 @@ Retorne APENAS o JSON, sem markdown."""
     except Exception as e:
         return jsonify({'erro': str(e)}), 500
 
+@app.route('/leads/solicitar-remocao', methods=['POST'])
+@login_required
+def leads_solicitar_remocao():
+    """Chamado pelo frontend quando a IA classifica uma resposta como
+    'pedido_remocao' (email_ler.html). Só entra na fila de revisão manual —
+    nenhum dado é apagado automaticamente."""
+    dados = request.get_json() or {}
+    contact_email = (dados.get('contact_email') or '').strip().lower()
+    if not contact_email:
+        return jsonify({'erro': 'contact_email obrigatório.'}), 400
+    conn = get_db()
+    contato = conn.execute(
+        'SELECT id FROM contacts WHERE user_id=%s AND email=%s', (_uid(), contact_email)).fetchone()
+    if not contato:
+        conn.close()
+        # Não é um contato salvo neste tenant — nada para colocar na fila.
+        return jsonify({'ok': True, 'na_fila': False})
+    conn.execute(
+        "INSERT INTO data_removal_requests (user_id, contact_id, contact_email, source) "
+        "VALUES (%s,%s,%s,'ia_classificacao') ON CONFLICT DO NOTHING",
+        (_uid(), contato['id'], contact_email))
+    conn.commit()
+    conn.close()
+    return jsonify({'ok': True, 'na_fila': True})
+
+@app.route('/leads/remocoes-pendentes')
+@login_required
+def leads_remocoes_pendentes():
+    conn = get_db()
+    pendentes = conn.execute(
+        "SELECT r.id, r.contact_email, r.source, r.created_at, c.name, c.status "
+        "FROM data_removal_requests r JOIN contacts c ON c.id = r.contact_id "
+        "WHERE r.user_id=%s AND r.status='pending' ORDER BY r.created_at DESC",
+        (_uid(),)).fetchall()
+    conn.close()
+    return render_template('leads_remocoes_pendentes.html', pendentes=pendentes)
+
+@app.route('/leads/<int:req_id>/aprovar-remocao', methods=['POST'])
+@login_required
+def leads_aprovar_remocao(req_id):
+    conn = get_db()
+    pedido = conn.execute(
+        'SELECT * FROM data_removal_requests WHERE id=%s AND user_id=%s', (req_id, _uid())).fetchone()
+    if not pedido or pedido['status'] != 'pending':
+        conn.close()
+        flash('Solicitação não encontrada ou já revisada.', 'warning')
+        return redirect(url_for('leads_remocoes_pendentes'))
+    contato = _check_owner('contacts', pedido['contact_id'], conn)
+    conn.execute(
+        "UPDATE contacts SET name=NULL, phone=NULL, company=NULL, position=NULL, whatsapp=NULL, "
+        "whatsapp_notes=NULL, city=NULL, state=NULL, country=NULL, notes=NULL, tags=NULL, "
+        "status='removido_lgpd', updated_at=NOW() WHERE id=%s", (contato['id'],))
+    add_to_blacklist(contato['email'], 'Solicitação de remoção LGPD', conn)
+    conn.execute(
+        "UPDATE data_removal_requests SET status='aprovado', reviewed_at=NOW() WHERE id=%s", (req_id,))
+    conn.commit()
+    conn.close()
+    flash('Dados pessoais do contato foram removidos e o email foi adicionado à blacklist.', 'success')
+    return redirect(url_for('leads_remocoes_pendentes'))
+
+@app.route('/leads/<int:req_id>/rejeitar-remocao', methods=['POST'])
+@login_required
+def leads_rejeitar_remocao(req_id):
+    conn = get_db()
+    conn.execute(
+        "UPDATE data_removal_requests SET status='rejeitado', reviewed_at=NOW() WHERE id=%s AND user_id=%s",
+        (req_id, _uid()))
+    conn.commit()
+    conn.close()
+    flash('Solicitação rejeitada.', 'info')
+    return redirect(url_for('leads_remocoes_pendentes'))
+
 # ── 3. Formulários de captura embutíveis ─────────────────────────────────────
 
 @app.route('/formularios')
@@ -7920,6 +8289,31 @@ def _enviar_email_tarefa(row, kind='hoje'):
     api.send_transac_email(email_obj)
 
 
+def processar_exclusoes_agendadas():
+    """Roda 1x/dia. Executa a exclusão em cascade (_excluir_dados_usuario) de
+    contas cujo prazo de 30 dias de arrependimento já passou. Envia o email de
+    confirmação ANTES de apagar (precisa do endereço, que some com a conta).
+    Erro numa conta não impede o processamento das demais."""
+    try:
+        conn = get_db()
+    except Exception as e:
+        print(f"[worker-exclusao-conta] db indisponivel: {e}", flush=True)
+        return
+    try:
+        pendentes = conn.execute(
+            "SELECT id, email, name FROM users WHERE deletion_status='scheduled' "
+            "AND deletion_scheduled_at <= NOW()").fetchall()
+        for row in pendentes:
+            try:
+                _send_account_deleted_email(row['email'], row['name'])
+                _excluir_dados_usuario(row['id'], conn)
+                print(f"[worker-exclusao-conta] conta #{row['id']} excluída (agendada)", flush=True)
+            except Exception as e:
+                print(f"[worker-exclusao-conta] falha ao excluir #{row['id']}: {e}", flush=True)
+    finally:
+        conn.close()
+
+
 def _start_scheduler():
     global _scheduler
     if _scheduler is not None and _scheduler.running:
@@ -7929,6 +8323,7 @@ def _start_scheduler():
     _scheduler.add_job(processar_campanhas_agendadas, 'interval', minutes=5)
     _scheduler.add_job(calcular_scores_inativos, 'interval', hours=24)
     _scheduler.add_job(notificar_tarefas_agendadas, 'interval', minutes=15)
+    _scheduler.add_job(processar_exclusoes_agendadas, 'interval', hours=24)
     _scheduler.start()
     print("APScheduler iniciado.", flush=True)
 

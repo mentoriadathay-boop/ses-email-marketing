@@ -119,6 +119,9 @@
       <a href="{{ url_for('lista_blacklist') }}" class="nav-link {% if request.endpoint in ('lista_blacklist','remover_blacklist','adicionar_blacklist_manual') %}active{% endif %}">
         <i class="bi bi-slash-circle"></i> Blacklist
       </a>
+      <a href="{{ url_for('leads_remocoes_pendentes') }}" class="nav-link {% if request.endpoint == 'leads_remocoes_pendentes' %}active{% endif %}">
+        <i class="bi bi-shield-exclamation"></i> Solicitações LGPD
+      </a>
       <div style="border-top:1px solid #ffffff22;margin:8px 20px 4px;"></div>
       <a href="{{ url_for('analytics') }}" class="nav-link {% if request.endpoint == 'analytics' %}active{% endif %}">
         <i class="bi bi-graph-up"></i> Analytics

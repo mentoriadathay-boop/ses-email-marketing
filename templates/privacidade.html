@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Política de Privacidade — ConvertMail</title>
+  <link rel="icon" type="image/png" href="/static/favicon.png">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <style>
+    body { background:#f0f2f5; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif; }
+    .doc-card { max-width:820px; margin:32px auto; background:#fff; border-radius:16px; box-shadow:0 10px 40px rgba(0,0,0,.08); padding:40px; }
+    .doc-card h1 { font-size:1.5rem; font-weight:800; color:#5B2A6E; }
+    .doc-card h2 { font-size:1.05rem; font-weight:700; margin-top:1.75rem; }
+    .doc-card p, .doc-card li { color:#333; line-height:1.6; }
+    .doc-meta { color:#888; font-size:.85rem; }
+    table.subproc { width:100%; border-collapse:collapse; font-size:.9rem; margin:.75rem 0; }
+    table.subproc th, table.subproc td { border:1px solid #eee; padding:8px 10px; text-align:left; }
+    table.subproc th { background:#faf7f2; }
+  </style>
+</head>
+<body>
+  <div class="doc-card">
+    <a href="/" class="small text-muted">&larr; Voltar</a>
+    <h1 class="mt-2">Política de Privacidade — ConvertMail</h1>
+    <p class="doc-meta">Versão {{ versao }}</p>
+
+    <p>A <strong>ASA ESTRATÉGIAS DE MARKETING E VENDAS LTDA</strong>, CNPJ 50.761.136/0001-92, sediada na Rua Anambés, nº 5, Alípio de Melo, Belo Horizonte/MG, CEP 30.830-700, é a controladora dos dados tratados nesta Política em relação aos dados dos Assinantes da Plataforma ConvertMail, e operadora em relação aos dados de contatos/leads que os Assinantes importam. Contato do responsável pelo tratamento: Thayane Fidelis de Aquino — <a href="mailto:consultoria@asamarketingevendas.com.br">consultoria@asamarketingevendas.com.br</a>.</p>
+
+    <h2>1. Quais dados coletamos</h2>
+    <p><strong>Do Assinante (você, que contrata a Plataforma):</strong> nome, email, senha (armazenada com hash, nunca em texto plano), histórico de login, e dados de contas de email que você conecta (IMAP/SMTP — a senha dessas contas é armazenada criptografada).</p>
+    <p><strong>De terceiros/leads (contatos que você importa para a Plataforma):</strong> nome, email, telefone, empresa, cargo, cidade/estado, tags, notas e histórico de interação (aberturas, cliques, respostas) que você registra. Esses dados são de responsabilidade do Assinante como controlador — a ConvertMail os trata apenas como operadora, seguindo suas instruções (envio de campanhas, cadências).</p>
+
+    <h2>2. Para que usamos os dados</h2>
+    <ul>
+      <li>Prover o serviço: envio de campanhas/cadências, CRM de contatos, dashboards.</li>
+      <li>Recursos de inteligência artificial: geração/reescrita de emails a partir do conteúdo que você fornece, e classificação da intenção de respostas recebidas dos seus contatos.</li>
+      <li>Segurança e prevenção de abuso: lista de supressão (blacklist) de emails que pediram descadastro ou remoção, para não reenviar a eles no futuro, inclusive em reimportações.</li>
+      <li>Comunicação transacional com o Assinante (boas-vindas, recuperação de senha, avisos de exclusão de conta).</li>
+    </ul>
+
+    <h2>3. Com quem compartilhamos (subprocessadores)</h2>
+    <table class="subproc">
+      <tr><th>Empresa</th><th>Finalidade</th></tr>
+      <tr><td>Railway</td><td>Hospedagem da aplicação e do banco de dados</td></tr>
+      <tr><td>Brevo (Sendinblue)</td><td>Envio de emails de campanha e emails transacionais</td></tr>
+      <tr><td>Anthropic</td><td>Modelos de IA usados para geração de conteúdo de email e classificação de respostas de contatos</td></tr>
+      <tr><td>Hotmart</td><td>Processamento de pagamento e gestão de assinatura do Assinante</td></tr>
+    </table>
+    <p>Não vendemos dados pessoais a terceiros.</p>
+
+    <h2>4. Seus direitos (Lei 13.709/2018 — LGPD)</h2>
+    <p><strong>Se você é Assinante:</strong> em Configurações &gt; Minha Conta, você pode exportar os dados da sua conta a qualquer momento, e solicitar exclusão definitiva imediata ou agendada (com 30 dias para desistir, período em que pode cancelar o pedido).</p>
+    <p><strong>Se você é um contato/lead de um Assinante</strong> e deseja que seus dados sejam removidos: responda ao email recebido pedindo a remoção, ou entre em contato diretamente com quem te enviou o email (o Assinante, controlador desses dados). O pedido é registrado e revisado manualmente pelo Assinante; ao ser aprovado, seus dados pessoais (nome, telefone, empresa e demais campos) são apagados, mantendo apenas o registro do seu email em nossa lista de supressão — isso é necessário para garantir que você não seja reimportado ou recontatado no futuro pelo mesmo Assinante.</p>
+
+    <h2>5. Retenção de dados</h2>
+    <p>Dados do Assinante são mantidos enquanto a conta estiver ativa. Dados de contatos/leads são mantidos enquanto o Assinante mantiver sua conta ativa e não excluir/anonimizar o contato. Quando um email é adicionado à lista de supressão (descadastro voluntário ou aprovação de pedido de remoção), ele permanece registrado nessa lista por tempo indeterminado — essa retenção mínima (apenas o endereço de email, sem os demais dados pessoais) tem a finalidade específica de impedir novos envios, e é uma exceção prevista pelo próprio exercício do direito de oposição do titular.</p>
+
+    <h2>6. Segurança</h2>
+    <p>Conexões são feitas via HTTPS. Senhas de usuários são armazenadas com hash (nunca em texto plano); senhas de contas de email conectadas e outros segredos sensíveis são armazenados de forma criptografada. O acesso aos dados é isolado por conta — cada Assinante só acessa seus próprios contatos e campanhas.</p>
+
+    <h2>7. Alterações desta política</h2>
+    <p>Alterações relevantes exigem novo aceite explícito do Assinante na Plataforma.</p>
+
+    <h2>8. Contato</h2>
+    <p>Dúvidas ou solicitações sobre seus dados: <a href="mailto:consultoria@asamarketingevendas.com.br">consultoria@asamarketingevendas.com.br</a>.</p>
+  </div>
+</body>
+</html>

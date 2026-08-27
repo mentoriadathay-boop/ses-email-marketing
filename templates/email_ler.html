@@ -102,7 +102,12 @@ function classificarResposta() {
       </div>
       <div class="mb-1"><strong>Resumo:</strong> ${d.resumo}</div>
       <div><strong>Sugestão de resposta:</strong> ${d.sugestao_resposta}</div>
+      ${d.intencao === 'pedido_remocao' ? '<div class="mt-1 small">📋 Enviado para revisão em <a href="{{ url_for("leads_remocoes_pendentes") }}">Solicitações de Remoção</a>.</div>' : ''}
     </div>`;
+    if (d.intencao === 'pedido_remocao') {
+      fetch('/leads/solicitar-remocao', {method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({contact_email: {{ msg.from_email|tojson }}})}).catch(()=>{});
+    }
   }).catch(()=>{ el.innerHTML = '<div class="alert alert-danger py-2 small">Erro de conexão.</div>'; });
 }
 

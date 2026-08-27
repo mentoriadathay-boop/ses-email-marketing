@@ -7,6 +7,74 @@
   </div>
 </div>
 
+<!-- Minha Conta (LGPD: exportar / excluir) -->
+<div class="card mb-4">
+  <div class="card-body">
+    <h6 class="fw-semibold mb-3"><i class="bi bi-person-gear me-2 text-danger"></i>Minha Conta</h6>
+
+    {% if minha_conta and minha_conta.deletion_status == 'scheduled' %}
+    <div class="alert alert-warning d-flex justify-content-between align-items-center py-2 small mb-3">
+      <span><i class="bi bi-exclamation-triangle me-1"></i>Sua conta e todos os seus dados serão excluídos em <strong>{{ minha_conta.deletion_scheduled_at.strftime('%d/%m/%Y') }}</strong>.</span>
+      <form method="POST" action="{{ url_for('conta_cancelar_exclusao') }}" class="d-inline">
+        <button type="submit" class="btn btn-sm btn-outline-dark">Cancelar exclusão</button>
+      </form>
+    </div>
+    {% endif %}
+
+    <p class="text-muted small mb-3">Exporte os dados da sua conta ou solicite a exclusão definitiva, a qualquer momento.</p>
+    <div class="d-flex gap-2 flex-wrap">
+      <a href="{{ url_for('conta_exportar_dados') }}" class="btn btn-outline-secondary btn-sm"><i class="bi bi-download me-1"></i>Exportar meus dados</a>
+      <a href="{{ url_for('termos') }}" class="btn btn-outline-secondary btn-sm" target="_blank"><i class="bi bi-file-text me-1"></i>Termos de Uso</a>
+      <a href="{{ url_for('privacidade') }}" class="btn btn-outline-secondary btn-sm" target="_blank"><i class="bi bi-shield-lock me-1"></i>Privacidade</a>
+      {% if not minha_conta or minha_conta.deletion_status != 'scheduled' %}
+      <button type="button" class="btn btn-outline-danger btn-sm" data-bs-toggle="modal" data-bs-target="#modalExcluirConta">
+        <i class="bi bi-trash me-1"></i>Excluir minha conta
+      </button>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+<!-- Modal: excluir conta -->
+<div class="modal fade" id="modalExcluirConta" tabindex="-1" data-bs-backdrop="static">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="bi bi-exclamation-triangle text-danger me-2"></i>Excluir conta</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <p class="small text-muted">Isso vai apagar permanentemente sua conta, contatos, campanhas, cadências e contas de email conectadas. Confirme sua senha para continuar.</p>
+        <input type="password" id="excluirContaSenha" class="form-control mb-3" placeholder="Sua senha atual" required>
+        <div class="d-grid gap-2">
+          <button type="button" class="btn btn-outline-warning" onclick="_submitExclusaoConta('{{ url_for('conta_agendar_exclusao') }}')">
+            Agendar exclusão em 30 dias <span class="small d-block">(dá pra cancelar até lá)</span>
+          </button>
+          <button type="button" class="btn btn-danger" onclick="if(confirm('Excluir definitivamente agora? Não é possível desfazer.')) _submitExclusaoConta('{{ url_for('conta_excluir_agora') }}')">
+            Excluir definitivamente agora
+          </button>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+      </div>
+    </div>
+  </div>
+</div>
+<form id="_formExclusaoConta" method="POST" style="display:none">
+  <input type="hidden" name="senha" id="_hiddenSenhaExclusao">
+</form>
+<script>
+function _submitExclusaoConta(actionUrl) {
+  var senha = document.getElementById('excluirContaSenha').value;
+  if (!senha) { alert('Digite sua senha para confirmar.'); return; }
+  var form = document.getElementById('_formExclusaoConta');
+  form.action = actionUrl;
+  document.getElementById('_hiddenSenhaExclusao').value = senha;
+  form.submit();
+}
+</script>
+
 <!-- Assinatura de Email -->
 <div class="card mb-4">
   <div class="card-body">
