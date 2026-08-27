@@ -44,6 +44,45 @@
     .ql-editor li { margin-bottom: .25em; }
     .editor-extra-btns { display: flex; gap: 6px; flex-wrap: wrap; padding: 6px 0 2px; }
     .editor-extra-btns .btn { font-size: .75rem; padding: 2px 8px; }
+
+    /* Bolinha flutuante do Assistente IA */
+    .ia-fab {
+      position: fixed; right: 24px; bottom: 24px; width: 56px; height: 56px;
+      border-radius: 50%; background: linear-gradient(135deg, #4361ee, #7c3aed);
+      color: #fff; border: none; box-shadow: 0 6px 20px rgba(67,97,238,.4);
+      display: flex; align-items: center; justify-content: center; font-size: 1.4rem;
+      cursor: pointer; z-index: 1050; transition: transform .2s;
+    }
+    .ia-fab:hover { transform: scale(1.06); }
+    .ia-fab.open { display: none; }
+    .ia-panel {
+      position: fixed; right: 24px; bottom: 24px; width: 360px; max-width: calc(100vw - 32px);
+      height: 520px; max-height: calc(100vh - 48px); background: #fff; border-radius: 16px;
+      box-shadow: 0 12px 40px rgba(0,0,0,.25); display: none; flex-direction: column;
+      overflow: hidden; z-index: 1050;
+    }
+    .ia-panel.open { display: flex; }
+    .ia-panel-head {
+      background: linear-gradient(135deg, #4361ee, #7c3aed); color: #fff;
+      padding: 14px 16px; display: flex; align-items: center; justify-content: space-between;
+    }
+    .ia-panel-head-info { display: flex; align-items: center; gap: 10px; }
+    .ia-panel-head h6 { margin: 0; font-size: .9rem; font-weight: 700; }
+    .ia-panel-head span { font-size: .7rem; opacity: .85; }
+    .ia-panel-close { background: none; border: none; color: #fff; font-size: 1.3rem; opacity: .8; cursor: pointer; line-height: 1; }
+    .ia-panel-close:hover { opacity: 1; }
+    .ia-panel-body { flex: 1; overflow-y: auto; padding: 14px; display: flex; flex-direction: column; gap: 10px; background: #f8f9fb; }
+    .ia-msg { max-width: 85%; padding: 9px 13px; border-radius: 14px; font-size: .84rem; line-height: 1.5; }
+    .ia-msg.bot { align-self: flex-start; background: #eef0f5; color: #1a1a2e; border-bottom-left-radius: 4px; }
+    .ia-msg.user { align-self: flex-end; background: #4361ee; color: #fff; border-bottom-right-radius: 4px; }
+    .ia-msg.typing { align-self: flex-start; background: #eef0f5; color: #999; font-style: italic; }
+    .ia-msg .md-list { margin: 4px 0; padding-left: 18px; }
+    .ia-msg .md-code { background: #00000012; padding: 8px 10px; border-radius: 8px; font-size: .78rem; white-space: pre-wrap; overflow-x: auto; }
+    .ia-panel-input { padding: 10px 12px; border-top: 1px solid #eee; display: flex; gap: 8px; }
+    .ia-panel-input input { flex: 1; border: 1px solid #e0e0e0; border-radius: 20px; padding: 8px 14px; font-size: .84rem; outline: none; }
+    .ia-panel-input input:focus { border-color: #4361ee; }
+    .ia-panel-send { width: 36px; height: 36px; border-radius: 50%; background: #4361ee; color: #fff; border: none; cursor: pointer; flex-shrink: 0; }
+    .ia-panel-send:disabled { opacity: .5; cursor: not-allowed; }
   </style>
 </head>
 <body>
@@ -430,6 +469,100 @@
   setInterval(loadNotifs, 45000);
   setInterval(loadNotifs, 60000);
   </script>
+
+  <script src="{{ url_for('static', filename='js/markdown_lite.js') }}"></script>
+  {% if request.endpoint != 'assistente_ia' %}
+  <button class="ia-fab" id="iaFab" title="Assistente IA" aria-label="Abrir Assistente IA"><i class="bi bi-stars"></i></button>
+  <div class="ia-panel" id="iaPanel">
+    <div class="ia-panel-head">
+      <div class="ia-panel-head-info">
+        <i class="bi bi-robot"></i>
+        <div><h6>Assistente IA</h6><span>Consultor de email marketing</span></div>
+      </div>
+      <button class="ia-panel-close" id="iaPanelClose" aria-label="Fechar">&times;</button>
+    </div>
+    <div class="ia-panel-body" id="iaPanelBody">
+      <div class="ia-msg bot">Olá! Sou o assistente do ConvertMail. Pergunte sobre suas campanhas, estratégias ou como usar a plataforma.</div>
+    </div>
+    <div class="ia-panel-input">
+      <input type="text" id="iaPanelInput" placeholder="Digite sua pergunta..." autocomplete="off">
+      <button class="ia-panel-send" id="iaPanelSend" aria-label="Enviar"><i class="bi bi-send-fill"></i></button>
+    </div>
+  </div>
+  <script>
+  (function() {
+    var fab = document.getElementById('iaFab');
+    var panel = document.getElementById('iaPanel');
+    var closeBtn = document.getElementById('iaPanelClose');
+    var body = document.getElementById('iaPanelBody');
+    var input = document.getElementById('iaPanelInput');
+    var sendBtn = document.getElementById('iaPanelSend');
+    if (!fab || !panel) return;
+    var historico = [];
+    var contexto = '';
+    var contextoCarregado = false;
+    var sending = false;
+
+    function openPanel() {
+      panel.classList.add('open');
+      fab.classList.add('open');
+      input.focus();
+      if (!contextoCarregado) {
+        contextoCarregado = true;
+        fetch('/api/assistente/contexto').then(r => r.json()).then(d => { contexto = d.contexto || ''; }).catch(function(){});
+      }
+    }
+    function closePanel() {
+      panel.classList.remove('open');
+      fab.classList.remove('open');
+    }
+    fab.addEventListener('click', openPanel);
+    closeBtn.addEventListener('click', closePanel);
+
+    function addMsg(text, role) {
+      var div = document.createElement('div');
+      div.className = 'ia-msg ' + role;
+      if (role === 'bot') { div.innerHTML = mdToHtml(text); }
+      else { div.textContent = text; }
+      body.appendChild(div);
+      body.scrollTop = body.scrollHeight;
+      return div;
+    }
+
+    function enviar(texto) {
+      if (sending || !texto.trim()) return;
+      sending = true;
+      sendBtn.disabled = true;
+      addMsg(texto, 'user');
+      historico.push({ role: 'user', content: texto });
+      input.value = '';
+      var typing = addMsg('Pensando...', 'typing');
+      fetch('/ia/chat-assistente', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mensagem: texto, historico: historico.slice(-20), contexto: contexto })
+      }).then(function(r) { return r.json(); }).then(function(data) {
+        typing.remove();
+        if (data.erro) {
+          addMsg('Desculpe, tive um problema. Tente novamente em instantes.', 'bot');
+        } else {
+          addMsg(data.resposta, 'bot');
+          historico.push({ role: 'assistant', content: data.resposta });
+        }
+      }).catch(function() {
+        typing.remove();
+        addMsg('Erro de conexão. Verifique sua internet e tente novamente.', 'bot');
+      }).finally(function() {
+        sending = false;
+        sendBtn.disabled = false;
+        input.focus();
+      });
+    }
+    sendBtn.addEventListener('click', function() { enviar(input.value); });
+    input.addEventListener('keydown', function(e) { if (e.key === 'Enter') enviar(input.value); });
+  })();
+  </script>
+  {% endif %}
+
   {% block scripts %}{% endblock %}
 </body>
 </html>

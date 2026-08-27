@@ -7546,22 +7546,40 @@ Sempre termine convidando a pessoa a se cadastrar ou testar gratuitamente."""
 
 # ── Chat IA Assistente (in-app) ───────────────────────────────────────────────
 
-@app.route('/assistente')
-def assistente_ia():
+def _assistente_contexto_data(uid):
     conn = get_db()
-    total_contacts = conn.execute('SELECT COUNT(*) as n FROM contacts WHERE user_id=%s', (_uid(),)).fetchone()['n']
-    total_campaigns = conn.execute('SELECT COUNT(*) as n FROM campaigns WHERE user_id=%s', (_uid(),)).fetchone()['n']
-    total_sequences = conn.execute('SELECT COUNT(*) as n FROM sequences WHERE user_id=%s', (_uid(),)).fetchone()['n']
+    total_contacts = conn.execute('SELECT COUNT(*) as n FROM contacts WHERE user_id=%s', (uid,)).fetchone()['n']
+    total_campaigns = conn.execute('SELECT COUNT(*) as n FROM campaigns WHERE user_id=%s', (uid,)).fetchone()['n']
+    total_sequences = conn.execute('SELECT COUNT(*) as n FROM sequences WHERE user_id=%s', (uid,)).fetchone()['n']
     recent_campaigns = conn.execute(
         "SELECT name, status, subject, sent, total_opened, total_clicked FROM campaigns "
-        "WHERE user_id=%s ORDER BY created_at DESC LIMIT 5", (_uid(),)
+        "WHERE user_id=%s ORDER BY created_at DESC LIMIT 5", (uid,)
     ).fetchall()
     conn.close()
-    return render_template('assistente.html',
-                           total_contacts=total_contacts,
-                           total_campaigns=total_campaigns,
-                           total_sequences=total_sequences,
-                           recent_campaigns=recent_campaigns)
+    return {
+        'total_contacts': total_contacts,
+        'total_campaigns': total_campaigns,
+        'total_sequences': total_sequences,
+        'recent_campaigns': recent_campaigns,
+    }
+
+@app.route('/assistente')
+def assistente_ia():
+    ctx = _assistente_contexto_data(_uid())
+    return render_template('assistente.html', **ctx)
+
+@app.route('/api/assistente/contexto')
+@login_required
+def api_assistente_contexto():
+    ctx = _assistente_contexto_data(_uid())
+    linhas = [f'- "{c["name"]}" ({c["status"]}) — Assunto: "{c["subject"]}", '
+              f'Enviados: {c["sent"] or 0}, Aberturas: {c["total_opened"] or 0}, Cliques: {c["total_clicked"] or 0}'
+              for c in ctx['recent_campaigns']]
+    contexto = (f"Total de contatos: {ctx['total_contacts']}\n"
+                f"Total de campanhas: {ctx['total_campaigns']}\n"
+                f"Total de cadências: {ctx['total_sequences']}\n"
+                f"Campanhas recentes:\n" + '\n'.join(linhas))
+    return jsonify({'contexto': contexto})
 
 @app.route('/ia/chat-assistente', methods=['POST'])
 def ia_chat_assistente():
