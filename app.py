@@ -2741,8 +2741,9 @@ def nova_campanha():
             emails_vistos = set()
             for mid in mailing_id_list:
                 conn_m = get_db()
-                ml = conn_m.execute('SELECT * FROM mailings WHERE id=%s', (mid,)).fetchone()
-                if not ml:
+                try:
+                    ml = _check_owner('mailings', mid, conn_m)
+                except Exception:
                     conn_m.close()
                     continue
                 ml_contacts = get_mailing_contacts_db(int(mid), conn_m)
@@ -2830,8 +2831,8 @@ def nova_campanha():
         return redirect(url_for('campanha_detalhe', campaign_id=campaign_id))
 
     conn = get_db()
-    mailings = conn.execute('SELECT * FROM mailings ORDER BY created_at DESC').fetchall()
-    sequences = conn.execute("SELECT id, name FROM sequences WHERE status='active' ORDER BY name").fetchall()
+    mailings = conn.execute('SELECT * FROM mailings WHERE user_id=%s ORDER BY created_at DESC', (_uid(),)).fetchall()
+    sequences = conn.execute("SELECT id, name FROM sequences WHERE status='active' AND user_id=%s ORDER BY name", (_uid(),)).fetchall()
     kits = conn.execute('SELECT id, name, signature_name FROM brand_kits WHERE user_id=%s ORDER BY name', (_uid(),)).fetchall()
     conn.close()
     return render_template('nova_campanha.html', mailings=mailings, sequences=sequences, kits=kits, reutilizar=None, editar=None)
@@ -2979,8 +2980,8 @@ def campanha_para_abridores(campaign_id):
             "INSERT INTO mailing_contacts (mailing_id, email, name) VALUES (%s, %s, %s)",
             (mailing_id, op['contact_email'], op['name']))
     conn.commit()
-    mailings = conn.execute('SELECT * FROM mailings ORDER BY created_at DESC').fetchall()
-    sequences = conn.execute("SELECT id, name FROM sequences WHERE status='active' ORDER BY name").fetchall()
+    mailings = conn.execute('SELECT * FROM mailings WHERE user_id=%s ORDER BY created_at DESC', (_uid(),)).fetchall()
+    sequences = conn.execute("SELECT id, name FROM sequences WHERE status='active' AND user_id=%s ORDER BY name", (_uid(),)).fetchall()
     kits = conn.execute('SELECT id, name, signature_name FROM brand_kits WHERE user_id=%s ORDER BY name', (_uid(),)).fetchall()
     conn.close()
     reutilizar_data = {
@@ -3116,7 +3117,14 @@ def api_nichos():
     conn = get_db()
 
     if mailing_ids:
-        id_list = [m.strip() for m in mailing_ids.split(',') if m.strip()]
+        id_list_raw = [m.strip() for m in mailing_ids.split(',') if m.strip()]
+        id_list = []
+        for mid in id_list_raw:
+            try:
+                _check_owner('mailings', mid, conn)
+                id_list.append(mid)
+            except Exception:
+                pass
         if not id_list:
             conn.close()
             return jsonify([])
@@ -3147,7 +3155,7 @@ def api_nichos():
 
     rows = conn.execute(
         "SELECT nicho, COUNT(*) as qtd FROM contacts WHERE nicho IS NOT NULL AND nicho != '' "
-        "GROUP BY nicho ORDER BY qtd DESC"
+        "AND user_id=%s GROUP BY nicho ORDER BY qtd DESC", (_uid(),)
     ).fetchall()
     conn.close()
     return jsonify([{'nicho': r['nicho'], 'qtd': r['qtd']} for r in rows])
@@ -3222,7 +3230,15 @@ def campanha_segmentada():
 
     conn = get_db()
 
-    mailing_id_list = [m.strip() for m in mailing_ids_raw.split(',') if m.strip()] if mailing_ids_raw else []
+    mailing_id_list_raw = [m.strip() for m in mailing_ids_raw.split(',') if m.strip()] if mailing_ids_raw else []
+    # Multi-tenancy: só usa mailings que pertencem ao usuário logado.
+    mailing_id_list = []
+    for mid in mailing_id_list_raw:
+        try:
+            _check_owner('mailings', mid, conn)
+            mailing_id_list.append(mid)
+        except Exception:
+            pass
 
     resultados = []
     for nicho in nichos:
@@ -3245,7 +3261,7 @@ def campanha_segmentada():
                     contacts.append({'email': r['email'], 'name': r['name'] or '', 'tags': r['tags'] or ''})
 
         crm_rows = conn.execute(
-            "SELECT email, name, tags FROM contacts WHERE LOWER(nicho)=LOWER(%s)", (nicho,)
+            "SELECT email, name, tags FROM contacts WHERE LOWER(nicho)=LOWER(%s) AND user_id=%s", (nicho, _uid())
         ).fetchall()
         for r in crm_rows:
             em = r['email'].strip().lower()
@@ -3290,7 +3306,10 @@ def _gerar_email_por_nicho(api_key, nicho, ia_config, sender):
     primary_color = '#1a3a6b'
     kit_id = ia_config.get('kit_id')
     if kit_id:
-        kit = conn_kit.execute('SELECT * FROM brand_kits WHERE id=%s', (kit_id,)).fetchone()
+        try:
+            kit = _check_owner('brand_kits', kit_id, conn_kit)
+        except Exception:
+            kit = None
         if kit:
             primary_color = kit['primary_color'] or '#1a3a6b'
             kit_info = f"\nKit de Marca — {kit['name']}: Tom de voz: {kit['tone_of_voice'] or 'Profissional'}, Cores: {kit['primary_color']}, {kit['secondary_color']}"
@@ -4128,8 +4147,8 @@ def api_contatos_buscar():
         return jsonify([])
     conn = get_db()
     rows = conn.execute(
-        "SELECT email, name FROM contacts WHERE LOWER(email) LIKE %s OR LOWER(name) LIKE %s LIMIT 10",
-        (f'%{q}%', f'%{q}%')).fetchall()
+        "SELECT email, name FROM contacts WHERE (LOWER(email) LIKE %s OR LOWER(name) LIKE %s) AND user_id=%s LIMIT 10",
+        (f'%{q}%', f'%{q}%', _uid())).fetchall()
     conn.close()
     return jsonify([{'email': r['email'], 'name': r['name'] or ''} for r in rows])
 
@@ -4150,12 +4169,15 @@ def api_templates():
             conn.close()
             return jsonify({'error': 'Nome obrigatório'}), 400
         conn.execute(
-            'INSERT INTO email_templates (name,category,subject,body_html) VALUES (%s,%s,%s,%s)',
-            (name, data.get('category', 'Geral'), data.get('subject', ''), data.get('body_html', '')))
+            'INSERT INTO email_templates (name,category,subject,body_html,user_id) VALUES (%s,%s,%s,%s,%s)',
+            (name, data.get('category', 'Geral'), data.get('subject', ''), data.get('body_html', ''), _uid()))
         conn.commit()
         conn.close()
         return jsonify({'ok': True})
-    tpls = conn.execute('SELECT * FROM email_templates ORDER BY category, name').fetchall()
+    # Templates padrão do sistema (user_id IS NULL) + os customizados deste usuário.
+    tpls = conn.execute(
+        'SELECT * FROM email_templates WHERE user_id=%s OR user_id IS NULL ORDER BY category, name', (_uid(),)
+    ).fetchall()
     conn.close()
     return jsonify([dict(t) for t in tpls])
 
@@ -4611,7 +4633,7 @@ def cadencia_detalhe(seq_id):
             'is_delayed': is_delayed,
         })
 
-    mailings = conn.execute('SELECT * FROM mailings ORDER BY created_at DESC').fetchall()
+    mailings = conn.execute('SELECT * FROM mailings WHERE user_id=%s ORDER BY created_at DESC', (_uid(),)).fetchall()
     nd = conn.execute(
         "SELECT MIN(next_send_at) as next_dt, COUNT(*) as pending"
         " FROM sequence_contacts WHERE sequence_id=%s AND status='active' AND next_send_at > NOW()",
@@ -5114,7 +5136,7 @@ def contato_perfil(email):
     purchases = conn.execute(
         'SELECT * FROM contact_purchases WHERE contact_email=%s ORDER BY created_at DESC',
         (email,)).fetchall()
-    all_mailings = conn.execute('SELECT id, name, contact_count FROM mailings ORDER BY name').fetchall()
+    all_mailings = conn.execute('SELECT id, name, contact_count FROM mailings WHERE user_id=%s ORDER BY name', (uid,)).fetchall()
     contact_mailings = conn.execute(
         'SELECT m.id, m.name, m.contact_count FROM mailing_contacts mc JOIN mailings m ON m.id=mc.mailing_id WHERE mc.email=%s ORDER BY m.name',
         (email,)).fetchall()
@@ -5184,7 +5206,8 @@ def contato_add_mailing(email):
         flash('Selecione um mailing.', 'danger')
         return redirect(url_for('contato_perfil', email=email))
     conn = get_db()
-    contact = conn.execute('SELECT name, tags FROM contacts WHERE email=%s', (email,)).fetchone()
+    _check_owner('mailings', mailing_id, conn)
+    contact = conn.execute('SELECT name, tags FROM contacts WHERE email=%s AND user_id=%s', (email, _uid())).fetchone()
     if not contact:
         conn.close()
         flash('Contato não encontrado.', 'danger')
@@ -5946,7 +5969,8 @@ def iniciar_cadencia_contato(email):
 @app.route('/tags')
 def lista_tags():
     conn = get_db()
-    contacts_with_tags = conn.execute("SELECT tags FROM contacts WHERE tags IS NOT NULL AND tags != ''").fetchall()
+    contacts_with_tags = conn.execute(
+        "SELECT tags FROM contacts WHERE tags IS NOT NULL AND tags != '' AND user_id=%s", (_uid(),)).fetchall()
     tag_counts = {}
     for row in contacts_with_tags:
         for t in row['tags'].split(','):
@@ -5960,8 +5984,9 @@ def lista_tags():
 def contatos_por_tag(tag):
     conn = get_db()
     contatos = conn.execute(
-        'SELECT c.*, COALESCE(cs.score,0) as current_score FROM contacts c LEFT JOIN contact_scores cs ON cs.email=c.email WHERE c.tags ILIKE %s',
-        (f'%{tag}%',)).fetchall()
+        'SELECT c.*, COALESCE(cs.score,0) as current_score FROM contacts c LEFT JOIN contact_scores cs ON cs.email=c.email '
+        'WHERE c.tags ILIKE %s AND c.user_id=%s',
+        (f'%{tag}%', _uid())).fetchall()
     conn.close()
     return render_template('contatos.html', contatos=contatos, all_tags=[], status_filter='',
                            tag_filter=tag, search='', sort='score', page_title=f'Tag: {tag}')
@@ -6171,35 +6196,50 @@ def exportar_contatos():
 
 @app.route('/api/dashboard-stats')
 def api_dashboard_stats():
+    uid = _uid()
     conn = get_db()
 
     rows = conn.execute('''
         SELECT DATE(sent_at) as d, COUNT(*) as c FROM (
-            SELECT sent_at FROM campaign_logs WHERE status='sent'
+            SELECT cl.sent_at FROM campaign_logs cl JOIN campaigns c ON c.id=cl.campaign_id
+                WHERE cl.status='sent' AND c.user_id=%s
             UNION ALL
-            SELECT sent_at FROM sequence_logs WHERE status='sent'
+            SELECT sl.sent_at FROM sequence_logs sl JOIN sequences s ON s.id=sl.sequence_id
+                WHERE sl.status='sent' AND s.user_id=%s
         ) AS combined
         WHERE DATE(sent_at) >= CURRENT_DATE - INTERVAL '30 days'
         GROUP BY d ORDER BY d
-    ''').fetchall()
+    ''', (uid, uid)).fetchall()
     sends_by_day = [{'date': str(r['d']), 'count': r['c']} for r in rows]
 
+    # Pré-agrega sequence_logs/email_opens em subqueries ANTES de juntar com
+    # sequences — juntar as duas tabelas "cruas" direto (LEFT JOIN duplo,
+    # ambas 1-pra-N) multiplicava as linhas em cascata (produto cartesiano),
+    # o que gerou ~4.8GB de arquivo temporário e derrubou o disco do Postgres
+    # em produção (2026-08-27).
     seqs = conn.execute('''
-        SELECT s.name,
-            COUNT(DISTINCT sl.contact_email) as sent,
-            COUNT(DISTINCT eo.contact_email) as opened
+        SELECT s.name, COALESCE(sl.sent,0) as sent, COALESCE(eo.opened,0) as opened
         FROM sequences s
-        LEFT JOIN sequence_logs sl ON sl.sequence_id=s.id AND sl.status='sent'
-        LEFT JOIN email_opens eo ON eo.sequence_id=s.id
-        GROUP BY s.id, s.name ORDER BY sent DESC LIMIT 8
-    ''').fetchall()
+        LEFT JOIN (
+            SELECT sequence_id, COUNT(DISTINCT contact_email) as sent
+            FROM sequence_logs WHERE status='sent' GROUP BY sequence_id
+        ) sl ON sl.sequence_id = s.id
+        LEFT JOIN (
+            SELECT sequence_id, COUNT(DISTINCT contact_email) as opened
+            FROM email_opens GROUP BY sequence_id
+        ) eo ON eo.sequence_id = s.id
+        WHERE s.user_id=%s
+        ORDER BY sent DESC LIMIT 8
+    ''', (uid,)).fetchall()
     seq_stats = [{'name': s['name'], 'sent': s['sent'], 'opened': s['opened'],
                   'rate': round(s['opened']/s['sent']*100, 1) if s['sent'] > 0 else 0} for s in seqs]
 
     heatmap_rows = conn.execute('''
-        SELECT hour_of_day, day_of_week, COUNT(*) as cnt
-        FROM send_analytics WHERE hour_of_day IS NOT NULL GROUP BY hour_of_day, day_of_week
-    ''').fetchall()
+        SELECT sa.hour_of_day, sa.day_of_week, COUNT(*) as cnt
+        FROM send_analytics sa
+        JOIN contacts c ON c.email=sa.contact_email AND c.user_id=%s
+        WHERE sa.hour_of_day IS NOT NULL GROUP BY sa.hour_of_day, sa.day_of_week
+    ''', (uid,)).fetchall()
     heatmap = {}
     for r in heatmap_rows:
         heatmap[f"{r['day_of_week']}-{r['hour_of_day']}"] = r['cnt']
@@ -6222,8 +6262,8 @@ def api_calendario_eventos():
     events = []
     camps = conn.execute(
         "SELECT id, name, scheduled_at, total_contacts, status FROM campaigns "
-        "WHERE scheduled_at BETWEEN %s AND %s",
-        (start, end)).fetchall()
+        "WHERE scheduled_at BETWEEN %s AND %s AND user_id=%s",
+        (start, end, _uid())).fetchall()
     for c in camps:
         dt = c['scheduled_at']
         if dt:
@@ -6244,9 +6284,9 @@ def api_calendario_eventos():
                DATE(sc.next_send_at) AS send_date, COUNT(*) AS contact_count
         FROM sequence_contacts sc
         JOIN sequences s ON s.id = sc.sequence_id
-        WHERE sc.status = 'active' AND sc.next_send_at BETWEEN %s AND %s
+        WHERE sc.status = 'active' AND sc.next_send_at BETWEEN %s AND %s AND s.user_id=%s
         GROUP BY sc.sequence_id, s.name, DATE(sc.next_send_at)
-    ''', (start, end)).fetchall()
+    ''', (start, end, _uid())).fetchall()
     for r in rows:
         sd = r['send_date']
         date_str = sd.strftime('%Y-%m-%d') if hasattr(sd, 'strftime') else str(sd)
@@ -7048,7 +7088,10 @@ def _ia_gerar_email_impl():
     kit_id = dados.get('kit_id')
     if kit_id:
         conn = get_db()
-        kit = conn.execute('SELECT * FROM brand_kits WHERE id=%s', (kit_id,)).fetchone()
+        try:
+            kit = _check_owner('brand_kits', kit_id, conn)
+        except Exception:
+            kit = None
         conn.close()
         if kit:
             primary_color = kit['primary_color'] or '#1a3a6b'
@@ -7473,7 +7516,7 @@ def ia_buscar_imagem():
 @app.route('/templates-visuais')
 def templates_visuais():
     conn = get_db()
-    kits = conn.execute('SELECT id, name FROM brand_kits ORDER BY name').fetchall()
+    kits = conn.execute('SELECT id, name FROM brand_kits WHERE user_id=%s ORDER BY name', (_uid(),)).fetchall()
     conn.close()
     return render_template('templates_visuais.html', kits=kits)
 
@@ -7800,8 +7843,8 @@ def leads_rejeitar_remocao(req_id):
 @app.route('/formularios')
 def formularios():
     conn = get_db()
-    forms = conn.execute('SELECT * FROM capture_forms ORDER BY created_at DESC').fetchall()
-    sequences = conn.execute("SELECT id, name FROM sequences ORDER BY name").fetchall()
+    forms = conn.execute('SELECT * FROM capture_forms WHERE user_id=%s ORDER BY created_at DESC', (_uid(),)).fetchall()
+    sequences = conn.execute("SELECT id, name FROM sequences WHERE user_id=%s ORDER BY name", (_uid(),)).fetchall()
     conn.close()
     return render_template('formularios.html', forms=forms, sequences=sequences)
 
@@ -7813,17 +7856,21 @@ def formulario_salvar():
         return redirect(url_for('formularios'))
     conn = get_db()
     form_id = request.form.get('form_id')
+    sequence_id = request.form.get('sequence_id') or None
+    if sequence_id:
+        _check_owner('sequences', sequence_id, conn)
     data = (name, request.form.get('tag', '').strip(),
-            request.form.get('sequence_id') or None,
+            sequence_id,
             request.form.get('heading', 'Inscreva-se').strip(),
             request.form.get('description', '').strip(),
             request.form.get('button_text', 'Cadastrar').strip(),
             request.form.get('primary_color', '#4361ee').strip())
     if form_id:
+        _check_owner('capture_forms', form_id, conn)
         conn.execute('UPDATE capture_forms SET name=%s,tag=%s,sequence_id=%s,heading=%s,description=%s,button_text=%s,primary_color=%s WHERE id=%s',
                      data + (form_id,))
     else:
-        conn.execute('INSERT INTO capture_forms (name,tag,sequence_id,heading,description,button_text,primary_color) VALUES (%s,%s,%s,%s,%s,%s,%s)', data)
+        conn.execute('INSERT INTO capture_forms (name,tag,sequence_id,heading,description,button_text,primary_color,user_id) VALUES (%s,%s,%s,%s,%s,%s,%s,%s)', data + (_uid(),))
     conn.commit()
     conn.close()
     flash('Formulário salvo!', 'success')
@@ -7877,35 +7924,41 @@ def api_captura():
 
 @app.route('/analytics')
 def analytics():
+    uid = _uid()
     conn = get_db()
-    total_sent = conn.execute('SELECT COALESCE(SUM(sent),0) as n FROM campaigns').fetchone()['n']
-    total_opened = conn.execute('SELECT COUNT(DISTINCT id) as n FROM email_opens').fetchone()['n']
-    total_contacts = conn.execute('SELECT COUNT(*) as n FROM contacts').fetchone()['n']
-    total_campaigns = conn.execute('SELECT COUNT(*) as n FROM campaigns').fetchone()['n']
+    total_sent = conn.execute('SELECT COALESCE(SUM(sent),0) as n FROM campaigns WHERE user_id=%s', (uid,)).fetchone()['n']
+    total_opened = conn.execute(
+        'SELECT COUNT(DISTINCT eo.id) as n FROM email_opens eo '
+        'JOIN contacts c ON c.email=eo.contact_email AND c.user_id=%s', (uid,)).fetchone()['n']
+    total_contacts = conn.execute('SELECT COUNT(*) as n FROM contacts WHERE user_id=%s', (uid,)).fetchone()['n']
+    total_campaigns = conn.execute('SELECT COUNT(*) as n FROM campaigns WHERE user_id=%s', (uid,)).fetchone()['n']
     open_rate = round(total_opened / total_sent * 100, 1) if total_sent > 0 else 0
 
     by_hour = conn.execute(
-        'SELECT hour_of_day as h, COUNT(*) as n FROM send_analytics WHERE hour_of_day IS NOT NULL '
-        'GROUP BY hour_of_day ORDER BY hour_of_day').fetchall()
+        'SELECT sa.hour_of_day as h, COUNT(*) as n FROM send_analytics sa '
+        'JOIN contacts c ON c.email=sa.contact_email AND c.user_id=%s '
+        'WHERE sa.hour_of_day IS NOT NULL GROUP BY sa.hour_of_day ORDER BY sa.hour_of_day', (uid,)).fetchall()
     by_dow = conn.execute(
-        'SELECT day_of_week as d, COUNT(*) as n FROM send_analytics WHERE day_of_week IS NOT NULL '
-        'GROUP BY day_of_week ORDER BY day_of_week').fetchall()
+        'SELECT sa.day_of_week as d, COUNT(*) as n FROM send_analytics sa '
+        'JOIN contacts c ON c.email=sa.contact_email AND c.user_id=%s '
+        'WHERE sa.day_of_week IS NOT NULL GROUP BY sa.day_of_week ORDER BY sa.day_of_week', (uid,)).fetchall()
 
     top_campaigns = conn.execute(
         "SELECT id, name, sent, "
         "(SELECT COUNT(DISTINCT contact_email) FROM email_opens WHERE campaign_id=c.id) as opens "
-        "FROM campaigns c WHERE sent > 0 ORDER BY sent DESC LIMIT 10").fetchall()
+        "FROM campaigns c WHERE sent > 0 AND user_id=%s ORDER BY sent DESC LIMIT 10", (uid,)).fetchall()
 
     monthly_sends = conn.execute(
-        "SELECT TO_CHAR(sent_at, 'YYYY-MM') as month, COUNT(*) as n "
-        "FROM send_analytics WHERE sent_at IS NOT NULL "
-        "GROUP BY TO_CHAR(sent_at, 'YYYY-MM') ORDER BY month DESC LIMIT 12").fetchall()
+        "SELECT TO_CHAR(sa.sent_at, 'YYYY-MM') as month, COUNT(*) as n "
+        "FROM send_analytics sa JOIN contacts c ON c.email=sa.contact_email AND c.user_id=%s "
+        "WHERE sa.sent_at IS NOT NULL "
+        "GROUP BY TO_CHAR(sa.sent_at, 'YYYY-MM') ORDER BY month DESC LIMIT 12", (uid,)).fetchall()
     monthly_sends = list(reversed(monthly_sends))
 
     score_dist = conn.execute(
         "SELECT CASE WHEN score >= 100 THEN 'Muito Quente' WHEN score >= 51 THEN 'Quente' "
         "WHEN score >= 21 THEN 'Morno' ELSE 'Frio' END as faixa, COUNT(*) as n "
-        "FROM contacts GROUP BY faixa").fetchall()
+        "FROM contacts WHERE user_id=%s GROUP BY faixa", (uid,)).fetchall()
 
     conn.close()
     return render_template('analytics.html',
