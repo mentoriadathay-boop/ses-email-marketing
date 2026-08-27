@@ -6264,6 +6264,14 @@ def _texto_para_email_html(texto, template_html='', primary_color='#1a3a6b', tem
     texto = texto.strip()
     texto = texto.replace('\r\n', '\n').replace('\r', '\n')
 
+    # Remove marcadores de markdown (**negrito**, *itálico*) ANTES de
+    # classificar os blocos. Sem isso, uma linha como "**Assinatura mensal**"
+    # começa com "*" e cai na detecção de citação/destaque (pensada pra
+    # aspas/itálico de verdade), virando um bloco de citação em vez de
+    # aparecer como tópico/parágrafo normal.
+    texto = re.sub(r'\*\*(.+?)\*\*', r'\1', texto)
+    texto = re.sub(r'(?<!\*)\*([^\*\n]+)\*(?!\*)', r'\1', texto)
+
     assunto_extraido = ''
     if texto.lower().startswith('assunto:'):
         first_nl = texto.find('\n')
@@ -6668,15 +6676,23 @@ Kit de Marca — {kit['name']}:
         return jsonify({'html': html, 'cta_url_missing': not cta_url})
     elif template_ref:
         # Um template específico da galeria foi escolhido (ex: "Oferta Especial",
-        # com caixa de preço/urgência) — a IA deve preencher o conteúdo desse
-        # template exato, preservando sua estrutura/layout, em vez de gerar um
-        # email genérico do zero que ignora o modelo escolhido pela usuária.
-        prompt = f"""Você vai personalizar o email HTML abaixo, preenchendo o conteúdo com base no contexto informado — SEM mudar a estrutura, o layout, as tags HTML ou os estilos (cores, bordas, tamanhos, espaçamentos) do template original.
+        # com caixa de preço/urgência). Em vez de pedir pra IA reescrever o HTML
+        # inteiro — o que chegou a travar/estourar erro 500 em templates maiores
+        # e mais ricos (ex: "Newsletter Rica"), por gerar um prompt e uma
+        # resposta muito grandes — pedimos só um mapa de substituição para os
+        # trechos entre colchetes do próprio template. A estrutura HTML fica
+        # 100% preservada porque a substituição é feita aqui em Python, não
+        # reescrita pela IA (chamada bem menor e mais rápida).
+        placeholders = sorted(set(re.findall(r'\[[^\[\]\n]{1,80}\]', template_ref)))
+        html = template_ref
+        if placeholders:
+            lista_placeholders = '\n'.join(f'- {p}' for p in placeholders)
+            prompt = f"""Este é um template de email de marketing com trechos entre colchetes que precisam virar conteúdo real, específico e persuasivo — nada de texto genérico.
 
-TEMPLATE HTML ORIGINAL (preserve a estrutura exata — mesmas tags, mesma ordem, mesmos blocos):
-{template_ref}
+Placeholders a preencher:
+{lista_placeholders}
 
-Contexto para personalizar o conteúdo:
+Contexto para gerar o conteúdo:
 Público-alvo: {dados.get('publico', '')}
 Faixa etária: {dados.get('faixa_etaria', '')}
 Nível de conhecimento: {dados.get('nivel', '')}
@@ -6684,18 +6700,38 @@ Objetivo: {dados.get('objetivo', '')}
 Tema: {dados.get('tema', '')}
 Contexto: {dados.get('contexto', '')}
 Resultado esperado: {dados.get('resultado', '')}
-{kit_info}{imagem_info}{cta_info}
+{kit_info}
 
-Instruções obrigatórias:
-- Mantenha a MESMA estrutura de tags HTML (<table>/<tr>/<td>/<div>/<ul>/<li> etc.) do template original — não invente blocos novos, não remova blocos existentes, não mude a ordem dos elementos, não mude estilos (cores/bordas/tamanhos) a menos que seja para aplicar as cores do Kit de Marca informado acima.
-- Troque TODO texto entre colchetes (ex: [DATA], [Produto/Serviço], [problema/situação], [Item 1 incluso na oferta]) por conteúdo real, específico e persuasivo, coerente com o contexto acima. Não deixe nenhum colchete no resultado final.
-- Mantenha o placeholder {{nome}} EXATAMENTE como está — é substituído automaticamente pelo sistema pelo nome de cada destinatário.
-- Se o template tiver preço/desconto/porcentagem de exemplo, pode ajustar os valores para fazer sentido com o contexto, mas mantenha o mesmo estilo visual do bloco (mesma caixa, mesmas cores, mesmo destaque).
-- Se houver botão(ões) de call-to-action no template, mantenha a MESMA posição, estilo e o mesmo href (ex: #LINK_CTA) — só ajuste o texto do botão para algo específico ao objetivo, se fizer sentido.
-- NÃO adicione blocos de "prova social", parágrafos extras, listas extras ou seções que não existem no template original — o objetivo é preencher o modelo escolhido, não criar um email novo.
-- Retorne APENAS o código HTML completo, sem explicações, sem markdown, sem blocos ```
-- Se houver placeholder __IMAGEM_PLACEHOLDER__ ou __CTA_URL_PLACEHOLDER__ no template ou nas instruções acima, mantenha EXATAMENTE assim para eu substituir depois.
+Responda APENAS com um objeto JSON válido, sem markdown, sem blocos de código — onde cada CHAVE é EXATAMENTE o texto de um placeholder acima (incluindo os colchetes) e cada VALOR é o texto de substituição correspondente, sem colchetes. Exemplo de formato de resposta: {{"[DATA]": "31 de agosto", "[Produto/Serviço]": "Curso de Marketing Digital"}}
 """
+            try:
+                client = _anthropic.Anthropic(api_key=api_key, timeout=60.0)
+                resp = client.messages.create(
+                    model='claude-haiku-4-5-20251001',
+                    max_tokens=2000,
+                    messages=[{'role': 'user', 'content': prompt}]
+                )
+                raw = resp.content[0].text.strip()
+                raw = re.sub(r'^```[a-z]*\n?', '', raw)
+                raw = re.sub(r'\n?```$', '', raw).strip()
+                mapa = json.loads(raw)
+                for ph in placeholders:
+                    valor = (mapa.get(ph) or '').strip()
+                    if valor:
+                        html = html.replace(ph, valor)
+            except Exception as e:
+                import traceback
+                tb = traceback.format_exc()
+                print(f'[ia_gerar_email/template_ref] CRASH: {e}\n{tb}', flush=True)
+                return jsonify({'erro': f'Erro ao preencher o template: {e}'}), 500
+        if imagem_url:
+            html = html.replace('__IMAGEM_PLACEHOLDER__', imagem_url)
+        if cta_url:
+            html = html.replace('__CTA_URL_PLACEHOLDER__', cta_url)
+            html = html.replace('href="#LINK_CTA"', f'href="{cta_url}"')
+            html = html.replace("href='#LINK_CTA'", f'href="{cta_url}"')
+        html = _upgrade_social_icons_in_html(html)
+        return jsonify({'html': html, 'cta_url_missing': not cta_url})
     else:
         prompt = f"""Crie um email profissional de marketing em HTML, com conteúdo RICO, ESPECÍFICO e APROFUNDADO — nada de texto genérico ou raso.
 
