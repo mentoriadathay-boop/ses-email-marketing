@@ -4288,9 +4288,14 @@ def track_open():
                 log_activity(email, 'email_opened', f'Campanha {camp_id}', conn)
             score_row = conn.execute('SELECT score FROM contact_scores WHERE email=%s', (email,)).fetchone()
             if score_row and score_row['score'] >= 51:
+                contexto = "campanha " + str(camp_id) if camp_id else "cadência " + str(seq_id)
                 criar_notificacao('abertura_quente', f'{email} abriu seu email',
-                                  f'Lead quente (score {score_row["score"]}) abriu {"campanha " + str(camp_id) if camp_id else "cadência " + str(seq_id)}',
+                                  f'Lead quente (score {score_row["score"]}) abriu {contexto}',
                                   contact_email=email, campaign_id=camp_id)
+                try:
+                    _enviar_email_lead_quente('abertura_quente', email, score_row['score'], contexto)
+                except Exception as e:
+                    print(f'[lead-quente] falha ao notificar abertura: {e}', flush=True)
             conn.commit()
             conn.close()
             print(f"[TRACK] Abertura registrada: {email} campaign={camp_id} seq={seq_id}", flush=True)
@@ -4318,8 +4323,16 @@ def track_click():
             contexto = (f'Campanha {camp_id}' if camp_id else
                         f'Cadência {seq_id}, passo {step_num}' if seq_id else 'Manual')
             log_activity(email, 'link_clicked', f'{contexto} — {dest_url[:100]}', conn)
-            criar_notificacao('clique', f'{email} clicou no seu email',
-                              f'Clicou em: {dest_url[:80]}', contact_email=email)
+            # Só notifica (sininho + email) se o lead já está quente — clique de
+            # lead frio/morno não é o "timing perfeito de abordagem" prometido.
+            score_row = conn.execute('SELECT score FROM contact_scores WHERE email=%s', (email,)).fetchone()
+            if score_row and score_row['score'] >= 51:
+                criar_notificacao('clique', f'{email} clicou no seu email',
+                                  f'Lead quente (score {score_row["score"]}) clicou em: {dest_url[:80]}', contact_email=email)
+                try:
+                    _enviar_email_lead_quente('clique', email, score_row['score'], f'{contexto} — {dest_url[:80]}')
+                except Exception as e:
+                    print(f'[lead-quente] falha ao notificar clique: {e}', flush=True)
             conn.commit()
             conn.close()
         except Exception as e:
@@ -8274,6 +8287,40 @@ def _enviar_email_tarefa(row, kind='hoje'):
         <div style="color:#111;font-size:16px;font-weight:600">{row['title']}</div>
       </div>
       {f'<p style="margin:20px 0"><a href="{link_contato}" style="background:#1a3a6b;color:#fff;padding:10px 18px;border-radius:6px;text-decoration:none;font-weight:bold">Abrir contato</a>&nbsp;&nbsp;<a href="{link_agenda}" style="color:#1a3a6b;text-decoration:none;font-weight:bold">Ver agenda</a></p>' if APP_URL else ''}
+      <hr style="border:none;border-top:1px solid #eee;margin:24px 0">
+      <p style="color:#999;font-size:12px">ConvertMail — notificação automática de CRM</p>
+    </div>
+    '''
+    configuration = sib_api_v3_sdk.Configuration()
+    configuration.api_key['api-key'] = BREVO_API_KEY
+    api = sib_api_v3_sdk.TransactionalEmailsApi(sib_api_v3_sdk.ApiClient(configuration))
+    email_obj = sib_api_v3_sdk.SendSmtpEmail(
+        to=[{'email': TASK_NOTIFY_TO}],
+        sender={'email': ADMIN_EMAIL, 'name': 'ConvertMail CRM'},
+        subject=subject,
+        html_content=body)
+    api.send_transac_email(email_obj)
+
+
+def _enviar_email_lead_quente(tipo, contact_email, score, contexto):
+    """Alerta por email (fora da plataforma) quando um lead quente abre ou
+    clica em um email. Sem isso, o aviso só existia como um sininho dentro do
+    app, que só atualiza quando a página é recarregada — não é um "alerta
+    instantâneo" de verdade se a usuária não estiver com a aba aberta."""
+    if not BREVO_API_KEY or not TASK_NOTIFY_TO:
+        return
+    acao = 'abriu' if tipo == 'abertura_quente' else 'clicou em um link de'
+    subject = f'🔥 Lead quente {acao} seu email — {contact_email}'
+    link_contato = f'{APP_URL}/contatos/{quote(contact_email)}' if APP_URL else ''
+    body = f'''
+    <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:20px">
+      <h2 style="color:#d62828;margin:0 0 12px">&#128293; Lead quente {acao} seu email</h2>
+      <p style="color:#333;font-size:15px">
+        <strong>Contato:</strong> {contact_email}<br>
+        <strong>Score atual:</strong> {score}<br>
+        <strong>Contexto:</strong> {contexto}
+      </p>
+      {f'<p style="margin:20px 0"><a href="{link_contato}" style="background:#d62828;color:#fff;padding:10px 18px;border-radius:6px;text-decoration:none;font-weight:bold">Abrir contato</a></p>' if link_contato else ''}
       <hr style="border:none;border-top:1px solid #eee;margin:24px 0">
       <p style="color:#999;font-size:12px">ConvertMail — notificação automática de CRM</p>
     </div>
