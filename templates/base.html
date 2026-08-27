@@ -427,6 +427,7 @@
     fetch('/api/notificacoes/ler', {method:'POST'}).then(()=>loadNotifs());
   }
   loadNotifs();
+  setInterval(loadNotifs, 45000);
   setInterval(loadNotifs, 60000);
   </script>
   {% block scripts %}{% endblock %}
