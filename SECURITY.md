@@ -15,7 +15,19 @@ Cobertura: ~151 rotas, 4 frentes (auth/IDOR, SQLi/injeção, upload/SSRF/webhook
 - **`ENCRYPTION_KEY` ausente em produção**: rotacionada; senhas de email conectadas antes da rotação precisaram ser reconectadas (efeito colateral esperado).
 - **Tabela `signature` era global** entre tenants (sem uso de `user_id` apesar da coluna existir). Corrigido nos 5 pontos que liam/gravavam.
 
-**Decisão consciente de não mexer**: `api_nichos` aceita `mailing_ids` de qualquer tenant para estatísticas agregadas (baixo risco, não expõe lista de contatos).
+**Decisão consciente de não mexer** (revertida em 27/08, ver seção abaixo): `api_nichos` aceitava `mailing_ids` de qualquer tenant — corrigido na varredura de vazamento entre tenants.
+
+## Vazamento sistêmico de dados entre tenants — corrigido em 27/08/2026
+
+Descoberto ao investigar um disco cheio no Postgres de produção (query com JOIN duplo mal formado em `/api/dashboard-stats` gerou ~4.8GB de arquivo temporário — corrigida com subqueries pré-agregadas). Ao consertar essa rota, ficou claro que ela e `/analytics` não filtravam nenhuma consulta por `user_id` — qualquer assinante logado via estatísticas agregadas de todos os outros. Isso levou a uma varredura completa no arquivo atrás do mesmo padrão (rotas de listagem/dashboard sem `WHERE user_id`), que achou o problema em bem mais lugares do que a auditoria original de IDOR pegou (aquela focou em rotas com `<id>` na URL; esta classe de bug é diferente — consultas de "listar/agregar tudo" que simplesmente esqueciam o filtro de tenant).
+
+Corrigido (commits `f343ede`, `56c2f52`):
+- **Vazamento de leitura**: `/analytics`, `/api/dashboard-stats`, `/tags` + `/tags/<tag>` (esse último devolvia registro completo do contato — nome/telefone/empresa), `/api/contatos/buscar`, `/api/nichos`, `/api/templates` (GET), `/templates-visuais`, `/api/calendario/eventos`, `/formularios`, dropdowns de mailing em `/contatos/<email>`, `/nova-campanha` e `/cadencias/<id>`, geração de email por IA lendo brand kit de qualquer tenant.
+- **IDOR de escrita (mais grave — ação, não só leitura)**: `/nova-campanha` (POST) e `/campanha/segmentada` aceitavam `mailing_id` de qualquer tenant sem checar dono — dava para montar uma campanha e **enviar e-mail para a lista de contatos de outro assinante**. `/contatos/<email>/mailing` deixava inserir um contato próprio na lista de outro tenant. `/formularios/salvar` deixava editar formulário de outro tenant (UPDATE sem `_check_owner`) e não validava se o `sequence_id` de destino pertencia ao usuário (leads capturados podiam ser matriculados na cadência de outro tenant); o INSERT também nunca gravava `user_id`, deixando todo formulário novo global.
+
+Testado com 2 tenants sintéticos contra o Postgres de produção, incluindo tentativas deliberadas de IDOR (mandar `mailing_id`/`form_id`/`kit_id` de outro tenant) — todas bloqueadas.
+
+**How to apply**: essa classe de bug (query de listagem/agregação sem `WHERE user_id`) é fácil de reintroduzir em uma rota nova. Ao adicionar qualquer `SELECT`/`COUNT`/`SUM` num handler de rota que serve uma página ou JSON para o usuário logado, perguntar: "essa query devolve dado de mais de um tenant se eu não filtrar?" — se a resposta for sim, precisa de `WHERE user_id=%s` (direto ou via JOIN até uma tabela com `user_id`). IDs recebidos do cliente (form/JSON) que apontam pra `mailings`/`sequences`/`brand_kits`/`capture_forms`/etc. sempre precisam passar por `_check_owner()` antes de serem usados — mesmo em rotas que não têm `<id>` na URL (o achado do dia foi justamente em rotas onde o ID vem do corpo do POST, não da URL).
 
 ## LGPD — implementado em 27/08/2026
 
