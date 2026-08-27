@@ -6200,8 +6200,28 @@ def _extrair_cor_template(template_html):
     return None
 
 
+def _skin_do_template(categoria):
+    """Mapeia a categoria do template escolhido na galeria para um 'skin'
+    visual (formato de cabeçalho/rodapé). Não decide cor — cor sempre vem do
+    Kit de Marca do cliente (ou do fallback padrão); o skin só decide o
+    FORMATO/estrutura, pra parecer com o template escolhido em vez de um
+    cartão genérico único."""
+    c = (categoria or '').strip().lower()
+    if 'venda' in c:
+        return 'vendas'
+    if 'texto corrido' in c:
+        return 'editorial'
+    if 'evento' in c:
+        return 'evento'
+    if 'educacional' in c:
+        return 'educacional'
+    if 'reengaj' in c:
+        return 'reengajamento'
+    return 'padrao'
+
+
 def _texto_para_email_html(texto, template_html='', primary_color='#1a3a6b', tema='',
-                           kit=None, imagem_url='', imagem_posicao='top'):
+                           kit=None, imagem_url='', imagem_posicao='top', categoria=''):
     """Convert plain text into a structured HTML email WITHOUT using AI.
     Every word of the user's text is preserved verbatim."""
 
@@ -6557,21 +6577,104 @@ def _texto_para_email_html(texto, template_html='', primary_color='#1a3a6b', tem
     if assunto_extraido and tema:
         subtitle_html = f'<p style="color:{cor_border_light};margin:8px 0 0;font-size:13px;">{_esc(assunto_extraido)}</p>'
 
-    html = f'''<!DOCTYPE html><html><body style="margin:0;padding:20px;background:{cor_fundo};font-family:{fonte_stack};">
-<table width="100%" cellpadding="0" cellspacing="0"><tr><td align="center">
-<table cellpadding="0" cellspacing="0" style="width:100%;max-width:560px;background:#fff;border-radius:8px;overflow:hidden;box-shadow:0 4px 12px rgba(0,0,0,.1);">
-<tr><td style="background:{cor};padding:32px 32px 28px;text-align:center;">
-  <h1 style="color:#fff;margin:0;font-size:26px;font-weight:bold;word-wrap:break-word;letter-spacing:-0.3px;">{_esc(titulo_header)}</h1>
+    # --- Skin: formato de cabeçalho/rodapé/card conforme a categoria do
+    # template escolhido na galeria. A cor/fonte nunca muda aqui — isso já
+    # foi decidido acima (Kit de Marca do cliente tem prioridade); o skin só
+    # muda o FORMATO, pra não sair sempre o mesmo cartão genérico não
+    # importa qual template a pessoa escolheu.
+    skin = _skin_do_template(categoria)
+    rodape_footer = (
+        f'{social_links + "<br>" if social_links else ""}'
+        f'&copy; 2025 {_esc(empresa)} &middot; <a href="#" style="color:#888;">Descadastrar</a>')
+
+    if skin == 'editorial':
+        fonte_editorial = fonte_stack if (kit and kit.get('font_primary')) else "Georgia,'Times New Roman',serif"
+        card_style = 'border-top:4px solid {c};'.format(c=cor)
+        header_tr = f'''<tr><td style="padding:26px 36px 18px;text-align:center;border-bottom:1px solid {cor_border_light};">
+  <p style="margin:0 0 6px;font-size:11px;letter-spacing:3px;text-transform:uppercase;color:{cor_accent};font-weight:bold;">Edição</p>
+  <h1 style="color:{cor};margin:0;font-size:26px;font-weight:bold;word-wrap:break-word;font-family:{fonte_editorial};">{_esc(titulo_header)}</h1>
   {subtitle_html}
-</td></tr>
-<tr><td style="padding:32px 32px;color:{cor_texto};word-wrap:break-word;overflow-wrap:break-word;font-family:{fonte_stack};">
+</td></tr>'''
+        body_tr = f'''<tr><td style="padding:32px 36px;color:{cor_texto};word-wrap:break-word;overflow-wrap:break-word;font-family:{fonte_editorial};">
   {img_tag}
   {body_html}
-</td></tr>
-<tr><td style="background:{cor_bg};padding:20px 32px;text-align:center;font-size:12px;color:#888;">
-  {social_links + '<br>' if social_links else ''}
-  &copy; 2025 {_esc(empresa)} &middot; <a href="#" style="color:#888;">Descadastrar</a>
-</td></tr>
+</td></tr>'''
+        footer_tr = f'''<tr><td style="border-top:1px solid {cor_border_light};padding:18px 36px;text-align:center;font-size:12px;color:#888;">
+  {rodape_footer}
+</td></tr>'''
+    elif skin == 'vendas':
+        card_style = 'border-radius:4px;overflow:hidden;box-shadow:0 6px 18px rgba(0,0,0,.14);'
+        header_tr = f'''<tr><td style="background:{cor};padding:30px 32px 26px;text-align:center;">
+  <span style="display:inline-block;background:{cor_accent};color:#fff;font-size:11px;font-weight:bold;letter-spacing:1px;text-transform:uppercase;padding:5px 14px;border-radius:20px;margin-bottom:12px;">Oferta</span>
+  <h1 style="color:#fff;margin:8px 0 0;font-size:27px;font-weight:800;word-wrap:break-word;letter-spacing:-0.3px;">{_esc(titulo_header)}</h1>
+  {subtitle_html}
+</td></tr>'''
+        body_tr = f'''<tr><td style="padding:32px 32px;color:{cor_texto};word-wrap:break-word;overflow-wrap:break-word;font-family:{fonte_stack};">
+  {img_tag}
+  {body_html}
+</td></tr>'''
+        footer_tr = f'''<tr><td style="background:{cor_bg};padding:20px 32px;text-align:center;font-size:12px;color:#888;">
+  {rodape_footer}
+</td></tr>'''
+    elif skin == 'evento':
+        card_style = 'border-radius:16px;overflow:hidden;box-shadow:0 6px 20px rgba(0,0,0,.12);'
+        header_tr = f'''<tr><td style="background:{cor};padding:34px 32px 12px;text-align:center;border-bottom:5px solid {cor_accent};">
+  <h1 style="color:#fff;margin:0;font-size:26px;font-weight:bold;word-wrap:break-word;letter-spacing:-0.3px;">{_esc(titulo_header)}</h1>
+  {subtitle_html}
+</td></tr>'''
+        body_tr = f'''<tr><td style="padding:30px 32px;color:{cor_texto};word-wrap:break-word;overflow-wrap:break-word;font-family:{fonte_stack};">
+  {img_tag}
+  {body_html}
+</td></tr>'''
+        footer_tr = f'''<tr><td style="background:{cor_bg};padding:20px 32px;text-align:center;font-size:12px;color:#888;border-radius:0 0 16px 16px;">
+  {rodape_footer}
+</td></tr>'''
+    elif skin == 'educacional':
+        card_style = 'border-radius:8px;overflow:hidden;box-shadow:0 3px 10px rgba(0,0,0,.08);'
+        header_tr = f'''<tr><td style="background:{cor_bg};padding:28px 32px 22px;text-align:center;border-bottom:3px solid {cor};">
+  <h1 style="color:{cor};margin:0;font-size:24px;font-weight:800;word-wrap:break-word;letter-spacing:-0.3px;">{_esc(titulo_header)}</h1>
+  {subtitle_html}
+</td></tr>'''
+        body_tr = f'''<tr><td style="padding:32px 32px;color:{cor_texto};word-wrap:break-word;overflow-wrap:break-word;font-family:{fonte_stack};">
+  {img_tag}
+  {body_html}
+</td></tr>'''
+        footer_tr = f'''<tr><td style="background:#fff;border-top:1px solid {cor_border_light};padding:18px 32px;text-align:center;font-size:12px;color:#888;">
+  {rodape_footer}
+</td></tr>'''
+    elif skin == 'reengajamento':
+        card_style = 'border-radius:14px;overflow:hidden;box-shadow:0 4px 14px rgba(0,0,0,.1);'
+        header_tr = f'''<tr><td style="background:linear-gradient(135deg,{cor},{cor_accent});padding:32px 32px 26px;text-align:center;">
+  <h1 style="color:#fff;margin:0;font-size:25px;font-weight:bold;word-wrap:break-word;letter-spacing:-0.3px;">{_esc(titulo_header)}</h1>
+  {subtitle_html}
+</td></tr>'''
+        body_tr = f'''<tr><td style="padding:30px 32px;color:{cor_texto};word-wrap:break-word;overflow-wrap:break-word;font-family:{fonte_stack};">
+  {img_tag}
+  {body_html}
+</td></tr>'''
+        footer_tr = f'''<tr><td style="background:{cor_bg};padding:20px 32px;text-align:center;font-size:12px;color:#888;">
+  {rodape_footer}
+</td></tr>'''
+    else:
+        card_style = 'border-radius:8px;overflow:hidden;box-shadow:0 4px 12px rgba(0,0,0,.1);'
+        header_tr = f'''<tr><td style="background:{cor};padding:32px 32px 28px;text-align:center;">
+  <h1 style="color:#fff;margin:0;font-size:26px;font-weight:bold;word-wrap:break-word;letter-spacing:-0.3px;">{_esc(titulo_header)}</h1>
+  {subtitle_html}
+</td></tr>'''
+        body_tr = f'''<tr><td style="padding:32px 32px;color:{cor_texto};word-wrap:break-word;overflow-wrap:break-word;font-family:{fonte_stack};">
+  {img_tag}
+  {body_html}
+</td></tr>'''
+        footer_tr = f'''<tr><td style="background:{cor_bg};padding:20px 32px;text-align:center;font-size:12px;color:#888;">
+  {rodape_footer}
+</td></tr>'''
+
+    html = f'''<!DOCTYPE html><html><body style="margin:0;padding:20px;background:{cor_fundo};font-family:{fonte_stack};">
+<table width="100%" cellpadding="0" cellspacing="0"><tr><td align="center">
+<table cellpadding="0" cellspacing="0" style="width:100%;max-width:560px;background:#fff;{card_style}">
+{header_tr}
+{body_tr}
+{footer_tr}
 </table></td></tr></table></body></html>'''
     return html
 
@@ -6662,6 +6765,7 @@ Kit de Marca — {kit['name']}:
                 kit=dict(kit) if kit else None,
                 imagem_url=imagem_url,
                 imagem_posicao=dados.get('imagem_posicao', 'top'),
+                categoria=dados.get('template_categoria', ''),
             )
         except Exception as e:
             import traceback
