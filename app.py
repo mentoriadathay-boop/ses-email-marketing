@@ -6200,6 +6200,23 @@ def _extrair_cor_template(template_html):
     return None
 
 
+def _extrair_estilo_body_template(template_html):
+    """Extrai font-family e background do <body style="..."> do template —
+    usado como 'cor/fonte padrão do template' quando o cliente não escolheu
+    um Kit de Marca. Retorna (fonte_stack_ou_None, cor_fundo_ou_None)."""
+    if not template_html:
+        return None, None
+    m = re.search(r'<body\s+style="([^"]*)"', template_html, re.I)
+    if not m:
+        return None, None
+    style = m.group(1)
+    fm = re.search(r'font-family:\s*([^;"]+)', style, re.I)
+    bm = re.search(r'background(?:-color)?:\s*(#[0-9a-fA-F]{3,8})', style, re.I)
+    fonte = fm.group(1).strip() if fm else None
+    fundo = bm.group(1).strip() if bm else None
+    return fonte, fundo
+
+
 def _skin_do_template(categoria):
     """Mapeia a categoria do template escolhido na galeria para um 'skin'
     visual (formato de cabeçalho/rodapé). Não decide cor — cor sempre vem do
@@ -6221,24 +6238,35 @@ def _skin_do_template(categoria):
 
 
 def _texto_para_email_html(texto, template_html='', primary_color='#1a3a6b', tema='',
-                           kit=None, imagem_url='', imagem_posicao='top', categoria=''):
+                           kit=None, imagem_url='', imagem_posicao='top', categoria='',
+                           template_cor_padrao=''):
     """Convert plain text into a structured HTML email WITHOUT using AI.
     Every word of the user's text is preserved verbatim."""
 
-    # --- Color precedence: kit > primary_color param > template extraction > default ---
+    fonte_template, fundo_template = _extrair_estilo_body_template(template_html)
+
+    # --- Cor: SEMPRE do Kit de Marca do cliente quando houver um selecionado.
+    # Sem kit, usa a cor/fonte/fundo PADRÃO do próprio template escolhido
+    # (declarada na galeria, ou extraída do HTML como último recurso) — nunca
+    # um padrão genérico do app. ---
     if kit and kit.get('primary_color'):
         cor = kit['primary_color']
+    elif template_cor_padrao:
+        cor = template_cor_padrao
     elif primary_color and primary_color != '#1a3a6b':
         cor = primary_color
     else:
         cor = _extrair_cor_template(template_html) or primary_color
 
-    # Kit colors with fallbacks
     cor_texto = (kit.get('text_color') if kit else None) or '#333333'
-    cor_fundo = (kit.get('bg_color') if kit else None) or '#f0f2f5'
+    cor_fundo = (kit.get('bg_color') if kit else None) or fundo_template or '#f0f2f5'
     cor_accent = (kit.get('accent_color') if kit else None) or cor
-    fonte_principal = (kit.get('font_primary') if kit else None) or 'Arial'
-    fonte_stack = f'{fonte_principal},Helvetica,sans-serif'
+    if kit and kit.get('font_primary'):
+        fonte_stack = f"{kit['font_primary']},Helvetica,sans-serif"
+    elif fonte_template:
+        fonte_stack = fonte_template
+    else:
+        fonte_stack = 'Arial,Helvetica,sans-serif'
 
     # Compute tinted backgrounds from the primary color
     def _tint(hex_color, factor):
@@ -6588,14 +6616,13 @@ def _texto_para_email_html(texto, template_html='', primary_color='#1a3a6b', tem
         f'&copy; 2025 {_esc(empresa)} &middot; <a href="#" style="color:#888;">Descadastrar</a>')
 
     if skin == 'editorial':
-        fonte_editorial = fonte_stack if (kit and kit.get('font_primary')) else "Georgia,'Times New Roman',serif"
         card_style = 'border-top:4px solid {c};'.format(c=cor)
         header_tr = f'''<tr><td style="padding:26px 36px 18px;text-align:center;border-bottom:1px solid {cor_border_light};">
   <p style="margin:0 0 6px;font-size:11px;letter-spacing:3px;text-transform:uppercase;color:{cor_accent};font-weight:bold;">Edição</p>
-  <h1 style="color:{cor};margin:0;font-size:26px;font-weight:bold;word-wrap:break-word;font-family:{fonte_editorial};">{_esc(titulo_header)}</h1>
+  <h1 style="color:{cor};margin:0;font-size:26px;font-weight:bold;word-wrap:break-word;font-family:{fonte_stack};">{_esc(titulo_header)}</h1>
   {subtitle_html}
 </td></tr>'''
-        body_tr = f'''<tr><td style="padding:32px 36px;color:{cor_texto};word-wrap:break-word;overflow-wrap:break-word;font-family:{fonte_editorial};">
+        body_tr = f'''<tr><td style="padding:32px 36px;color:{cor_texto};word-wrap:break-word;overflow-wrap:break-word;font-family:{fonte_stack};">
   {img_tag}
   {body_html}
 </td></tr>'''
@@ -6766,6 +6793,7 @@ Kit de Marca — {kit['name']}:
                 imagem_url=imagem_url,
                 imagem_posicao=dados.get('imagem_posicao', 'top'),
                 categoria=dados.get('template_categoria', ''),
+                template_cor_padrao=dados.get('template_cor', '').strip(),
             )
         except Exception as e:
             import traceback

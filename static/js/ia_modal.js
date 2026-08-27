@@ -127,6 +127,7 @@ function iamReset() {
   _gtmModoTexto = null;
   _gtmTemplateHtmlParaIA = null;
   _gtmTemplateCatParaIA = null;
+  _gtmTemplateCorParaIA = null;
   _ajustarStep3ParaModo('reescrever');
   document.getElementById('iamStep0').classList.remove('d-none');
   document.getElementById('iamStepMelhorar').classList.add('d-none');
@@ -322,6 +323,7 @@ function iamColetarDados() {
     modo_texto: _gtmModoTexto || 'reescrever',
     template_ref_html: _gtmTemplateHtmlParaIA || '',
     template_categoria: _gtmTemplateCatParaIA || '',
+    template_cor: _gtmTemplateCorParaIA || '',
   };
 }
 
@@ -525,7 +527,7 @@ function gtmPersonalizarComIA() {
 
   const conteudoAtual = getEditorContent(_aiTarget.containerId, _aiTarget.textareaId);
   if (conteudoAtual.trim()) {
-    _gtmPendingTemplate = { html: _gtmTemplateAtivo.html, nome: _gtmTemplateAtivo.name, cat: _gtmTemplateAtivo.cat };
+    _gtmPendingTemplate = { html: _gtmTemplateAtivo.html, nome: _gtmTemplateAtivo.name, cat: _gtmTemplateAtivo.cat, cor: _gtmTemplateAtivo.cor };
     new bootstrap.Modal(document.getElementById('modalEscolhaTemplate')).show();
   } else {
     const tema = _gtmTemplateAtivo.name + ' — ' + _gtmTemplateAtivo.cat;
@@ -539,7 +541,7 @@ function gtmUsarTemplate() {
 
   const conteudoAtual = getEditorContent(_aiTarget.containerId, _aiTarget.textareaId);
   if (conteudoAtual.trim()) {
-    _gtmPendingTemplate = { html: _gtmTemplateAtivo.html, nome: _gtmTemplateAtivo.name, cat: _gtmTemplateAtivo.cat };
+    _gtmPendingTemplate = { html: _gtmTemplateAtivo.html, nome: _gtmTemplateAtivo.name, cat: _gtmTemplateAtivo.cat, cor: _gtmTemplateAtivo.cor };
     new bootstrap.Modal(document.getElementById('modalEscolhaTemplate')).show();
   } else {
     showHtmlInEditor(_aiTarget.containerId, _aiTarget.textareaId, _gtmTemplateAtivo.html, _aiTarget.subjectId, _gtmTemplateAtivo.name);
@@ -553,23 +555,24 @@ function gtmUsarDireto(id) {
 
   const conteudoAtual = getEditorContent(_aiTarget.containerId, _aiTarget.textareaId);
   if (conteudoAtual.trim()) {
-    _gtmPendingTemplate = { html: tpl.html, nome: tpl.name, cat: tpl.cat };
+    _gtmPendingTemplate = { html: tpl.html, nome: tpl.name, cat: tpl.cat, cor: tpl.cor };
     new bootstrap.Modal(document.getElementById('modalEscolhaTemplate')).show();
   } else {
     showHtmlInEditor(_aiTarget.containerId, _aiTarget.textareaId, tpl.html, _aiTarget.subjectId, tpl.name);
   }
 }
 
-let _gtmPendingTemplate = null; // { html, nome, cat }
+let _gtmPendingTemplate = null; // { html, nome, cat, cor }
 let _gtmModoTexto = null; // 'manter' | 'reescrever' | null
 let _gtmTemplateHtmlParaIA = null; // template HTML reference for IA
 let _gtmTemplateCatParaIA = null; // template category (Vendas, Eventos, ...) for IA
+let _gtmTemplateCorParaIA = null; // template's own default color (usada quando não há Kit de Marca)
 
 
 function gtmEscolherOpcao(opcao) {
   bootstrap.Modal.getInstance(document.getElementById('modalEscolhaTemplate'))?.hide();
   if (!_gtmPendingTemplate) return;
-  const { html: templateHtml, nome, cat: templateCat } = _gtmPendingTemplate;
+  const { html: templateHtml, nome, cat: templateCat, cor: templateCor } = _gtmPendingTemplate;
   _gtmPendingTemplate = null;
 
   // Capture kit from gallery preview BEFORE iamReset clears it
@@ -584,6 +587,7 @@ function gtmEscolherOpcao(opcao) {
     _gtmModoTexto = opcao;
     _gtmTemplateHtmlParaIA = templateHtml;
     _gtmTemplateCatParaIA = templateCat || '';
+    _gtmTemplateCorParaIA = templateCor || '';
     _ajustarStep3ParaModo(opcao);
     // Restore the kit from gallery preview into the wizard selector
     if (kitIdPrevia) _gtmRestaurarKit(kitIdPrevia);
