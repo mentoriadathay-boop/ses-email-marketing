@@ -75,6 +75,7 @@
         {% endfor %}
       {% endwith %}
       <form method="POST" action="{{ url_for('esqueci_senha') }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <div class="mb-4">
           <label class="form-label small fw-semibold">Email cadastrado</label>
           <div class="input-group">

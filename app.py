@@ -5,7 +5,9 @@ import threading
 import uuid
 import calendar as cal_module
 from datetime import datetime, timedelta
-from urllib.parse import quote, unquote
+from urllib.parse import quote, unquote, urlparse
+import socket
+import ipaddress
 from flask import (Flask, render_template, request, jsonify, redirect,
                    url_for, flash, Response, send_from_directory, session)
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -64,6 +66,10 @@ app.config.update(
     SESSION_COOKIE_HTTPONLY=True,
     SESSION_COOKIE_SAMESITE='Lax',
 )
+
+# ── Security: CSRF ───────────────────────────────────────────────────────────
+from flask_wtf import CSRFProtect
+csrf = CSRFProtect(app)
 
 # ── Security: rate limiting ─────────────────────────────────────────────────
 try:
@@ -634,10 +640,23 @@ def init_db():
         except Exception:
             conn.rollback()
 
-    admin_pw = os.environ.get('ADMIN_PASSWORD', 'admin123')
-    conn.execute(
-        "INSERT INTO users (email, password_hash, name, status, role) VALUES (%s, %s, %s, 'active', 'admin') ON CONFLICT (email) DO UPDATE SET password_hash=%s, role='admin'",
-        (ADMIN_EMAIL, generate_password_hash(admin_pw), 'Administrador', generate_password_hash(admin_pw)))
+    admin_pw_env = os.environ.get('ADMIN_PASSWORD', '').strip()
+    if admin_pw_env:
+        conn.execute(
+            "INSERT INTO users (email, password_hash, name, status, role) VALUES (%s, %s, %s, 'active', 'admin') ON CONFLICT (email) DO UPDATE SET password_hash=%s, role='admin'",
+            (ADMIN_EMAIL, generate_password_hash(admin_pw_env), 'Administrador', generate_password_hash(admin_pw_env)))
+    else:
+        existing_admin = conn.execute('SELECT id FROM users WHERE email=%s', (ADMIN_EMAIL,)).fetchone()
+        if not existing_admin:
+            # ADMIN_PASSWORD não definida: gera senha aleatória forte em vez de um
+            # default fixo. Nunca logada — recupere acesso via "Esqueci minha senha".
+            conn.execute(
+                "INSERT INTO users (email, password_hash, name, status, role) VALUES (%s, %s, %s, 'active', 'admin')",
+                (ADMIN_EMAIL, generate_password_hash(_generate_password(24)), 'Administrador'))
+            print('[SECURITY] ADMIN_PASSWORD não definida — conta admin criada com senha aleatória. '
+                  'Defina ADMIN_PASSWORD ou use "Esqueci minha senha" para recuperar acesso.', flush=True)
+        else:
+            conn.execute("UPDATE users SET role='admin' WHERE email=%s", (ADMIN_EMAIL,))
 
     conn.commit()
 
@@ -1003,10 +1022,15 @@ app.jinja_env.globals['score_label'] = score_label
 app.jinja_env.globals['effective_temperature'] = effective_temperature
 app.jinja_env.globals['TEMPERATURE_LABELS'] = TEMPERATURE_LABELS
 
-def get_sender_name():
+def get_sender_name(user_id=None):
     try:
         conn = get_db()
-        row = conn.execute('SELECT sender_name FROM signature ORDER BY id DESC LIMIT 1').fetchone()
+        if user_id is not None:
+            row = conn.execute(
+                'SELECT sender_name FROM signature WHERE user_id=%s ORDER BY id DESC LIMIT 1',
+                (user_id,)).fetchone()
+        else:
+            row = conn.execute('SELECT sender_name FROM signature ORDER BY id DESC LIMIT 1').fetchone()
         conn.close()
         return (row['sender_name'] or 'ConvertMail') if row else 'ConvertMail'
     except Exception:
@@ -1519,6 +1543,32 @@ def _enriquecer_claude(texto, url):
         pass
     return []
 
+def _host_e_privado_ou_interno(host):
+    """True se `host` resolve para IP privado/loopback/link-local/reservado —
+    usado para bloquear SSRF em features que buscam URL/host fornecido pelo
+    usuário (prospecção de leads, teste de conta de email IMAP/SMTP)."""
+    if not host:
+        return True
+    try:
+        infos = socket.getaddrinfo(host, None)
+    except Exception:
+        return True
+    for info in infos:
+        try:
+            ip = ipaddress.ip_address(info[4][0])
+        except ValueError:
+            return True
+        if (ip.is_private or ip.is_loopback or ip.is_link_local
+                or ip.is_reserved or ip.is_multicast or ip.is_unspecified):
+            return True
+    return False
+
+
+def _url_e_segura_para_buscar(url):
+    host = urlparse(url).hostname
+    return not _host_e_privado_ou_interno(host)
+
+
 def _extrair_com_firecrawl(url, modo='html'):
     if not FIRECRAWL_OK or not FIRECRAWL_API_KEY:
         return None
@@ -1542,6 +1592,8 @@ def _extrair_com_firecrawl(url, modo='html'):
     return None
 
 def _extrair_pagina_html(url):
+    if not _url_e_segura_para_buscar(url):
+        raise ValueError('URL aponta para host privado/interno — bloqueado por segurança.')
     html = _extrair_com_firecrawl(url, modo='html')
     if html:
         return html
@@ -1671,6 +1723,8 @@ def run_campaign(campaign_id, contacts, sender, subject, body_html, sequence_id=
         "WHERE c.id=%s", (campaign_id,)).fetchone()
     if kit_row:
         sender_name = (kit_row.get('signature_name') or kit_row.get('name') or '').strip() or None
+    if not sender_name:
+        sender_name = get_sender_name(owner_uid)
 
     blacklisted_count = 0
     for contact in contacts:
@@ -1756,7 +1810,8 @@ def processar_cadencias():
     conn = get_db()
     now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
     cur = conn.execute('''
-        SELECT sc.*, s.sender_email AS seq_sender, s.preferred_hour AS seq_preferred_hour
+        SELECT sc.*, s.sender_email AS seq_sender, s.preferred_hour AS seq_preferred_hour,
+               s.user_id AS seq_user_id
         FROM sequence_contacts sc
         JOIN sequences s ON s.id = sc.sequence_id
         WHERE sc.status = 'active' AND sc.next_send_at <= %s
@@ -1827,7 +1882,8 @@ def processar_cadencias():
 
             try:
                 send_email_brevo(sender, email, name, use_subject, body,
-                                 sequence_id=seq_id, step_number=step_num)
+                                 sequence_id=seq_id, step_number=step_num,
+                                 sender_name=get_sender_name(c['seq_user_id']))
                 conn.execute(
                     'INSERT INTO sequence_logs (sequence_id,contact_email,step_number,status,ab_version) VALUES (%s,%s,%s,%s,%s)',
                     (seq_id, email, step_num, 'sent', ab_version))
@@ -1950,6 +2006,9 @@ _PUBLIC_ENDPOINTS = {
     'serve_imagem',         # /uploads/imagens/<filename> — upload legado
 }
 
+_user_status_cache = {}  # user_id -> (status, role, checked_at) — evita 1 SELECT por request
+_USER_STATUS_CACHE_TTL = timedelta(seconds=60)
+
 @app.before_request
 def require_db_and_auth():
     if not _db_ready and request.endpoint not in _PUBLIC_ENDPOINTS:
@@ -1962,7 +2021,24 @@ def require_db_and_auth():
             if request.path.startswith('/api/') or request.path.startswith('/ia/'):
                 return jsonify({'erro': 'Autenticação necessária'}), 401
             return redirect(url_for('login'))
-        user_status = session.get('user_status')
+        # Revalida status/role no banco periodicamente (em vez de confiar só no
+        # valor gravado na sessão no momento do login) — sem isso, um usuário
+        # suspenso/cancelado (ex: reembolso via webhook Hotmart) mantém acesso
+        # total até a sessão de 30 dias expirar.
+        uid = session['user_id']
+        cached = _user_status_cache.get(uid)
+        now_dt = datetime.now()
+        if cached and (now_dt - cached[2]) < _USER_STATUS_CACHE_TTL:
+            user_status, user_role = cached[0], cached[1]
+        else:
+            conn = get_db()
+            row = conn.execute('SELECT status, role FROM users WHERE id=%s', (uid,)).fetchone()
+            conn.close()
+            user_status = row['status'] if row else 'suspended'
+            user_role = row['role'] if row else session.get('user_role')
+            session['user_status'] = user_status
+            session['user_role'] = user_role
+            _user_status_cache[uid] = (user_status, user_role, now_dt)
         if user_status != 'active':
             if request.endpoint not in ('conta_suspensa', 'logout'):
                 return redirect(url_for('conta_suspensa'))
@@ -2179,6 +2255,7 @@ def esqueci_senha():
 
 # ── Webhook Hotmart ──────────────────────────────────────────────────────────
 
+@csrf.exempt  # webhook externo — autenticado via X-Hotmart-Hottok (hmac), não via sessão
 @app.route('/webhook/hotmart', methods=['POST'])
 @limiter.limit('60 per minute')
 def webhook_hotmart():
@@ -2809,7 +2886,7 @@ def adicionar_campo_personalizado():
 @login_required
 def remover_nicho(nicho_id):
     conn = get_db()
-    nicho = conn.execute('SELECT name FROM nichos WHERE id=%s', (nicho_id,)).fetchone()
+    nicho = _check_owner('nichos', nicho_id, conn)
     if nicho:
         conn.execute('DELETE FROM nichos WHERE id=%s', (nicho_id,))
         conn.commit()
@@ -3055,6 +3132,7 @@ def deletar_log_campanha(log_id):
     conn = get_db()
     log = conn.execute('SELECT campaign_id FROM campaign_logs WHERE id=%s', (log_id,)).fetchone()
     campaign_id = log['campaign_id'] if log else None
+    _check_owner('campaigns', campaign_id, conn)
     conn.execute('DELETE FROM campaign_logs WHERE id=%s', (log_id,))
     conn.commit()
     conn.close()
@@ -3135,14 +3213,14 @@ def preview_envio_campanha(campaign_id):
 
 @app.route('/api/progresso/<int:campaign_id>')
 def api_progresso(campaign_id):
-    prog = campaign_progress.get(campaign_id)
-    if prog: return jsonify(prog)
     conn = get_db()
-    c = conn.execute("SELECT * FROM campaigns WHERE id=%s", (campaign_id,)).fetchone()
+    c = _check_owner('campaigns', campaign_id, conn)
+    prog = campaign_progress.get(campaign_id)
+    if prog:
+        conn.close()
+        return jsonify(prog)
     conn.close()
-    if c:
-        return jsonify({'total': c['total_contacts'], 'sent': c['sent'], 'errors': c['errors'], 'status': c['status'], 'logs': []})
-    return jsonify({'error': 'não encontrado'}), 404
+    return jsonify({'total': c['total_contacts'], 'sent': c['sent'], 'errors': c['errors'], 'status': c['status'], 'logs': []})
 
 @app.route('/api/verificar-ses')
 def api_verificar_ses():
@@ -3171,8 +3249,8 @@ def api_verificar_ses():
 @app.route('/configuracoes')
 def configuracoes():
     conn = get_db()
-    sig = conn.execute('SELECT * FROM signature ORDER BY id DESC LIMIT 1').fetchone()
-    email_accounts = conn.execute('SELECT * FROM email_accounts ORDER BY id').fetchall()
+    sig = conn.execute('SELECT * FROM signature WHERE user_id=%s ORDER BY id DESC LIMIT 1', (_uid(),)).fetchone()
+    email_accounts = conn.execute('SELECT * FROM email_accounts WHERE user_id=%s ORDER BY id', (_uid(),)).fetchall()
     conn.close()
     return render_template('configuracoes.html', signature=sig, email_accounts=email_accounts)
 
@@ -3182,13 +3260,13 @@ def salvar_assinatura():
     name = request.form.get('sig_name', '').strip()
     sender_name = request.form.get('sender_name', '').strip() or 'ConvertMail'
     conn = get_db()
-    existing = conn.execute('SELECT id FROM signature LIMIT 1').fetchone()
+    existing = conn.execute('SELECT id FROM signature WHERE user_id=%s LIMIT 1', (_uid(),)).fetchone()
     if existing:
         conn.execute(
-            "UPDATE signature SET name=%s,body_html=%s,sender_name=%s,updated_at=NOW() WHERE id=%s",
-            (name, body_html, sender_name, existing['id']))
+            "UPDATE signature SET name=%s,body_html=%s,sender_name=%s,updated_at=NOW() WHERE id=%s AND user_id=%s",
+            (name, body_html, sender_name, existing['id'], _uid()))
     else:
-        conn.execute('INSERT INTO signature (name,body_html,sender_name) VALUES (%s,%s,%s)', (name, body_html, sender_name))
+        conn.execute('INSERT INTO signature (name,body_html,sender_name,user_id) VALUES (%s,%s,%s,%s)', (name, body_html, sender_name, _uid()))
     conn.commit()
     conn.close()
     flash('Configuracoes salvas com sucesso!', 'success')
@@ -3198,7 +3276,9 @@ def salvar_assinatura():
 
 def _get_email_account():
     conn = get_db()
-    acc = conn.execute('SELECT * FROM email_accounts WHERE active=TRUE ORDER BY id LIMIT 1').fetchone()
+    acc = conn.execute(
+        'SELECT * FROM email_accounts WHERE active=TRUE AND user_id=%s ORDER BY id LIMIT 1',
+        (_uid(),)).fetchone()
     conn.close()
     return acc
 
@@ -3220,17 +3300,17 @@ def salvar_email_account():
     existing_acc = None
     if is_edit:
         conn = get_db()
-        existing_acc = conn.execute(
-            'SELECT * FROM email_accounts WHERE id=%s', (account_id,)).fetchone()
+        existing_acc = _check_owner('email_accounts', account_id, conn)
         conn.close()
-        if not existing_acc:
-            flash('Conta não encontrada.', 'danger')
-            return redirect(url_for('configuracoes'))
         if not password:
             password = _acc_password(existing_acc) or ''
 
     if not all([imap_server, smtp_server, email_addr, password]):
         flash('Preencha todos os campos obrigatórios (email + servidores + senha).', 'danger')
+        return redirect(url_for('configuracoes'))
+
+    if _host_e_privado_ou_interno(imap_server) or _host_e_privado_ou_interno(smtp_server):
+        flash('Servidor IMAP/SMTP inválido.', 'danger')
         return redirect(url_for('configuracoes'))
 
     # Só reautentica se a senha OU o servidor OU a porta OU o email mudaram.
@@ -3264,12 +3344,12 @@ def salvar_email_account():
     conn = get_db()
     if is_edit:
         conn.execute("""UPDATE email_accounts SET label=%s,imap_server=%s,imap_port=%s,
-            smtp_server=%s,smtp_port=%s,email=%s,password=%s,use_ssl=%s,sent_folder=%s WHERE id=%s""",
-            (label, imap_server, imap_port, smtp_server, smtp_port, email_addr, _encrypt_password(password), use_ssl, sent_folder, account_id))
+            smtp_server=%s,smtp_port=%s,email=%s,password=%s,use_ssl=%s,sent_folder=%s WHERE id=%s AND user_id=%s""",
+            (label, imap_server, imap_port, smtp_server, smtp_port, email_addr, _encrypt_password(password), use_ssl, sent_folder, account_id, _uid()))
     else:
-        conn.execute("""INSERT INTO email_accounts (label,imap_server,imap_port,smtp_server,smtp_port,email,password,use_ssl,sent_folder)
-            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
-            (label, imap_server, imap_port, smtp_server, smtp_port, email_addr, _encrypt_password(password), use_ssl, sent_folder))
+        conn.execute("""INSERT INTO email_accounts (label,imap_server,imap_port,smtp_server,smtp_port,email,password,use_ssl,sent_folder,user_id)
+            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
+            (label, imap_server, imap_port, smtp_server, smtp_port, email_addr, _encrypt_password(password), use_ssl, sent_folder, _uid()))
     conn.commit()
     conn.close()
     flash('Conta de email configurada com sucesso!', 'success')
@@ -3278,6 +3358,7 @@ def salvar_email_account():
 @app.route('/configuracoes/email-account/<int:account_id>/deletar', methods=['POST'])
 def deletar_email_account(account_id):
     conn = get_db()
+    _check_owner('email_accounts', account_id, conn)
     conn.execute('DELETE FROM email_accounts WHERE id=%s', (account_id,))
     conn.commit()
     conn.close()
@@ -3287,6 +3368,8 @@ def deletar_email_account(account_id):
 @app.route('/configuracoes/email-account/testar', methods=['POST'])
 def testar_email_account():
     data = request.get_json()
+    if _host_e_privado_ou_interno(data.get('imap_server', '')):
+        return jsonify({'ok': False, 'erro': 'Servidor IMAP inválido.'})
     try:
         imap_conn = ec.imap_connect(data['imap_server'], int(data['imap_port']),
                                      data['email'], data['password'], data.get('use_ssl', True))
@@ -3512,7 +3595,7 @@ def email_enviar():
             # de attachment/headers corretamente. Aqui montamos o JSON EXATO.
             payload = {
                 'to': [{'email': addr.strip()} for addr in to.split(',') if addr.strip()],
-                'sender': {'email': acc['email'], 'name': get_sender_name()},
+                'sender': {'email': acc['email'], 'name': get_sender_name(_uid())},
                 'subject': subject,
                 'htmlContent': body_html,
             }
@@ -3756,7 +3839,7 @@ def api_contatos_buscar():
 @app.route('/api/assinatura')
 def api_assinatura():
     conn = get_db()
-    sig = conn.execute('SELECT * FROM signature ORDER BY id DESC LIMIT 1').fetchone()
+    sig = conn.execute('SELECT * FROM signature WHERE user_id=%s ORDER BY id DESC LIMIT 1', (_uid(),)).fetchone()
     conn.close()
     return jsonify({'body_html': sig['body_html'] if sig else '', 'name': sig['name'] if sig else ''})
 
@@ -3946,6 +4029,7 @@ def track_click():
             print(f'[track_click] erro: {e}', flush=True)
     return redirect(dest_url or '/')
 
+@csrf.exempt  # acessado por destinatário anônimo via link no email, sem sessão
 @app.route('/descadastrar', methods=['GET', 'POST'])
 @limiter.limit('10 per minute')
 def descadastrar():
@@ -4274,7 +4358,7 @@ def api_contato_historico(seq_id, email):
 @app.route('/diagnostico/cadencia/<int:seq_id>')
 def diagnostico_cadencia(seq_id):
     conn = get_db()
-    seq = conn.execute('SELECT * FROM sequences WHERE id=%s', (seq_id,)).fetchone()
+    seq = _check_owner('sequences', seq_id, conn)
     if not seq:
         conn.close()
         return jsonify({'error': 'Cadência não encontrada'}), 404
@@ -4529,7 +4613,8 @@ def enviar_teste_cadencia(seq_id):
         flash('BREVO_API_KEY não configurada.', 'danger')
         return redirect(url_for('cadencia_detalhe', seq_id=seq_id))
     try:
-        send_email_brevo(seq['sender_email'], test_email, test_name, step['subject'], step['body_html'])
+        send_email_brevo(seq['sender_email'], test_email, test_name, step['subject'], step['body_html'],
+                          sender_name=get_sender_name(_uid()))
         flash(f'Teste enviado para {test_email} — Passo {step_number}: "{step["subject"]}"', 'success')
     except Exception as e:
         flash(f'Erro ao enviar teste: {e}', 'danger')
@@ -4816,6 +4901,7 @@ def contato_add_mailing(email):
 @login_required
 def contato_remove_mailing(email, mailing_id):
     conn = get_db()
+    _check_owner('mailings', mailing_id, conn)
     conn.execute('DELETE FROM mailing_contacts WHERE mailing_id=%s AND email=%s', (mailing_id, email))
     conn.execute('UPDATE mailings SET contact_count = (SELECT COUNT(*) FROM mailing_contacts WHERE mailing_id=%s) WHERE id=%s',
                  (mailing_id, mailing_id))
@@ -5469,7 +5555,8 @@ def enviar_email_contato(email):
         flash('BREVO_API_KEY não configurada — não é possível enviar.', 'danger')
         return redirect(url_for('contato_perfil', email=email))
     try:
-        send_email_brevo(sender, email, contact['name'] or '', subject, body_html)
+        send_email_brevo(sender, email, contact['name'] or '', subject, body_html,
+                          sender_name=get_sender_name(uid))
         log_activity(email, 'email_sent', f'Envio manual: {subject}', conn)
         conn.execute(
             "UPDATE contacts SET last_contact_at=NOW() WHERE email=%s AND user_id=%s",
@@ -6914,6 +7001,7 @@ def templates_visuais():
 
 # ── Chat IA Landing Page ─────────────────────────────────────────────────────
 
+@csrf.exempt  # widget público na landing page, visitante anônimo sem sessão
 @app.route('/ia/chat-landing', methods=['POST'])
 def ia_chat_landing():
     if not ANTHROPIC_OK:
@@ -7175,12 +7263,14 @@ def formulario_salvar():
 @app.route('/formularios/<int:form_id>/deletar', methods=['POST'])
 def formulario_deletar(form_id):
     conn = get_db()
+    _check_owner('capture_forms', form_id, conn)
     conn.execute('DELETE FROM capture_forms WHERE id=%s', (form_id,))
     conn.commit()
     conn.close()
     flash('Formulário removido.', 'success')
     return redirect(url_for('formularios'))
 
+@csrf.exempt  # formulário de captura embutido em sites de terceiros, sem sessão
 @app.route('/api/captura', methods=['POST', 'OPTIONS'])
 def api_captura():
     if request.method == 'OPTIONS':
@@ -7444,8 +7534,8 @@ def verificar_dominio():
 @app.route('/warmup')
 def warmup():
     conn = get_db()
-    plans = conn.execute('SELECT * FROM warmup_plans ORDER BY created_at DESC').fetchall()
-    accounts = conn.execute('SELECT email FROM email_accounts WHERE active=TRUE ORDER BY email').fetchall()
+    plans = conn.execute('SELECT * FROM warmup_plans WHERE user_id=%s ORDER BY created_at DESC', (_uid(),)).fetchall()
+    accounts = conn.execute('SELECT email FROM email_accounts WHERE active=TRUE AND user_id=%s ORDER BY email', (_uid(),)).fetchall()
     conn.close()
     return render_template('warmup.html', plans=plans, accounts=accounts)
 
@@ -7460,8 +7550,8 @@ def warmup_criar():
         return redirect(url_for('warmup'))
     conn = get_db()
     conn.execute(
-        'INSERT INTO warmup_plans (sender_email,daily_limit,total_days,growth_rate) VALUES (%s,%s,%s,%s)',
-        (sender, daily_start, total_days, growth))
+        'INSERT INTO warmup_plans (sender_email,daily_limit,total_days,growth_rate,user_id) VALUES (%s,%s,%s,%s,%s)',
+        (sender, daily_start, total_days, growth, _uid()))
     conn.commit()
     conn.close()
     flash(f'Plano de warm-up criado para {sender}!', 'success')
@@ -7470,7 +7560,7 @@ def warmup_criar():
 @app.route('/warmup/<int:plan_id>/pausar', methods=['POST'])
 def warmup_pausar(plan_id):
     conn = get_db()
-    plan = conn.execute('SELECT status FROM warmup_plans WHERE id=%s', (plan_id,)).fetchone()
+    plan = _check_owner('warmup_plans', plan_id, conn)
     new_status = 'paused' if plan and plan['status'] == 'active' else 'active'
     conn.execute('UPDATE warmup_plans SET status=%s WHERE id=%s', (new_status, plan_id))
     conn.commit()
@@ -7481,6 +7571,7 @@ def warmup_pausar(plan_id):
 @app.route('/warmup/<int:plan_id>/deletar', methods=['POST'])
 def warmup_deletar(plan_id):
     conn = get_db()
+    _check_owner('warmup_plans', plan_id, conn)
     conn.execute('DELETE FROM warmup_plans WHERE id=%s', (plan_id,))
     conn.commit()
     conn.close()
@@ -7490,7 +7581,7 @@ def warmup_deletar(plan_id):
 @app.route('/api/warmup/<int:plan_id>')
 def api_warmup(plan_id):
     conn = get_db()
-    plan = conn.execute('SELECT * FROM warmup_plans WHERE id=%s', (plan_id,)).fetchone()
+    plan = _check_owner('warmup_plans', plan_id, conn)
     conn.close()
     if not plan:
         return jsonify({'erro': 'Plano não encontrado.'}), 404
