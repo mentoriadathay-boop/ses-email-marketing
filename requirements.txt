@@ -11,6 +11,6 @@ apscheduler
 psycopg2-binary
 beautifulsoup4
 lxml
-anthropic
+anthropic==1.1.0
 firecrawl-py
 Pillow
