@@ -115,20 +115,27 @@
 
 <!-- Metricas da campanha -->
 <div class="row g-3 mb-4">
-  <div class="col-md-4">
+  <div class="col-md-3">
     <div class="stat-card" style="background:linear-gradient(135deg,#14b8a6,#0d9488)">
       <div class="opacity-75 small">Taxa de Abertura</div>
       <div class="fs-3 fw-bold">{{ camp_open_rate }}%</div>
       <div class="opacity-75 small mt-1">{{ camp_opens }} abertura(s)</div>
     </div>
   </div>
-  <div class="col-md-4">
+  <div class="col-md-3">
+    <div class="stat-card" style="background:linear-gradient(135deg,#4361ee,#3451d1)">
+      <div class="opacity-75 small">Taxa de Clique</div>
+      <div class="fs-3 fw-bold">{{ camp_click_rate }}%</div>
+      <div class="opacity-75 small mt-1">{{ camp_clicks }} contato(s) clicaram</div>
+    </div>
+  </div>
+  <div class="col-md-3">
     <div class="stat-card" style="background:linear-gradient(135deg,#64748b,#475569)">
       <div class="opacity-75 small">Blacklist nesta Campanha</div>
       <div class="fs-3 fw-bold">{{ blacklisted_in_campaign }}</div>
     </div>
   </div>
-  <div class="col-md-4">
+  <div class="col-md-3">
     <div class="stat-card" style="background:linear-gradient(135deg,#ea580c,#c2410c)">
       <div class="opacity-75 small">Leads Quentes (score &gt; 50)</div>
       <div class="fs-3 fw-bold">{{ camp_opens }}</div>
@@ -185,6 +192,63 @@
             <td class="text-center">
               <span class="badge {{ 'bg-warning text-dark' if op.total_opens > 1 else 'bg-light text-dark' }}">
                 {{ op.total_opens }}x
+              </span>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endif %}
+
+<!-- Quem clicou -->
+{% if clickers %}
+<div class="card mb-4">
+  <div class="card-header bg-white fw-semibold border-0 pt-4 pb-0 px-4 d-flex justify-content-between align-items-center">
+    <span><i class="bi bi-cursor me-2 text-primary"></i>Quem Clicou <span class="badge bg-primary ms-1">{{ clickers|length }}</span></span>
+    <button class="btn btn-sm btn-outline-secondary" type="button" id="btn-toggle-clickers"
+            onclick="document.getElementById('clickers-table').classList.toggle('d-none');this.textContent=this.textContent==='Ocultar'?'Mostrar':'Ocultar'">
+      Mostrar
+    </button>
+  </div>
+  <div class="card-body p-0 d-none" id="clickers-table">
+    <div style="max-height:400px;overflow-y:auto">
+      <table class="table table-sm table-hover mb-0 align-middle">
+        <thead class="table-light sticky-top">
+          <tr>
+            <th class="ps-4">Contato</th>
+            <th>Primeiro Clique</th>
+            <th>Último Clique</th>
+            <th>Último Link</th>
+            <th class="text-center">Vezes</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for cl in clickers %}
+          <tr>
+            <td class="ps-4">
+              <a href="{{ url_for('contato_perfil', email=cl.email) }}"
+                 class="text-decoration-none fw-semibold small">
+                {{ cl.name or cl.email }}
+              </a>
+              {% if cl.name %}
+              <div class="text-muted" style="font-size:.75rem">{{ cl.email }}</div>
+              {% endif %}
+            </td>
+            <td class="small text-muted">
+              {{ cl.first_click.strftime('%d/%m/%Y %H:%M') if cl.first_click else '—' }}
+            </td>
+            <td class="small text-muted">
+              {{ cl.last_click.strftime('%d/%m/%Y %H:%M') if cl.last_click else '—' }}
+            </td>
+            <td class="small text-muted text-truncate" style="max-width:220px" title="{{ cl.last_url or '' }}">
+              {{ cl.last_url or '—' }}
+            </td>
+            <td class="text-center">
+              <span class="badge {{ 'bg-warning text-dark' if cl.total_clicks > 1 else 'bg-light text-dark' }}">
+                {{ cl.total_clicks }}x
               </span>
             </td>
           </tr>

@@ -2914,6 +2914,9 @@ def campanha_detalhe(campaign_id):
     camp_opens = conn.execute(
         'SELECT COUNT(DISTINCT contact_email) as n FROM email_opens WHERE campaign_id=%s', (campaign_id,)).fetchone()['n']
     camp_open_rate = round(camp_opens / campaign['sent'] * 100, 1) if campaign and campaign['sent'] > 0 else 0
+    camp_clicks = conn.execute(
+        'SELECT COUNT(DISTINCT contact_email) as n FROM email_clicks WHERE campaign_id=%s', (campaign_id,)).fetchone()['n']
+    camp_click_rate = round(camp_clicks / campaign['sent'] * 100, 1) if campaign and campaign['sent'] > 0 else 0
     blacklisted_in_campaign = 0
     if campaign:
         log_emails = [l['contact_email'] for l in logs if l['status'] == 'sent']
@@ -2945,14 +2948,41 @@ def campanha_detalhe(campaign_id):
             'first_open': op['first_open'],
             'last_open': op['last_open'],
         })
+    clickers = conn.execute(
+        "SELECT contact_email, COUNT(*) as total_clicks, "
+        "MIN(clicked_at) as first_click, MAX(clicked_at) as last_click, "
+        "(SELECT dest_url FROM email_clicks c2 WHERE c2.campaign_id=%s "
+        "   AND c2.contact_email=email_clicks.contact_email ORDER BY clicked_at DESC LIMIT 1) as last_url "
+        "FROM email_clicks WHERE campaign_id=%s "
+        "GROUP BY contact_email ORDER BY first_click DESC",
+        (campaign_id, campaign_id)).fetchall()
+    clickers_with_names = []
+    for cl in clickers:
+        contact = conn.execute(
+            "SELECT name FROM contacts WHERE email=%s", (cl['contact_email'],)).fetchone()
+        name = contact['name'] if contact and contact['name'] else None
+        if not name:
+            log_entry = conn.execute(
+                "SELECT contact_name FROM campaign_logs WHERE campaign_id=%s AND contact_email=%s LIMIT 1",
+                (campaign_id, cl['contact_email'])).fetchone()
+            name = log_entry['contact_name'] if log_entry and log_entry['contact_name'] else None
+        clickers_with_names.append({
+            'email': cl['contact_email'],
+            'name': name,
+            'total_clicks': cl['total_clicks'],
+            'first_click': cl['first_click'],
+            'last_click': cl['last_click'],
+            'last_url': cl['last_url'],
+        })
     conn.close()
     if not campaign:
         flash('Campanha não encontrada.', 'danger')
         return redirect(url_for('index'))
     return render_template('campanha_detalhe.html', campaign=campaign, logs=logs,
                            camp_open_rate=camp_open_rate, camp_opens=camp_opens,
+                           camp_click_rate=camp_click_rate, camp_clicks=camp_clicks,
                            blacklisted_in_campaign=blacklisted_in_campaign,
-                           openers=openers_with_names)
+                           openers=openers_with_names, clickers=clickers_with_names)
 
 @app.route('/campanha/<int:campaign_id>/reutilizar')
 @login_required
