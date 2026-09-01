@@ -149,9 +149,31 @@ app.config['MAX_CONTENT_LENGTH'] = 5 * 1024 * 1024
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 os.makedirs(IMAGES_FOLDER, exist_ok=True)
 
+# Endpoints POST específicos que respondem multipart/form-data (não JSON no
+# corpo da requisição, então request.is_json não detecta) mas cujo front
+# sempre espera um JSON de volta.
+_JSON_UPLOAD_PATHS = {'/upload/imagem'}
+
+def _espera_resposta_json():
+    """True se a requisição claramente veio de um fetch()/AJAX que espera
+    JSON de volta — pelos prefixos de API já conhecidos, pelo Content-Type
+    da própria requisição (fetch com JSON body), ou por uma lista pontual de
+    uploads multipart cujo front sempre lê a resposta como JSON. Sem isso,
+    endpoints JSON fora da lista de prefixos original (ex: /campanha/rascunho)
+    devolviam uma página HTML de erro/redirect em vez de JSON, quebrando o
+    front com "Unexpected token '<' ... is not valid JSON"."""
+    if request.path.startswith(('/ia/', '/api/', '/email/')):
+        return True
+    if request.path in _JSON_UPLOAD_PATHS:
+        return True
+    if request.is_json:
+        return True
+    accept = request.headers.get('Accept', '')
+    return 'application/json' in accept and 'text/html' not in accept
+
 @app.errorhandler(413)
 def _erro_payload_grande(e):
-    if request.path.startswith('/ia/') or request.path.startswith('/api/') or request.path.startswith('/email/'):
+    if _espera_resposta_json():
         return jsonify({'erro': 'Conteúdo muito grande (limite de 5MB). Tente remover imagens grandes ou reduzir o texto.'}), 413
     return e
 
@@ -159,13 +181,13 @@ def _erro_payload_grande(e):
 def _erro_geral(e):
     from werkzeug.exceptions import HTTPException
     if isinstance(e, HTTPException):
-        if request.path.startswith('/ia/') or request.path.startswith('/api/') or request.path.startswith('/email/'):
+        if _espera_resposta_json():
             return jsonify({'erro': f'Erro {e.code}: {e.description}'}), e.code
         return e
     err_id = uuid.uuid4().hex[:8]
     app.logger.exception('Erro %s em %s', err_id, request.path)
     msg = (f'Erro interno (ref {err_id}). Tente novamente ou contate o suporte.')
-    if request.path.startswith('/ia/') or request.path.startswith('/api/') or request.path.startswith('/email/'):
+    if _espera_resposta_json():
         return jsonify({'erro': msg, 'ref': err_id}), 500
     flash(msg, 'danger')
     return redirect(request.referrer or url_for('index'))
