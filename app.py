@@ -7269,7 +7269,11 @@ Instruções obrigatórias:
         client = _anthropic.Anthropic(api_key=api_key, timeout=90.0)
         resp = client.messages.create(
             model='claude-haiku-4-5-20251001',
-            max_tokens=8000,
+            # 4000 (não 8000): um email de 250-400 palavras com HTML/CSS inline
+            # nunca precisa de mais que isso — max_tokens alto só aumenta o
+            # tempo/risco de a geração travar (mesma causa dos erros 500
+            # intermitentes já corrigidos nos outros dois modos desta rota).
+            max_tokens=4000,
             messages=[{'role': 'user', 'content': prompt}]
         )
         html = resp.content[0].text.strip()
@@ -7286,6 +7290,9 @@ Instruções obrigatórias:
         html = _upgrade_social_icons_in_html(html)
         return jsonify({'html': html, 'cta_url_missing': not cta_url})
     except Exception as e:
+        import traceback
+        tb = traceback.format_exc()
+        print(f'[ia_gerar_email/reescrever] CRASH: {e}\n{tb}', flush=True)
         return jsonify({'erro': str(e)}), 500
 
 @app.route('/ia/melhorar-texto', methods=['POST'])
