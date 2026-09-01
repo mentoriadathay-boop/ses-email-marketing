@@ -4,7 +4,8 @@ import io
 import threading
 import uuid
 import calendar as cal_module
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 from urllib.parse import quote, unquote, urlparse
 import socket
 import ipaddress
@@ -127,6 +128,44 @@ if not _raw_app_url:
     else:
         _raw_app_url = 'http://127.0.0.1:5000'
 APP_URL = _raw_app_url
+
+# ── Fuso horário de agendamento ─────────────────────────────────────────────
+# O servidor (Railway) roda em UTC, mas a usuária digita horários no fuso de
+# Brasília nos campos "agendar para". Sem essa conversão, um agendamento pra
+# "09:00" era salvo como texto puro "09:00" e comparado direto contra
+# datetime.now() (que no servidor é UTC) — a campanha disparava 3h mais cedo
+# (09:00 UTC = 06:00 em Brasília). Toda hora de agendamento fica guardada no
+# banco em UTC; converter pra Brasília só na hora de mostrar pra usuária.
+try:
+    _TZ_BR = ZoneInfo('America/Sao_Paulo')
+except Exception:
+    # Sem dados de fuso horario do IANA disponiveis (ambiente sem tzdata) —
+    # cai pro deslocamento fixo de Brasilia (UTC-3, sem horario de verao
+    # desde 2019). Nunca deixa a aplicacao inteira falhar ao subir por causa
+    # disso.
+    _TZ_BR = timezone(timedelta(hours=-3))
+
+def _local_to_utc_naive(raw_str, fmt='%Y-%m-%dT%H:%M'):
+    """Converte um horário digitado no formulário (fuso de Brasília) num
+    datetime naive em UTC, pra guardar no banco e comparar com _now_utc_naive()."""
+    local_dt = datetime.strptime(raw_str, fmt).replace(tzinfo=_TZ_BR)
+    return local_dt.astimezone(timezone.utc).replace(tzinfo=None)
+
+def _utc_naive_to_local(utc_dt):
+    """Converte um datetime naive em UTC (como fica salvo no banco) de volta
+    pro horário de Brasília, pra exibir pra usuária."""
+    if not utc_dt:
+        return None
+    if isinstance(utc_dt, str):
+        try:
+            utc_dt = datetime.fromisoformat(utc_dt)
+        except ValueError:
+            return None
+    return utc_dt.replace(tzinfo=timezone.utc).astimezone(_TZ_BR).replace(tzinfo=None)
+
+def _now_utc_naive():
+    return datetime.now(timezone.utc).replace(tzinfo=None)
+
 UNSPLASH_ACCESS_KEY = os.environ.get('UNSPLASH_ACCESS_KEY', '')
 BREVO_API_KEY = os.environ.get('BREVO_API_KEY', '')
 FIRECRAWL_API_KEY = os.environ.get('FIRECRAWL_API_KEY', '')
@@ -149,9 +188,31 @@ app.config['MAX_CONTENT_LENGTH'] = 5 * 1024 * 1024
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 os.makedirs(IMAGES_FOLDER, exist_ok=True)
 
+# Endpoints POST específicos que respondem multipart/form-data (não JSON no
+# corpo da requisição, então request.is_json não detecta) mas cujo front
+# sempre espera um JSON de volta.
+_JSON_UPLOAD_PATHS = {'/upload/imagem'}
+
+def _espera_resposta_json():
+    """True se a requisição claramente veio de um fetch()/AJAX que espera
+    JSON de volta — pelos prefixos de API já conhecidos, pelo Content-Type
+    da própria requisição (fetch com JSON body), ou por uma lista pontual de
+    uploads multipart cujo front sempre lê a resposta como JSON. Sem isso,
+    endpoints JSON fora da lista de prefixos original (ex: /campanha/rascunho)
+    devolviam uma página HTML de erro/redirect em vez de JSON, quebrando o
+    front com "Unexpected token '<' ... is not valid JSON"."""
+    if request.path.startswith(('/ia/', '/api/', '/email/')):
+        return True
+    if request.path in _JSON_UPLOAD_PATHS:
+        return True
+    if request.is_json:
+        return True
+    accept = request.headers.get('Accept', '')
+    return 'application/json' in accept and 'text/html' not in accept
+
 @app.errorhandler(413)
 def _erro_payload_grande(e):
-    if request.path.startswith('/ia/') or request.path.startswith('/api/') or request.path.startswith('/email/'):
+    if _espera_resposta_json():
         return jsonify({'erro': 'Conteúdo muito grande (limite de 5MB). Tente remover imagens grandes ou reduzir o texto.'}), 413
     return e
 
@@ -159,13 +220,13 @@ def _erro_payload_grande(e):
 def _erro_geral(e):
     from werkzeug.exceptions import HTTPException
     if isinstance(e, HTTPException):
-        if request.path.startswith('/ia/') or request.path.startswith('/api/') or request.path.startswith('/email/'):
+        if _espera_resposta_json():
             return jsonify({'erro': f'Erro {e.code}: {e.description}'}), e.code
         return e
     err_id = uuid.uuid4().hex[:8]
     app.logger.exception('Erro %s em %s', err_id, request.path)
     msg = (f'Erro interno (ref {err_id}). Tente novamente ou contate o suporte.')
-    if request.path.startswith('/ia/') or request.path.startswith('/api/') or request.path.startswith('/email/'):
+    if _espera_resposta_json():
         return jsonify({'erro': msg, 'ref': err_id}), 500
     flash(msg, 'danger')
     return redirect(request.referrer or url_for('index'))
@@ -1184,6 +1245,7 @@ def effective_temperature(score, override):
 app.jinja_env.globals['score_label'] = score_label
 app.jinja_env.globals['effective_temperature'] = effective_temperature
 app.jinja_env.globals['TEMPERATURE_LABELS'] = TEMPERATURE_LABELS
+app.jinja_env.filters['local_dt'] = _utc_naive_to_local
 
 def get_sender_name(user_id=None):
     try:
@@ -1971,7 +2033,7 @@ def _run_campaign_safe(*args, **kwargs):
 
 def processar_cadencias():
     conn = get_db()
-    now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    now = _now_utc_naive().strftime('%Y-%m-%d %H:%M:%S')
     cur = conn.execute('''
         SELECT sc.*, s.sender_email AS seq_sender, s.preferred_hour AS seq_preferred_hour,
                s.user_id AS seq_user_id
@@ -2111,7 +2173,7 @@ def calcular_scores_inativos():
 
 def processar_campanhas_agendadas():
     conn = get_db()
-    now = datetime.now()
+    now = _now_utc_naive()
     cur = conn.execute(
         "SELECT * FROM campaigns WHERE status='scheduled' AND scheduled_at <= %s",
         (now,))
@@ -2782,7 +2844,7 @@ def nova_campanha():
         campaign_status = 'pending'
         if is_scheduled:
             try:
-                parsed_scheduled_at = datetime.strptime(scheduled_at_raw, '%Y-%m-%dT%H:%M')
+                parsed_scheduled_at = _local_to_utc_naive(scheduled_at_raw)
                 campaign_status = 'scheduled'
             except ValueError:
                 flash('Data/hora de agendamento inválida.', 'danger')
@@ -2822,7 +2884,7 @@ def nova_campanha():
         conn.close()
 
         if is_scheduled:
-            flash(f'Campanha agendada para {parsed_scheduled_at.strftime("%d/%m/%Y às %H:%M")}!', 'success')
+            flash(f'Campanha agendada para {_utc_naive_to_local(parsed_scheduled_at).strftime("%d/%m/%Y às %H:%M")}!', 'success')
             return redirect(url_for('campanha_detalhe', campaign_id=campaign_id))
 
         t = threading.Thread(target=_run_campaign_safe, args=(campaign_id, contacts, sender, subject, body_html, sequence_id), daemon=True)
@@ -4831,10 +4893,10 @@ def adicionar_contatos_cadencia(seq_id):
         flash('Adicione pelo menos um passo antes de importar.', 'danger'); conn.close()
         return redirect(url_for('cadencia_detalhe', seq_id=seq_id))
 
-    now = datetime.now()
+    now = _now_utc_naive()
     if start_mode == 'scheduled' and scheduled_at_raw:
         try:
-            start_base = datetime.strptime(scheduled_at_raw, '%Y-%m-%dT%H:%M')
+            start_base = _local_to_utc_naive(scheduled_at_raw)
         except ValueError:
             flash('Data/hora de agendamento inválida.', 'danger'); conn.close()
             return redirect(url_for('cadencia_detalhe', seq_id=seq_id))
@@ -4880,7 +4942,7 @@ def adicionar_contatos_cadencia(seq_id):
     if skipped_blacklist: extras.append(f'{skipped_blacklist} na blacklist')
     detail = f' ({", ".join(extras)})' if extras else ''
     if start_mode == 'scheduled' and scheduled_at_raw:
-        flash(f'{added} contato(s) adicionado(s) — primeiro envio agendado para {start_base.strftime("%d/%m/%Y às %H:%M")}.{detail}',
+        flash(f'{added} contato(s) adicionado(s) — primeiro envio agendado para {_utc_naive_to_local(start_base).strftime("%d/%m/%Y às %H:%M")}.{detail}',
               'success' if added > 0 else 'warning')
     else:
         flash(f'{added} contato(s) adicionado(s) à cadência.{detail}',
@@ -6265,7 +6327,7 @@ def api_calendario_eventos():
         "WHERE scheduled_at BETWEEN %s AND %s AND user_id=%s",
         (start, end, _uid())).fetchall()
     for c in camps:
-        dt = c['scheduled_at']
+        dt = _utc_naive_to_local(c['scheduled_at'])
         if dt:
             date_str = dt.strftime('%Y-%m-%d') if hasattr(dt, 'strftime') else str(dt)[:10]
             time_str = dt.strftime('%H:%M') if hasattr(dt, 'strftime') else ''
@@ -7269,7 +7331,11 @@ Instruções obrigatórias:
         client = _anthropic.Anthropic(api_key=api_key, timeout=90.0)
         resp = client.messages.create(
             model='claude-haiku-4-5-20251001',
-            max_tokens=8000,
+            # 4000 (não 8000): um email de 250-400 palavras com HTML/CSS inline
+            # nunca precisa de mais que isso — max_tokens alto só aumenta o
+            # tempo/risco de a geração travar (mesma causa dos erros 500
+            # intermitentes já corrigidos nos outros dois modos desta rota).
+            max_tokens=4000,
             messages=[{'role': 'user', 'content': prompt}]
         )
         html = resp.content[0].text.strip()
@@ -7286,6 +7352,9 @@ Instruções obrigatórias:
         html = _upgrade_social_icons_in_html(html)
         return jsonify({'html': html, 'cta_url_missing': not cta_url})
     except Exception as e:
+        import traceback
+        tb = traceback.format_exc()
+        print(f'[ia_gerar_email/reescrever] CRASH: {e}\n{tb}', flush=True)
         return jsonify({'erro': str(e)}), 500
 
 @app.route('/ia/melhorar-texto', methods=['POST'])

@@ -88,9 +88,11 @@ const _TEMPLATES = [
 
 <!-- Imagem hero (grande, sem padding lateral) -->
 <tr><td style="padding:0;background:#fff;">
-  <img src="https://via.placeholder.com/600x320/f5f2e9/5B2A6E?text=Imagem+de+capa+(600x320)"
-       alt="Capa" width="600"
-       style="display:block;width:100%;max-width:600px;height:auto;">
+  <table width="100%" cellpadding="0" cellspacing="0" role="presentation"><tr>
+    <td align="center" valign="middle" height="320" style="background:#f5f2e9;color:#5B2A6E;font-family:Georgia,serif;font-size:20px;">
+      Imagem de capa (600x320)
+    </td>
+  </tr></table>
 </td></tr>
 
 <!-- Corpo com drop cap (letra capitular) -->
