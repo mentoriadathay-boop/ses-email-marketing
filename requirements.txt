@@ -14,3 +14,4 @@ lxml
 anthropic
 firecrawl-py
 Pillow
+tzdata
