@@ -104,6 +104,45 @@
   </div>
 </div>
 
+<!-- Rascunhos -->
+{% if drafts %}
+<div class="card mb-4" style="border:1px solid #c7d2fe">
+  <div class="card-header bg-white fw-semibold border-0 pt-4 pb-2 px-4 d-flex justify-content-between align-items-center">
+    <span><i class="bi bi-pencil-square me-2" style="color:#3730a3"></i>Rascunhos
+      <span class="badge ms-1" style="background:#e0e7ff;color:#3730a3">{{ drafts|length }}</span>
+    </span>
+  </div>
+  <div class="card-body pt-0">
+    <div class="row g-2">
+      {% for d in drafts %}
+      <div class="col-md-6 col-lg-4">
+        <div class="border rounded p-3 h-100 d-flex flex-column" style="background:#f8f9ff">
+          <div class="fw-semibold small mb-1 text-truncate" title="{{ d.name }}">{{ d.name }}</div>
+          <div class="text-muted text-truncate mb-2" style="font-size:.78rem" title="{{ d.subject }}">
+            {{ d.subject or 'Sem assunto' }}
+          </div>
+          <div class="text-muted mb-2" style="font-size:.72rem">
+            <i class="bi bi-clock me-1"></i>Salvo em {{ d.created_at.strftime('%d/%m/%Y %H:%M') if d.created_at else '' }}
+          </div>
+          <div class="d-flex gap-2 mt-auto">
+            <a href="{{ url_for('campanha_editar', campaign_id=d.id) }}" class="btn btn-sm btn-primary flex-fill">
+              <i class="bi bi-pencil-square me-1"></i>Continuar editando
+            </a>
+            <form method="POST" action="{{ url_for('deletar_campanha', campaign_id=d.id) }}"
+                  onsubmit="return confirm('Excluir o rascunho &quot;{{ d.name|e }}&quot;? Esta ação não pode ser desfeita.');">
+              <button type="submit" class="btn btn-sm btn-outline-danger" title="Excluir rascunho">
+                <i class="bi bi-trash"></i>
+              </button>
+            </form>
+          </div>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+{% endif %}
+
 <!-- Historico de campanhas -->
 <div class="card">
   <div class="card-header bg-white fw-semibold border-0 pt-4 pb-0 px-4 d-flex justify-content-between align-items-center">

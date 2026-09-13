@@ -2709,6 +2709,13 @@ def index():
         "WHERE c.user_id=%s ORDER BY c.created_at DESC LIMIT 20",
         (uid,)
     ).fetchall()
+    # Rascunhos: lista completa (sem limite de 20), pra nunca "sumir" da tela
+    # mesmo quando a usuária já tem várias campanhas enviadas.
+    drafts = conn.execute(
+        "SELECT id, name, subject, sender_email, created_at FROM campaigns "
+        "WHERE user_id=%s AND status='draft' ORDER BY created_at DESC",
+        (uid,)
+    ).fetchall()
     total_contacts = conn.execute('SELECT COUNT(*) as n FROM contacts WHERE user_id=%s', (uid,)).fetchone()['n']
     blacklist_count = conn.execute('SELECT COUNT(*) as n FROM blacklist').fetchone()['n']
     hot_leads = conn.execute(
@@ -2744,7 +2751,7 @@ def index():
     ).fetchone()['n']
     sent_mes = sent_campanhas_mes + sent_cadencias_mes
     conn.close()
-    return render_template('index.html', campaigns=campaigns,
+    return render_template('index.html', campaigns=campaigns, drafts=drafts,
                            total_contacts=total_contacts, blacklist_count=blacklist_count,
                            hot_leads=hot_leads, open_rate=open_rate,
                            sent_total=sent_total, sent_mes=sent_mes)
