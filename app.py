@@ -66,6 +66,12 @@ app.config.update(
     SESSION_COOKIE_SECURE=(os.environ.get('FLASK_ENV') != 'development'),
     SESSION_COOKIE_HTTPONLY=True,
     SESSION_COOKIE_SAMESITE='Lax',
+    # Sem limite de tempo próprio pro token CSRF (padrão do Flask-WTF é 1h) —
+    # a validade já é amarrada à sessão (30 dias acima). Sem isso, quem deixa
+    # a tela de Nova Campanha aberta por mais de 1h (comum ao usar IA/montar
+    # o email com calma) tomava "CSRF token has expired" ao tentar subir uma
+    # imagem ou salvar, porque o token foi capturado no carregamento da página.
+    WTF_CSRF_TIME_LIMIT=None,
 )
 
 # ── Security: CSRF ───────────────────────────────────────────────────────────
