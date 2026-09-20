@@ -1407,10 +1407,26 @@ def _social_platform_from_url(url):
     return None
 
 
+# Plataformas com ícone de verdade (PNG em static/icons/, desenhado à mão —
+# não são os logos oficiais registrados, mas têm a forma reconhecível de
+# cada rede). Para as demais (twitter, tiktok, telegram), cai na caixinha
+# de texto CSS antiga.
+_SOCIAL_ICON_FILES = {'instagram', 'facebook', 'linkedin', 'whatsapp', 'youtube', 'website', 'email'}
+
 def _social_icon_html(url, platform=None, size=36):
-    """Gera <a> estilizado como caixinha brand — 100% CSS, funciona em qualquer email."""
+    """Gera <a> com o ícone da rede social — imagem de verdade (mais
+    profissional que texto/emoji) quando disponível, com fallback pra
+    caixinha de texto CSS quando não há ícone gerado pra plataforma."""
     if platform is None:
         platform = _social_platform_from_url(url) or 'website'
+    if platform in _SOCIAL_ICON_FILES:
+        icon_url = f'{APP_URL}/static/icons/{platform}.png'
+        return (
+            f'<a href="{url}" target="_blank" '
+            f'style="display:inline-block;margin:0 6px 6px 0;line-height:0;text-decoration:none;">'
+            f'<img src="{icon_url}" width="{size}" height="{size}" alt="{platform}" '
+            f'style="display:block;width:{size}px;height:{size}px;border-radius:8px;border:0;"></a>'
+        )
     label, bg_style = _SOCIAL_ICONS.get(platform, _SOCIAL_ICONS['website'])
     # font-size proporcional ao box (60% do size)
     fs = max(11, int(size * 0.44))
