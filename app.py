@@ -1419,7 +1419,7 @@ def _social_icon_html(url, platform=None, size=36):
         f'style="display:inline-block;width:{size}px;height:{size}px;line-height:{size}px;'
         f'text-align:center;{bg_style}color:#fff;border-radius:8px;text-decoration:none;'
         f'font-weight:bold;font-family:Arial,Helvetica,sans-serif;font-size:{fs}px;'
-        f'margin:0 4px;vertical-align:middle;">{label}</a>'
+        f'margin:0 6px 6px 0;vertical-align:middle;">{label}</a>'
     )
 
 
@@ -6613,7 +6613,7 @@ def api_brand_kit_assinatura(kit_id):
             'font-family:Arial,sans-serif;font-size:13px;line-height:1.6">')
     body += '<br>'.join(linhas)
     if links:
-        body += '<div style="margin-top:8px">' + ' '.join(links) + '</div>'
+        body += '<div style="margin-top:14px;line-height:1">' + '&nbsp;&nbsp;'.join(links) + '</div>'
     body += '</div>'
     return jsonify({'body_html': body})
 
