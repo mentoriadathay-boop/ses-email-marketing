@@ -686,14 +686,15 @@ function reinserirAssinatura(containerId, kitId) {
   if (quill) _fetchSignature(quill, kitId, true);
 }
 
-// Chamado ao trocar o Kit de Marca da campanha: se já existe uma assinatura
-// inserida no corpo do email, atualiza ela na hora para o kit atual.
+// Chamado ao trocar o Kit de Marca da campanha: insere (ou atualiza, se já
+// tiver uma) a assinatura desse kit automaticamente no corpo do email.
 function atualizarAssinaturaKitSelecionado() {
   const quill = _quillMap.get('quill-main');
   if (!quill) return;
   const sel = document.getElementById('campaignBrandKitId');
   const kitId = sel ? (sel.value || null) : null;
-  _fetchSignature(quill, kitId, false);
+  if (!kitId) return; // "Sem kit" — não mexe na assinatura já escrita manualmente
+  _fetchSignature(quill, kitId, true);
 }
 
 // ─────────────────────────────────────────────
