@@ -414,6 +414,34 @@ def init_db():
             active BOOLEAN DEFAULT TRUE,
             created_at TIMESTAMP DEFAULT NOW()
         )''',
+        '''CREATE TABLE IF NOT EXISTS cached_emails (
+            id SERIAL PRIMARY KEY,
+            user_id INTEGER,
+            account_email TEXT NOT NULL,
+            folder TEXT NOT NULL,
+            uid TEXT NOT NULL,
+            message_id TEXT,
+            from_name TEXT, from_email TEXT,
+            to_addr TEXT, cc_addr TEXT,
+            subject TEXT,
+            date_sent TIMESTAMP,
+            is_read BOOLEAN DEFAULT FALSE,
+            text_body TEXT,
+            html_body TEXT,
+            has_full_body BOOLEAN DEFAULT FALSE,
+            cached_at TIMESTAMP DEFAULT NOW(),
+            UNIQUE(account_email, folder, uid)
+        )''',
+        '''CREATE TABLE IF NOT EXISTS cached_email_attachments (
+            id SERIAL PRIMARY KEY,
+            cached_email_id INTEGER NOT NULL REFERENCES cached_emails(id) ON DELETE CASCADE,
+            att_index INTEGER NOT NULL,
+            filename TEXT,
+            content_type TEXT,
+            size INTEGER,
+            data TEXT,
+            UNIQUE(cached_email_id, att_index)
+        )''',
         '''CREATE TABLE IF NOT EXISTS uploaded_images (
             id TEXT PRIMARY KEY,
             mime_type TEXT NOT NULL,
@@ -543,6 +571,11 @@ def init_db():
         "ALTER TABLE contacts ADD COLUMN last_contact_at TIMESTAMP",
         "ALTER TABLE contacts ADD COLUMN next_action_date DATE",
         "ALTER TABLE contacts ADD COLUMN temperature_override TEXT",
+        # Último nome de pasta IMAP detectado p/ spam/lixeira — usado para
+        # buscar a cópia local em cached_emails quando a conexão IMAP falha
+        # (ex.: Spam/Junk varia por provedor e só é detectável com conexão ativa).
+        "ALTER TABLE email_accounts ADD COLUMN spam_folder TEXT",
+        "ALTER TABLE email_accounts ADD COLUMN trash_folder TEXT",
     ]:
         try:
             conn.execute(f"DO $$ BEGIN {col_sql}; EXCEPTION WHEN duplicate_column THEN NULL; END $$")
@@ -593,6 +626,8 @@ def init_db():
         "CREATE INDEX IF NOT EXISTS idx_seqlogs_sent_at ON sequence_logs(sent_at)",
         # Composto pra acelerar a query principal da home (WHERE user_id + ORDER BY created_at)
         "CREATE INDEX IF NOT EXISTS idx_campaigns_user_created ON campaigns(user_id, created_at DESC)",
+        "CREATE INDEX IF NOT EXISTS idx_cached_emails_lookup ON cached_emails(account_email, folder, date_sent DESC)",
+        "CREATE INDEX IF NOT EXISTS idx_cached_emails_user ON cached_emails(user_id)",
     ]:
         try:
             conn.execute(idx_sql)
@@ -3719,6 +3754,160 @@ def _get_email_account():
     conn.close()
     return acc
 
+# ── Cópia local de emails (cache) ───────────────────────────────────────────
+# A aba "Email" sempre foi uma janela ao vivo via IMAP, sem nada salvo no
+# banco — se a conta/domínio do usuário parar de funcionar (senha trocada,
+# domínio expirado etc.), tudo que já tinha sido visto desaparece do painel,
+# mesmo sem nunca ter sido de fato apagado do servidor. As funções abaixo
+# salvam uma cópia best-effort (nunca interrompem a navegação se falharem)
+# a cada leitura via IMAP, e servem essa cópia como fallback quando a
+# conexão IMAP falhar — do mesmo jeito que um cliente como Outlook mantém
+# as mensagens já sincronizadas visíveis mesmo com o servidor fora do ar.
+
+def _cache_strip_tz(dt):
+    """email_client já devolve datetimes convertidos p/ horário de Brasília
+    (hora de parede certa); se gravar o objeto com tzinfo direto, o driver
+    reconverte usando o timezone da sessão do Postgres (UTC no Railway) e
+    desloca a hora — o mesmo bug de fuso horário já corrigido em outro lugar
+    do app. Por isso sempre removemos o tzinfo antes de salvar."""
+    if dt is not None and getattr(dt, 'tzinfo', None) is not None:
+        return dt.replace(tzinfo=None)
+    return dt
+
+def _cache_upsert_headers(account_email, folder, messages):
+    if not messages:
+        return
+    try:
+        conn = get_db()
+        uid_usuario = _uid()
+        for m in messages:
+            conn.execute(
+                """INSERT INTO cached_emails
+                   (user_id, account_email, folder, uid, message_id, from_name, from_email, subject, date_sent, is_read)
+                   VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                   ON CONFLICT (account_email, folder, uid) DO UPDATE SET
+                       message_id=EXCLUDED.message_id, from_name=EXCLUDED.from_name,
+                       from_email=EXCLUDED.from_email, subject=EXCLUDED.subject,
+                       date_sent=EXCLUDED.date_sent, is_read=EXCLUDED.is_read""",
+                (uid_usuario, account_email, folder, str(m['uid']), m.get('message_id'), m.get('from_name'),
+                 m.get('from_email'), m.get('subject'), _cache_strip_tz(m.get('date')), m.get('is_read')))
+        conn.commit()
+        conn.close()
+    except Exception:
+        app.logger.exception('Falha ao salvar copia local de cabecalhos de email')
+
+def _cache_upsert_full(account_email, folder, msg):
+    try:
+        conn = get_db()
+        uid_usuario = _uid()
+        row = conn.execute(
+            """INSERT INTO cached_emails
+               (user_id, account_email, folder, uid, message_id, from_name, from_email,
+                to_addr, cc_addr, subject, date_sent, text_body, html_body, has_full_body, is_read)
+               VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,TRUE,TRUE)
+               ON CONFLICT (account_email, folder, uid) DO UPDATE SET
+                   message_id=EXCLUDED.message_id, from_name=EXCLUDED.from_name,
+                   from_email=EXCLUDED.from_email, to_addr=EXCLUDED.to_addr,
+                   cc_addr=EXCLUDED.cc_addr, subject=EXCLUDED.subject, date_sent=EXCLUDED.date_sent,
+                   text_body=EXCLUDED.text_body, html_body=EXCLUDED.html_body,
+                   has_full_body=TRUE, is_read=TRUE
+               RETURNING id""",
+            (uid_usuario, account_email, folder, str(msg['uid']), msg.get('message_id'), msg.get('from_name'),
+             msg.get('from_email'), msg.get('to'), msg.get('cc'), msg.get('subject'),
+             _cache_strip_tz(msg.get('date')), msg.get('text_body'), msg.get('html_body'))).fetchone()
+        cached_id = row['id'] if row else None
+        if cached_id:
+            for att in msg.get('attachments', []):
+                conn.execute(
+                    """INSERT INTO cached_email_attachments (cached_email_id, att_index, filename, content_type, size)
+                       VALUES (%s,%s,%s,%s,%s)
+                       ON CONFLICT (cached_email_id, att_index) DO UPDATE SET
+                           filename=EXCLUDED.filename, content_type=EXCLUDED.content_type, size=EXCLUDED.size""",
+                    (cached_id, att['index'], att.get('filename'), att.get('content_type'), att.get('size')))
+        conn.commit()
+        conn.close()
+    except Exception:
+        app.logger.exception('Falha ao salvar copia local de email')
+
+def _cache_store_attachment_data(account_email, folder, uid, index, filename, content_type, raw_bytes):
+    import base64
+    try:
+        conn = get_db()
+        cached = conn.execute(
+            "SELECT id FROM cached_emails WHERE account_email=%s AND folder=%s AND uid=%s",
+            (account_email, folder, str(uid))).fetchone()
+        if cached:
+            conn.execute(
+                """INSERT INTO cached_email_attachments (cached_email_id, att_index, filename, content_type, size, data)
+                   VALUES (%s,%s,%s,%s,%s,%s)
+                   ON CONFLICT (cached_email_id, att_index) DO UPDATE SET
+                       filename=EXCLUDED.filename, content_type=EXCLUDED.content_type,
+                       size=EXCLUDED.size, data=EXCLUDED.data""",
+                (cached['id'], index, filename, content_type, len(raw_bytes), base64.b64encode(raw_bytes).decode('ascii')))
+            conn.commit()
+        conn.close()
+    except Exception:
+        app.logger.exception('Falha ao salvar copia local de anexo de email')
+
+def _cache_fetch_mailbox(account_email, folder, page, per_page, order):
+    conn = get_db()
+    total = conn.execute(
+        "SELECT COUNT(*) as n FROM cached_emails WHERE account_email=%s AND folder=%s",
+        (account_email, folder)).fetchone()['n']
+    order_sql = 'DESC' if order == 'desc' else 'ASC'
+    offset = (page - 1) * per_page
+    rows = conn.execute(
+        f"SELECT uid, from_name, from_email, subject, date_sent, is_read, message_id "
+        f"FROM cached_emails WHERE account_email=%s AND folder=%s "
+        f"ORDER BY date_sent {order_sql} LIMIT %s OFFSET %s",
+        (account_email, folder, per_page, offset)).fetchall()
+    conn.close()
+    messages = [{
+        'uid': r['uid'], 'from_name': r['from_name'] or '', 'from_email': r['from_email'] or '',
+        'subject': r['subject'] or '(sem assunto)', 'date': r['date_sent'],
+        'is_read': r['is_read'], 'message_id': r['message_id'] or '',
+    } for r in rows]
+    return messages, total
+
+def _cache_fetch_email(account_email, folder, uid):
+    conn = get_db()
+    row = conn.execute(
+        "SELECT * FROM cached_emails WHERE account_email=%s AND folder=%s AND uid=%s",
+        (account_email, folder, str(uid))).fetchone()
+    if not row:
+        conn.close()
+        return None
+    atts = conn.execute(
+        "SELECT att_index, filename, content_type, size FROM cached_email_attachments "
+        "WHERE cached_email_id=%s ORDER BY att_index", (row['id'],)).fetchall()
+    conn.close()
+    return {
+        'uid': row['uid'], 'from_name': row['from_name'] or '', 'from_email': row['from_email'] or '',
+        'to': row['to_addr'] or '', 'cc': row['cc_addr'] or '', 'subject': row['subject'] or '(sem assunto)',
+        'date': row['date_sent'],
+        'text_body': row['text_body'] or '',
+        'html_body': row['html_body'] or '',
+        'attachments': [{'index': a['att_index'], 'filename': a['filename'],
+                          'content_type': a['content_type'], 'size': a['size'] or 0} for a in atts],
+        'message_id': row['message_id'] or '',
+        'references': '',
+        '_from_cache': True,
+        '_sem_corpo': not row['has_full_body'],
+    }
+
+def _cache_fetch_attachment(account_email, folder, uid, index):
+    import base64
+    conn = get_db()
+    row = conn.execute(
+        """SELECT a.filename, a.content_type, a.data FROM cached_email_attachments a
+           JOIN cached_emails c ON c.id = a.cached_email_id
+           WHERE c.account_email=%s AND c.folder=%s AND c.uid=%s AND a.att_index=%s""",
+        (account_email, folder, str(uid), index)).fetchone()
+    conn.close()
+    if not row or not row['data']:
+        return None, None, None
+    return row['filename'], row['content_type'], base64.b64decode(row['data'])
+
 @app.route('/configuracoes/email-account', methods=['POST'])
 def salvar_email_account():
     label = request.form.get('label', 'Principal').strip()
@@ -3855,18 +4044,23 @@ def email_inbox():
     page = int(request.args.get('page', 1))
     order = request.args.get('order', 'desc')
     per_page = 25
+    from_cache = False
     try:
         imap_conn = ec.imap_connect(acc['imap_server'], acc['imap_port'],
                                      acc['email'], _acc_password(acc), acc['use_ssl'])
         messages, total = ec.fetch_mailbox(imap_conn, 'INBOX', page, per_page, order)
         imap_conn.logout()
+        _cache_upsert_headers(acc['email'], 'INBOX', messages)
     except Exception as e:
-        flash(f'Erro ao conectar: {e}', 'danger')
-        return redirect(url_for('configuracoes'))
+        messages, total = _cache_fetch_mailbox(acc['email'], 'INBOX', page, per_page, order)
+        if not messages:
+            flash(f'Erro ao conectar: {e}', 'danger')
+            return redirect(url_for('configuracoes'))
+        from_cache = True
     total_pages = math.ceil(total / per_page) if total else 1
     return render_template('email_inbox.html', messages=messages, page=page,
                            total_pages=total_pages, total=total, folder='INBOX',
-                           account=acc, order=order)
+                           account=acc, order=order, from_cache=from_cache)
 
 @app.route('/email/enviados')
 def email_enviados():
@@ -3878,18 +4072,23 @@ def email_enviados():
     order = request.args.get('order', 'desc')
     per_page = 25
     sent_folder = acc.get('sent_folder') or 'Sent'
+    from_cache = False
     try:
         imap_conn = ec.imap_connect(acc['imap_server'], acc['imap_port'],
                                      acc['email'], _acc_password(acc), acc['use_ssl'])
         messages, total = ec.fetch_mailbox(imap_conn, sent_folder, page, per_page, order)
         imap_conn.logout()
+        _cache_upsert_headers(acc['email'], sent_folder, messages)
     except Exception as e:
-        flash(f'Erro ao conectar: {e}', 'danger')
-        return redirect(url_for('configuracoes'))
+        messages, total = _cache_fetch_mailbox(acc['email'], sent_folder, page, per_page, order)
+        if not messages:
+            flash(f'Erro ao conectar: {e}', 'danger')
+            return redirect(url_for('configuracoes'))
+        from_cache = True
     total_pages = math.ceil(total / per_page) if total else 1
     return render_template('email_enviados.html', messages=messages, page=page,
                            total_pages=total_pages, total=total, folder=sent_folder,
-                           account=acc, order=order)
+                           account=acc, order=order, from_cache=from_cache)
 
 @app.route('/email/spam')
 def email_spam():
@@ -3900,38 +4099,55 @@ def email_spam():
     page = int(request.args.get('page', 1))
     order = request.args.get('order', 'desc')
     per_page = 25
+    from_cache = False
     try:
         imap_conn = ec.imap_connect(acc['imap_server'], acc['imap_port'],
                                      acc['email'], _acc_password(acc), acc['use_ssl'])
         spam_folder = ec.detect_spam_folder(imap_conn)
         messages, total = ec.fetch_mailbox(imap_conn, spam_folder, page, per_page, order)
         imap_conn.logout()
+        _cache_upsert_headers(acc['email'], spam_folder, messages)
+        if spam_folder != acc.get('spam_folder'):
+            conn = get_db()
+            conn.execute('UPDATE email_accounts SET spam_folder=%s WHERE id=%s', (spam_folder, acc['id']))
+            conn.commit()
+            conn.close()
     except Exception as e:
-        flash(f'Erro ao conectar: {e}', 'danger')
-        return redirect(url_for('email_hub'))
+        spam_folder = acc.get('spam_folder') or 'Spam'
+        messages, total = _cache_fetch_mailbox(acc['email'], spam_folder, page, per_page, order)
+        if not messages:
+            flash(f'Erro ao conectar: {e}', 'danger')
+            return redirect(url_for('email_hub'))
+        from_cache = True
     total_pages = math.ceil(total / per_page) if total else 1
     return render_template('email_spam.html', messages=messages, page=page,
                            total_pages=total_pages, total=total, folder=spam_folder,
-                           account=acc, order=order)
+                           account=acc, order=order, from_cache=from_cache)
 
 @app.route('/email/ler/<folder>/<uid>')
 def email_ler(folder, uid):
     acc = _get_email_account()
     if not acc:
         return redirect(url_for('configuracoes'))
+    from_cache = False
     try:
         imap_conn = ec.imap_connect(acc['imap_server'], acc['imap_port'],
                                      acc['email'], _acc_password(acc), acc['use_ssl'])
         msg = ec.fetch_email(imap_conn, uid, folder)
         imap_conn.logout()
+        if msg:
+            _cache_upsert_full(acc['email'], folder, msg)
     except Exception as e:
-        flash(f'Erro ao ler email: {e}', 'danger')
-        return redirect(url_for('email_inbox'))
+        msg = _cache_fetch_email(acc['email'], folder, uid)
+        if not msg:
+            flash(f'Erro ao ler email: {e}', 'danger')
+            return redirect(url_for('email_inbox'))
+        from_cache = True
     if not msg:
         flash('Email nao encontrado.', 'warning')
         return redirect(url_for('email_inbox'))
     msg['attachments'] = [dict(a, size_fmt=ec.format_size(a['size'])) for a in msg.get('attachments', [])]
-    return render_template('email_ler.html', msg=msg, folder=folder, account=acc)
+    return render_template('email_ler.html', msg=msg, folder=folder, account=acc, from_cache=from_cache)
 
 @app.route('/email/anexo/<folder>/<uid>/<int:index>')
 def email_anexo(folder, uid, index):
@@ -3943,9 +4159,13 @@ def email_anexo(folder, uid, index):
                                      acc['email'], _acc_password(acc), acc['use_ssl'])
         filename, content_type, data = ec.fetch_attachment(imap_conn, uid, index, folder)
         imap_conn.logout()
+        if data:
+            _cache_store_attachment_data(acc['email'], folder, uid, index, filename, content_type, data)
     except Exception as e:
-        flash(f'Erro ao baixar anexo: {e}', 'danger')
-        return redirect(url_for('email_inbox'))
+        filename, content_type, data = _cache_fetch_attachment(acc['email'], folder, uid, index)
+        if not data:
+            flash(f'Erro ao baixar anexo: {e}', 'danger')
+            return redirect(url_for('email_inbox'))
     if not data:
         flash('Anexo nao encontrado.', 'warning')
         return redirect(url_for('email_inbox'))
@@ -4212,19 +4432,30 @@ def email_lixeira():
     page = int(request.args.get('page', 1))
     order = request.args.get('order', 'desc')
     per_page = 25
+    from_cache = False
     try:
         imap_conn = ec.imap_connect(acc['imap_server'], acc['imap_port'],
                                      acc['email'], _acc_password(acc), acc['use_ssl'])
         trash_folder = ec.detect_trash_folder(imap_conn)
         messages, total = ec.fetch_mailbox(imap_conn, trash_folder, page, per_page, order)
         imap_conn.logout()
+        _cache_upsert_headers(acc['email'], trash_folder, messages)
+        if trash_folder != acc.get('trash_folder'):
+            conn = get_db()
+            conn.execute('UPDATE email_accounts SET trash_folder=%s WHERE id=%s', (trash_folder, acc['id']))
+            conn.commit()
+            conn.close()
     except Exception as e:
-        flash(f'Erro ao conectar: {e}', 'danger')
-        return redirect(url_for('email_inbox'))
+        trash_folder = acc.get('trash_folder') or 'Trash'
+        messages, total = _cache_fetch_mailbox(acc['email'], trash_folder, page, per_page, order)
+        if not messages:
+            flash(f'Erro ao conectar: {e}', 'danger')
+            return redirect(url_for('email_inbox'))
+        from_cache = True
     total_pages = math.ceil(total / per_page) if total else 1
     return render_template('email_lixeira.html', messages=messages, page=page,
                            total_pages=total_pages, total=total, folder=trash_folder,
-                           account=acc, order=order)
+                           account=acc, order=order, from_cache=from_cache)
 
 @app.route('/email/esvaziar-lixeira', methods=['POST'])
 def email_esvaziar_lixeira():
