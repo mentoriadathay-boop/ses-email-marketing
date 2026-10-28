@@ -504,7 +504,18 @@ def init_db():
         )''',
     ]
     for sql in tables:
-        conn.execute(sql)
+        # CREATE TABLE IF NOT EXISTS não é atômico contra outro processo
+        # criando a mesma tabela ao mesmo tempo (ex.: os 2 workers do
+        # gunicorn subindo juntos num banco novo/tabela nova) — os dois
+        # passam pela checagem "não existe" antes que qualquer um commite,
+        # e um deles estoura "duplicate key" no catálogo do Postgres em vez
+        # de simplesmente ver que já existe. Sem isso, um worker nunca
+        # termina de inicializar e o app fica de pé mostrando erro.
+        try:
+            conn.execute(sql)
+            conn.commit()
+        except Exception:
+            conn.rollback()
 
     try:
         conn.execute(
