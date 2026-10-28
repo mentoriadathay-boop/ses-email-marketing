@@ -173,7 +173,7 @@ def _now_utc_naive():
     return datetime.now(timezone.utc).replace(tzinfo=None)
 
 UNSPLASH_ACCESS_KEY = os.environ.get('UNSPLASH_ACCESS_KEY', '')
-BREVO_API_KEY = os.environ.get('BREVO_API_KEY', '')
+BREVO_API_KEY = os.environ.get('BREVO_API_KEY', '') or os.environ.get('BREVO_CONVERTMAIL', '')
 FIRECRAWL_API_KEY = os.environ.get('FIRECRAWL_API_KEY', '')
 HOTMART_TOKEN = os.environ.get('HOTMART_TOKEN', '')
 HOTMART_SECRET = os.environ.get('HOTMART_SECRET', '')
