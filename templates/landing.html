@@ -321,11 +321,49 @@
       gap: 5px;
     }
     .recurso-shot-bar .dot { width: 8px; height: 8px; border-radius: 50%; }
-    .recurso-shot-crop { width: 100%; aspect-ratio: 16/10; overflow: hidden; }
-    .recurso-shot-crop img { width: 100%; height: 100%; object-fit: cover; display: block; }
+    .recurso-shot-crop { width: 100%; aspect-ratio: 16/10; overflow: hidden; position: relative; }
+    .recurso-shot-crop img { width: 100%; height: 100%; object-fit: cover; display: block; cursor: zoom-in; transition: transform .3s; }
+    .recurso-shot-crop:hover img { transform: scale(1.03); }
+    .recurso-shot-crop .zoom-hint {
+      position: absolute; top: 10px; right: 10px;
+      width: 30px; height: 30px; border-radius: 50%;
+      background: rgba(0,0,0,0.55); color: #fff;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 0.85rem; pointer-events: none;
+      opacity: 0; transition: opacity .2s;
+    }
+    .recurso-shot-crop:hover .zoom-hint { opacity: 1; }
     .step-shot { margin-bottom: 14px; box-shadow: 0 14px 30px rgba(0,0,0,0.3); }
     .step-shot .recurso-shot-bar { padding: 6px 10px; }
     .step-shot .dot { width: 7px; height: 7px; }
+    .laptop-screen { cursor: zoom-in; }
+
+    /* LIGHTBOX — clique numa tela pra ver ampliada */
+    .lightbox-overlay {
+      display: none;
+      position: fixed; inset: 0; z-index: 2000;
+      background: rgba(20,8,26,0.92);
+      align-items: center; justify-content: center;
+      padding: 40px 24px;
+      cursor: zoom-out;
+    }
+    .lightbox-overlay.open { display: flex; }
+    .lightbox-overlay img {
+      max-width: min(1200px, 92vw);
+      max-height: 88vh;
+      border-radius: 10px;
+      box-shadow: 0 30px 80px rgba(0,0,0,0.5);
+      cursor: default;
+    }
+    .lightbox-close {
+      position: absolute; top: 24px; right: 28px;
+      width: 44px; height: 44px; border-radius: 50%;
+      background: rgba(255,255,255,0.12); border: 1px solid rgba(255,255,255,0.25);
+      color: #fff; font-size: 1.3rem;
+      display: flex; align-items: center; justify-content: center;
+      cursor: pointer;
+    }
+    .lightbox-close:hover { background: rgba(255,255,255,0.22); }
 
     /* STATS BAR */
     .stats-bar {
@@ -1134,7 +1172,7 @@
           <div class="recurso-shot" style="margin-bottom:0">
             <div class="recurso-shot-bar"><div class="dot" style="background:#ff5f57"></div><div class="dot" style="background:#febc2e"></div><div class="dot" style="background:#28c840"></div></div>
             <div class="recurso-shot-crop">
-              <img src="/static/img/mockups/nova-campanha.png" alt="Editor de campanha com IA do ConvertMail" style="object-position:20% 15%">
+              <img src="/static/img/mockups/nova-campanha.png" alt="Editor de campanha com IA do ConvertMail" style="object-position:20% 15%"><i class="bi bi-arrows-fullscreen zoom-hint"></i>
             </div>
           </div>
         </div>
@@ -1144,7 +1182,7 @@
         <div class="recurso-shot">
           <div class="recurso-shot-bar"><div class="dot" style="background:#ff5f57"></div><div class="dot" style="background:#febc2e"></div><div class="dot" style="background:#28c840"></div></div>
           <div class="recurso-shot-crop">
-            <img src="/static/img/mockups/contatos.png" alt="CRM com lead scoring do ConvertMail" style="object-position:15% 10%">
+            <img src="/static/img/mockups/contatos.png" alt="CRM com lead scoring do ConvertMail" style="object-position:15% 10%"><i class="bi bi-arrows-fullscreen zoom-hint"></i>
           </div>
         </div>
         <h3>CRM com Lead Scoring Autom&aacute;tico</h3>
@@ -1158,7 +1196,12 @@
       </div>
 
       <div class="recurso-card fade-up">
-        <div class="recurso-icon" style="background:var(--lavanda);color:var(--roxo)"><i class="bi bi-arrow-repeat"></i></div>
+        <div class="recurso-shot">
+          <div class="recurso-shot-bar"><div class="dot" style="background:#ff5f57"></div><div class="dot" style="background:#febc2e"></div><div class="dot" style="background:#28c840"></div></div>
+          <div class="recurso-shot-crop">
+            <img src="/static/img/mockups/sequencias.png" alt="Editor de sequ&ecirc;ncia com teste A/B do ConvertMail" style="object-position:30% 20%"><i class="bi bi-arrows-fullscreen zoom-hint"></i>
+          </div>
+        </div>
         <h3>Sequ&ecirc;ncias com Teste A/B</h3>
         <p>Follow-ups autom&aacute;ticos com intervalos personalizados, envio condicional inteligente e teste A/B por etapa para maximizar convers&otilde;es.</p>
         <ul>
@@ -1170,7 +1213,12 @@
       </div>
 
       <div class="recurso-card fade-up">
-        <div class="recurso-icon" style="background:rgba(201,168,106,0.12);color:var(--dourado)"><i class="bi bi-globe2"></i></div>
+        <div class="recurso-shot">
+          <div class="recurso-shot-bar"><div class="dot" style="background:#ff5f57"></div><div class="dot" style="background:#febc2e"></div><div class="dot" style="background:#28c840"></div></div>
+          <div class="recurso-shot-crop">
+            <img src="/static/img/mockups/prospeccao.png" alt="Prospec&ccedil;&atilde;o de leads com IA do ConvertMail" style="object-position:20% 10%"><i class="bi bi-arrows-fullscreen zoom-hint"></i>
+          </div>
+        </div>
         <h3>Prospec&ccedil;&atilde;o com Enriquecimento IA</h3>
         <p>Extraia leads de qualquer site da internet. A IA analisa a p&aacute;gina e enriquece cada contato com nome, telefone, empresa e cargo automaticamente.</p>
         <ul>
@@ -1182,7 +1230,12 @@
       </div>
 
       <div class="recurso-card fade-up">
-        <div class="recurso-icon" style="background:rgba(14,153,124,0.1);color:var(--esmeralda)"><i class="bi bi-bullseye"></i></div>
+        <div class="recurso-shot">
+          <div class="recurso-shot-bar"><div class="dot" style="background:#ff5f57"></div><div class="dot" style="background:#febc2e"></div><div class="dot" style="background:#28c840"></div></div>
+          <div class="recurso-shot-crop">
+            <img src="/static/img/mockups/nova-campanha.png" alt="Campanha por nicho no ConvertMail" style="object-position:35% 8%"><i class="bi bi-arrows-fullscreen zoom-hint"></i>
+          </div>
+        </div>
         <h3>Campanhas Inteligentes por Nicho</h3>
         <p>A IA gera uma vers&atilde;o &uacute;nica do email para cada nicho da sua base. Uma campanha, m&uacute;ltiplos emails personalizados &mdash; autom&aacute;tico.</p>
         <ul>
@@ -1195,7 +1248,12 @@
 
       <div class="recurso-card fade-up">
         <div class="tag-novo">EXCLUSIVO</div>
-        <div class="recurso-icon" style="background:var(--lavanda);color:var(--roxo)"><i class="bi bi-envelope-paper-fill"></i></div>
+        <div class="recurso-shot">
+          <div class="recurso-shot-bar"><div class="dot" style="background:#ff5f57"></div><div class="dot" style="background:#febc2e"></div><div class="dot" style="background:#28c840"></div></div>
+          <div class="recurso-shot-crop">
+            <img src="/static/img/mockups/email-inbox.png" alt="Caixa de entrada do ConvertMail" style="object-position:15% 0%"><i class="bi bi-arrows-fullscreen zoom-hint"></i>
+          </div>
+        </div>
         <h3>Gerenciador de Email Completo</h3>
         <p>Caixa de entrada, enviados, lixeira e spam &mdash; tudo dentro do ConvertMail. Leia, responda, encaminhe e componha emails sem sair da plataforma.</p>
         <ul>
@@ -1207,7 +1265,12 @@
       </div>
 
       <div class="recurso-card fade-up">
-        <div class="recurso-icon" style="background:rgba(201,168,106,0.12);color:var(--dourado)"><i class="bi bi-palette-fill"></i></div>
+        <div class="recurso-shot">
+          <div class="recurso-shot-bar"><div class="dot" style="background:#ff5f57"></div><div class="dot" style="background:#febc2e"></div><div class="dot" style="background:#28c840"></div></div>
+          <div class="recurso-shot-crop">
+            <img src="/static/img/mockups/kit-marca.png" alt="Kit de Marca do ConvertMail" style="object-position:15% 8%"><i class="bi bi-arrows-fullscreen zoom-hint"></i>
+          </div>
+        </div>
         <h3>Kit de Marca + Templates Visuais</h3>
         <p>Configure cores, fontes, tom de voz, redes sociais e assinatura da sua empresa. A IA aplica automaticamente em cada email gerado.</p>
         <ul>
@@ -1222,7 +1285,7 @@
         <div class="recurso-shot">
           <div class="recurso-shot-bar"><div class="dot" style="background:#ff5f57"></div><div class="dot" style="background:#febc2e"></div><div class="dot" style="background:#28c840"></div></div>
           <div class="recurso-shot-crop">
-            <img src="/static/img/mockups/campanha-detalhe.png" alt="Analytics de campanha do ConvertMail" style="object-position:15% 10%">
+            <img src="/static/img/mockups/campanha-detalhe.png" alt="Analytics de campanha do ConvertMail" style="object-position:15% 10%"><i class="bi bi-arrows-fullscreen zoom-hint"></i>
           </div>
         </div>
         <h3>Analytics Avan&ccedil;ado com Receita e DNS</h3>
@@ -1237,7 +1300,12 @@
 
       <div class="recurso-card fade-up">
         <div class="tag-novo">NOVO</div>
-        <div class="recurso-icon" style="background:var(--lavanda);color:var(--roxo)"><i class="bi bi-arrow-repeat"></i></div>
+        <div class="recurso-shot">
+          <div class="recurso-shot-bar"><div class="dot" style="background:#ff5f57"></div><div class="dot" style="background:#febc2e"></div><div class="dot" style="background:#28c840"></div></div>
+          <div class="recurso-shot-crop">
+            <img src="/static/img/mockups/campanha-detalhe.png" alt="Reenvio para n&atilde;o abridores no ConvertMail" style="object-position:50% 45%"><i class="bi bi-arrows-fullscreen zoom-hint"></i>
+          </div>
+        </div>
         <h3>Re-envio para N&atilde;o Abridores</h3>
         <p>Campanhas com taxa de abertura baixa? Reenvie automaticamente para quem n&atilde;o abriu, com novo assunto. Aumente suas convers&otilde;es sem esfor&ccedil;o extra.</p>
         <ul>
@@ -1250,7 +1318,12 @@
 
       <div class="recurso-card fade-up">
         <div class="tag-novo">NOVO</div>
-        <div class="recurso-icon" style="background:rgba(14,153,124,0.1);color:var(--esmeralda)"><i class="bi bi-clipboard2-check-fill"></i></div>
+        <div class="recurso-shot">
+          <div class="recurso-shot-bar"><div class="dot" style="background:#ff5f57"></div><div class="dot" style="background:#febc2e"></div><div class="dot" style="background:#28c840"></div></div>
+          <div class="recurso-shot-crop">
+            <img src="/static/img/mockups/formularios.png" alt="Formul&aacute;rios de captura do ConvertMail" style="object-position:15% 10%"><i class="bi bi-arrows-fullscreen zoom-hint"></i>
+          </div>
+        </div>
         <h3>Formul&aacute;rios de Captura Embut&iacute;veis</h3>
         <p>Crie formul&aacute;rios de captura de leads personaliz&aacute;veis e cole no seu site. Cada inscri&ccedil;&atilde;o vai direto para o CRM com tag e inscri&ccedil;&atilde;o autom&aacute;tica em cad&ecirc;ncia.</p>
         <ul>
@@ -1276,7 +1349,12 @@
 
       <div class="recurso-card fade-up">
         <div class="tag-novo">NOVO</div>
-        <div class="recurso-icon" style="background:var(--lavanda);color:var(--roxo)"><i class="bi bi-thermometer-half"></i></div>
+        <div class="recurso-shot">
+          <div class="recurso-shot-bar"><div class="dot" style="background:#ff5f57"></div><div class="dot" style="background:#febc2e"></div><div class="dot" style="background:#28c840"></div></div>
+          <div class="recurso-shot-crop">
+            <img src="/static/img/mockups/warmup.png" alt="Warm-up de dom&iacute;nio no ConvertMail" style="object-position:15% 8%"><i class="bi bi-arrows-fullscreen zoom-hint"></i>
+          </div>
+        </div>
         <h3>Warm-up de Dom&iacute;nio</h3>
         <p>Aque&ccedil;a seu dom&iacute;nio gradualmente para evitar filtros de spam. Planos com crescimento exponencial autom&aacute;tico de 7 a 60 dias.</p>
         <ul>
@@ -1289,7 +1367,12 @@
 
       <div class="recurso-card fade-up">
         <div class="tag-novo">NOVO</div>
-        <div class="recurso-icon" style="background:rgba(14,153,124,0.1);color:var(--esmeralda)"><i class="bi bi-bell-fill"></i></div>
+        <div class="recurso-shot">
+          <div class="recurso-shot-bar"><div class="dot" style="background:#ff5f57"></div><div class="dot" style="background:#febc2e"></div><div class="dot" style="background:#28c840"></div></div>
+          <div class="recurso-shot-crop">
+            <img src="/static/img/mockups/notificacoes.png" alt="Notifica&ccedil;&otilde;es em tempo real do ConvertMail" style="object-position:50% 20%"><i class="bi bi-arrows-fullscreen zoom-hint"></i>
+          </div>
+        </div>
         <h3>Notifica&ccedil;&otilde;es em Tempo Real</h3>
         <p>Receba alertas instant&acirc;neos quando leads quentes abrem seus emails ou clicam em links. Nunca mais perca o timing perfeito de abordagem.</p>
         <ul>
@@ -1510,7 +1593,7 @@
         <div class="recurso-shot step-shot">
           <div class="recurso-shot-bar"><div class="dot" style="background:#ff5f57"></div><div class="dot" style="background:#febc2e"></div><div class="dot" style="background:#28c840"></div></div>
           <div class="recurso-shot-crop">
-            <img src="/static/img/mockups/nova-campanha.png" alt="Upload de contatos no ConvertMail" style="object-position:95% 35%">
+            <img src="/static/img/mockups/nova-campanha.png" alt="Upload de contatos no ConvertMail" style="object-position:95% 35%"><i class="bi bi-arrows-fullscreen zoom-hint"></i>
           </div>
         </div>
         <h3>Importe ou prospecte</h3>
@@ -1521,7 +1604,7 @@
         <div class="recurso-shot step-shot">
           <div class="recurso-shot-bar"><div class="dot" style="background:#ff5f57"></div><div class="dot" style="background:#febc2e"></div><div class="dot" style="background:#28c840"></div></div>
           <div class="recurso-shot-crop">
-            <img src="/static/img/mockups/kit-marca.png" alt="Kit de Marca do ConvertMail" style="object-position:15% 10%">
+            <img src="/static/img/mockups/kit-marca.png" alt="Kit de Marca do ConvertMail" style="object-position:15% 10%"><i class="bi bi-arrows-fullscreen zoom-hint"></i>
           </div>
         </div>
         <h3>Configure sua marca</h3>
@@ -1532,7 +1615,7 @@
         <div class="recurso-shot step-shot">
           <div class="recurso-shot-bar"><div class="dot" style="background:#ff5f57"></div><div class="dot" style="background:#febc2e"></div><div class="dot" style="background:#28c840"></div></div>
           <div class="recurso-shot-crop">
-            <img src="/static/img/mockups/nova-campanha.png" alt="Disparo de campanha com IA no ConvertMail" style="object-position:95% 100%">
+            <img src="/static/img/mockups/nova-campanha.png" alt="Disparo de campanha com IA no ConvertMail" style="object-position:95% 100%"><i class="bi bi-arrows-fullscreen zoom-hint"></i>
           </div>
         </div>
         <h3>Gere com IA e dispare</h3>
@@ -1543,7 +1626,7 @@
         <div class="recurso-shot step-shot">
           <div class="recurso-shot-bar"><div class="dot" style="background:#ff5f57"></div><div class="dot" style="background:#febc2e"></div><div class="dot" style="background:#28c840"></div></div>
           <div class="recurso-shot-crop">
-            <img src="/static/img/mockups/campanha-detalhe.png" alt="Analytics de campanha no ConvertMail" style="object-position:50% 0%">
+            <img src="/static/img/mockups/campanha-detalhe.png" alt="Analytics de campanha no ConvertMail" style="object-position:50% 0%"><i class="bi bi-arrows-fullscreen zoom-hint"></i>
           </div>
         </div>
         <h3>Acompanhe e otimize</h3>
@@ -1853,12 +1936,47 @@
   </div>
 </div>
 
+<!-- LIGHTBOX: clique em qualquer tela da plataforma pra ver ampliada -->
+<div class="lightbox-overlay" id="lightboxOverlay">
+  <button class="lightbox-close" id="lightboxClose" aria-label="Fechar"><i class="bi bi-x-lg"></i></button>
+  <img id="lightboxImg" src="" alt="">
+</div>
+
 <script src="{{ url_for('static', filename='js/markdown_lite.js') }}"></script>
 <script>
 /* Nav scroll */
 window.addEventListener('scroll', function() {
   document.getElementById('mainNav').classList.toggle('scrolled', window.scrollY > 10);
 });
+
+/* Lightbox: amplia qualquer tela real da plataforma ao clicar */
+(function() {
+  var overlay = document.getElementById('lightboxOverlay');
+  var img = document.getElementById('lightboxImg');
+  var closeBtn = document.getElementById('lightboxClose');
+
+  function openLightbox(src, alt) {
+    img.src = src;
+    img.alt = alt || '';
+    overlay.classList.add('open');
+    document.body.style.overflow = 'hidden';
+  }
+  function closeLightbox() {
+    overlay.classList.remove('open');
+    document.body.style.overflow = '';
+  }
+
+  document.querySelectorAll('.recurso-shot-crop img, .laptop-screen img').forEach(function(el) {
+    el.addEventListener('click', function() { openLightbox(el.src, el.alt); });
+  });
+  closeBtn.addEventListener('click', closeLightbox);
+  overlay.addEventListener('click', function(e) {
+    if (e.target === overlay) closeLightbox();
+  });
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') closeLightbox();
+  });
+})();
 
 /* Smooth scroll */
 document.querySelectorAll('a[href^="#"]').forEach(function(a) {
