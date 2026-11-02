@@ -257,6 +257,76 @@
       color: rgba(255,255,255,0.5);
     }
 
+    /* HERO — layout em 2 colunas com mockup da plataforma */
+    .hero-grid {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 48px;
+      text-align: left;
+    }
+    .hero-text { flex: 999 1 420px; min-width: 0; }
+    .hero-text .hero-badge,
+    .hero-text h1,
+    .hero-text p { margin-left: 0; }
+    .hero-text .hero-cta-group { align-items: flex-start; }
+    .hero-text .hero-cta-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 14px;
+      align-items: center;
+    }
+    .hero-visual { flex: 1 1 440px; min-width: 300px; max-width: 560px; }
+    .laptop-frame {
+      background: linear-gradient(160deg, #333, #0c0c0c);
+      border-radius: 18px;
+      padding: 14px 14px 10px;
+      box-shadow: 0 40px 90px rgba(0,0,0,0.5);
+      position: relative;
+    }
+    .laptop-frame::before {
+      content: '';
+      position: absolute;
+      top: 6px; left: 50%;
+      transform: translateX(-50%);
+      width: 6px; height: 6px;
+      border-radius: 50%;
+      background: #555;
+    }
+    .laptop-screen { border-radius: 8px; overflow: hidden; width: 100%; aspect-ratio: 1440/900; }
+    .laptop-screen img { width: 100%; display: block; }
+    .laptop-base {
+      height: 12px;
+      background: linear-gradient(160deg, #3f3f3f, #161616);
+      border-radius: 0 0 6px 6px;
+      margin-top: 8px;
+    }
+    @media (max-width: 900px) {
+      .hero-visual { max-width: 460px; margin: 0 auto; }
+    }
+
+    /* Molduras de navegador para telas reais da plataforma (Recursos e Como Funciona) */
+    .recurso-shot {
+      border-radius: 10px;
+      overflow: hidden;
+      box-shadow: 0 14px 34px rgba(91,42,110,0.14);
+      border: 1px solid rgba(0,0,0,0.06);
+      margin-bottom: 16px;
+    }
+    .recurso-shot-bar {
+      background: #e8e8ec;
+      padding: 8px 12px;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+    .recurso-shot-bar .dot { width: 8px; height: 8px; border-radius: 50%; }
+    .recurso-shot-crop { width: 100%; aspect-ratio: 16/10; overflow: hidden; }
+    .recurso-shot-crop img { width: 100%; height: 100%; object-fit: cover; display: block; }
+    .step-shot { margin-bottom: 14px; box-shadow: 0 14px 30px rgba(0,0,0,0.3); }
+    .step-shot .recurso-shot-bar { padding: 6px 10px; }
+    .step-shot .dot { width: 7px; height: 7px; }
+
     /* STATS BAR */
     .stats-bar {
       background: var(--branco);
@@ -988,13 +1058,27 @@
 <!-- HERO -->
 <section class="hero">
   <div class="container">
-    <div class="hero-badge fade-up"><i class="bi bi-lightning-charge-fill"></i> Email Marketing + IA + CRM + Prospec&ccedil;&atilde;o &mdash; Tudo em 1</div>
-    <h1 class="fade-up">Pare de perder vendas<br>com emails que <em>ningu&eacute;m abre</em></h1>
-    <p class="fade-up">O ConvertMail une intelig&ecirc;ncia artificial, CRM com lead scoring, sequ&ecirc;ncias automatizadas, prospec&ccedil;&atilde;o de leads e gerenciador de email em uma &uacute;nica plataforma &mdash; para voc&ecirc; converter mais, com menos esfor&ccedil;o.</p>
-    <div class="hero-cta-group fade-up">
-      <a href="#precos" class="btn-cta">Conhecer o Plano &rarr;</a>
-      <a href="{{ url_for('login') }}" class="btn-ghost">J&aacute; tenho conta &mdash; Entrar</a>
-      <span class="price-note">Sem fidelidade &bull; Cancele quando quiser &bull; Todos os recursos inclu&iacute;dos</span>
+    <div class="hero-grid">
+      <div class="hero-text">
+        <div class="hero-badge fade-up"><i class="bi bi-lightning-charge-fill"></i> Email Marketing + IA + CRM + Prospec&ccedil;&atilde;o &mdash; Tudo em 1</div>
+        <h1 class="fade-up">Pare de perder vendas<br>com emails que <em>ningu&eacute;m abre</em></h1>
+        <p class="fade-up">O ConvertMail une intelig&ecirc;ncia artificial, CRM com lead scoring, sequ&ecirc;ncias automatizadas, prospec&ccedil;&atilde;o de leads e gerenciador de email em uma &uacute;nica plataforma &mdash; para voc&ecirc; converter mais, com menos esfor&ccedil;o.</p>
+        <div class="hero-cta-group fade-up">
+          <div class="hero-cta-row">
+            <a href="#precos" class="btn-cta">Conhecer o Plano &rarr;</a>
+            <a href="{{ url_for('login') }}" class="btn-ghost">J&aacute; tenho conta &mdash; Entrar</a>
+          </div>
+          <span class="price-note">Sem fidelidade &bull; Cancele quando quiser &bull; Todos os recursos inclu&iacute;dos</span>
+        </div>
+      </div>
+      <div class="hero-visual fade-up">
+        <div class="laptop-frame">
+          <div class="laptop-screen">
+            <img src="/static/img/mockups/dashboard.png" alt="Dashboard do ConvertMail com m&eacute;tricas de campanhas">
+          </div>
+          <div class="laptop-base"></div>
+        </div>
+      </div>
     </div>
   </div>
 </section>
@@ -1046,19 +1130,23 @@
             <li>Melhoria de texto, templates e formata&ccedil;&atilde;o</li>
           </ul>
         </div>
-        <div style="background:var(--branco);border-radius:12px;padding:24px;border:0.5px solid var(--dourado-claro)">
-          <div style="font-size:0.72rem;color:var(--roxo);font-weight:700;margin-bottom:8px;letter-spacing:0.06em">EXEMPLO DE GERA&Ccedil;&Atilde;O</div>
-          <div style="font-size:0.82rem;color:var(--texto-suave);line-height:1.6">
-            <strong style="color:var(--texto)">Nicho:</strong> Nutri&ccedil;&atilde;o<br>
-            <strong style="color:var(--texto)">Tema:</strong> Reten&ccedil;&atilde;o de pacientes<br>
-            <strong style="color:var(--texto)">Tom:</strong> Profissional e amig&aacute;vel<br><br>
-            <em>&ldquo;Ol&aacute; {nome}, sabemos que manter pacientes engajados entre consultas &eacute; um dos maiores desafios da nutri&ccedil;&atilde;o cl&iacute;nica. Por isso, separei 3 estrat&eacute;gias comprovadas que voc&ecirc; pode aplicar j&aacute; nesta semana&hellip;&rdquo;</em>
+        <div>
+          <div class="recurso-shot" style="margin-bottom:0">
+            <div class="recurso-shot-bar"><div class="dot" style="background:#ff5f57"></div><div class="dot" style="background:#febc2e"></div><div class="dot" style="background:#28c840"></div></div>
+            <div class="recurso-shot-crop">
+              <img src="/static/img/mockups/nova-campanha.png" alt="Editor de campanha com IA do ConvertMail" style="object-position:20% 15%">
+            </div>
           </div>
         </div>
       </div>
 
       <div class="recurso-card fade-up">
-        <div class="recurso-icon" style="background:var(--lavanda);color:var(--roxo)"><i class="bi bi-bar-chart-fill"></i></div>
+        <div class="recurso-shot">
+          <div class="recurso-shot-bar"><div class="dot" style="background:#ff5f57"></div><div class="dot" style="background:#febc2e"></div><div class="dot" style="background:#28c840"></div></div>
+          <div class="recurso-shot-crop">
+            <img src="/static/img/mockups/contatos.png" alt="CRM com lead scoring do ConvertMail" style="object-position:15% 10%">
+          </div>
+        </div>
         <h3>CRM com Lead Scoring Autom&aacute;tico</h3>
         <p>Cada contato recebe pontua&ccedil;&atilde;o baseada em aberturas, cliques e intera&ccedil;&otilde;es. Classifica&ccedil;&atilde;o por temperatura: <strong>Frio &rarr; Morno &rarr; Quente &rarr; Muito Quente</strong>. Saiba exatamente quem est&aacute; pronto para comprar.</p>
         <ul>
@@ -1131,7 +1219,12 @@
       </div>
 
       <div class="recurso-card fade-up">
-        <div class="recurso-icon" style="background:rgba(14,153,124,0.1);color:var(--esmeralda)"><i class="bi bi-graph-up-arrow"></i></div>
+        <div class="recurso-shot">
+          <div class="recurso-shot-bar"><div class="dot" style="background:#ff5f57"></div><div class="dot" style="background:#febc2e"></div><div class="dot" style="background:#28c840"></div></div>
+          <div class="recurso-shot-crop">
+            <img src="/static/img/mockups/campanha-detalhe.png" alt="Analytics de campanha do ConvertMail" style="object-position:15% 10%">
+          </div>
+        </div>
         <h3>Analytics Avan&ccedil;ado com Receita e DNS</h3>
         <p>Dashboard completo com gr&aacute;ficos de envios, aberturas por hora/dia, distribui&ccedil;&atilde;o de leads, rastreamento de receita e verifica&ccedil;&atilde;o de dom&iacute;nio (SPF/DKIM/DMARC).</p>
         <ul>
@@ -1414,21 +1507,45 @@
     <div class="steps-grid">
       <div class="step fade-up">
         <div class="step-number">1</div>
+        <div class="recurso-shot step-shot">
+          <div class="recurso-shot-bar"><div class="dot" style="background:#ff5f57"></div><div class="dot" style="background:#febc2e"></div><div class="dot" style="background:#28c840"></div></div>
+          <div class="recurso-shot-crop">
+            <img src="/static/img/mockups/nova-campanha.png" alt="Upload de contatos no ConvertMail" style="object-position:95% 35%">
+          </div>
+        </div>
         <h3>Importe ou prospecte</h3>
         <p>Suba seu CSV, prospecte leads em sites com IA, ou adicione manualmente. Defina nicho e tags.</p>
       </div>
       <div class="step fade-up">
         <div class="step-number">2</div>
+        <div class="recurso-shot step-shot">
+          <div class="recurso-shot-bar"><div class="dot" style="background:#ff5f57"></div><div class="dot" style="background:#febc2e"></div><div class="dot" style="background:#28c840"></div></div>
+          <div class="recurso-shot-crop">
+            <img src="/static/img/mockups/kit-marca.png" alt="Kit de Marca do ConvertMail" style="object-position:15% 10%">
+          </div>
+        </div>
         <h3>Configure sua marca</h3>
         <p>Crie seu Kit de Marca com cores, fontes, tom de voz e assinatura. A IA usa em cada email.</p>
       </div>
       <div class="step fade-up">
         <div class="step-number">3</div>
+        <div class="recurso-shot step-shot">
+          <div class="recurso-shot-bar"><div class="dot" style="background:#ff5f57"></div><div class="dot" style="background:#febc2e"></div><div class="dot" style="background:#28c840"></div></div>
+          <div class="recurso-shot-crop">
+            <img src="/static/img/mockups/nova-campanha.png" alt="Disparo de campanha com IA no ConvertMail" style="object-position:95% 100%">
+          </div>
+        </div>
         <h3>Gere com IA e dispare</h3>
         <p>Escolha o tema, a IA gera o email completo. Envie imediato, agende, ou crie sequ&ecirc;ncias autom&aacute;ticas.</p>
       </div>
       <div class="step fade-up">
         <div class="step-number">4</div>
+        <div class="recurso-shot step-shot">
+          <div class="recurso-shot-bar"><div class="dot" style="background:#ff5f57"></div><div class="dot" style="background:#febc2e"></div><div class="dot" style="background:#28c840"></div></div>
+          <div class="recurso-shot-crop">
+            <img src="/static/img/mockups/campanha-detalhe.png" alt="Analytics de campanha no ConvertMail" style="object-position:50% 0%">
+          </div>
+        </div>
         <h3>Acompanhe e otimize</h3>
         <p>Dashboard com aberturas, cliques, lead scoring e heatmap. Identifique os leads quentes e feche mais vendas.</p>
       </div>
